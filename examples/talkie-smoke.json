@@ -1,0 +1,178 @@
+{
+  "name": "Talkie generic completion smoke",
+  "nodes": [
+    {
+      "id": "prompt",
+      "kind": "text_input",
+      "config": {
+        "text": "The atomic age will"
+      },
+      "position": {
+        "x": 0,
+        "y": 160
+      }
+    },
+    {
+      "id": "endpoint",
+      "kind": "endpoint",
+      "config": {
+        "base_url": "http://elsie-1:8790/v1",
+        "api_key_env": "",
+        "timeout_seconds": 180
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "vintage",
+      "kind": "model",
+      "config": {
+        "model_id": "talkie-1930-13b-base"
+      },
+      "position": {
+        "x": 240,
+        "y": 0
+      }
+    },
+    {
+      "id": "web",
+      "kind": "model",
+      "config": {
+        "model_id": "talkie-web-13b-base"
+      },
+      "position": {
+        "x": 240,
+        "y": 220
+      }
+    },
+    {
+      "id": "complete-vintage",
+      "kind": "completion",
+      "config": {
+        "temperature": 0.8,
+        "top_p": 0.95,
+        "max_tokens": 4,
+        "seed": 151,
+        "stop": "",
+        "logprobs": null,
+        "extra_body": {
+          "top_k": 40,
+          "presence_penalty": 0.0
+        },
+        "cache_mode": "use"
+      },
+      "position": {
+        "x": 480,
+        "y": 0
+      }
+    },
+    {
+      "id": "complete-web",
+      "kind": "completion",
+      "config": {
+        "temperature": 0.8,
+        "top_p": 0.95,
+        "max_tokens": 4,
+        "seed": 151,
+        "stop": "",
+        "logprobs": null,
+        "extra_body": {
+          "top_k": 40,
+          "presence_penalty": 0.0
+        },
+        "cache_mode": "use"
+      },
+      "position": {
+        "x": 480,
+        "y": 220
+      }
+    },
+    {
+      "id": "collect",
+      "kind": "collect",
+      "config": {
+        "flatten": false
+      },
+      "position": {
+        "x": 720,
+        "y": 110
+      }
+    },
+    {
+      "id": "preview",
+      "kind": "preview",
+      "config": {},
+      "position": {
+        "x": 960,
+        "y": 110
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "endpoint-vintage",
+      "source": "endpoint",
+      "source_port": "endpoint",
+      "target": "complete-vintage",
+      "target_port": "endpoint"
+    },
+    {
+      "id": "endpoint-web",
+      "source": "endpoint",
+      "source_port": "endpoint",
+      "target": "complete-web",
+      "target_port": "endpoint"
+    },
+    {
+      "id": "model-vintage",
+      "source": "vintage",
+      "source_port": "model",
+      "target": "complete-vintage",
+      "target_port": "model"
+    },
+    {
+      "id": "model-web",
+      "source": "web",
+      "source_port": "model",
+      "target": "complete-web",
+      "target_port": "model"
+    },
+    {
+      "id": "prompt-vintage",
+      "source": "prompt",
+      "source_port": "text",
+      "target": "complete-vintage",
+      "target_port": "prompt"
+    },
+    {
+      "id": "prompt-web",
+      "source": "prompt",
+      "source_port": "text",
+      "target": "complete-web",
+      "target_port": "prompt"
+    },
+    {
+      "id": "vintage-collect",
+      "source": "complete-vintage",
+      "source_port": "result",
+      "target": "collect",
+      "target_port": "item"
+    },
+    {
+      "id": "web-collect",
+      "source": "complete-web",
+      "source_port": "result",
+      "target": "collect",
+      "target_port": "item"
+    },
+    {
+      "id": "collect-preview",
+      "source": "collect",
+      "source_port": "items",
+      "target": "preview",
+      "target_port": "value"
+    }
+  ]
+}

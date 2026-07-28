@@ -1,0 +1,15 @@
+[Unit]
+Description=Glitchloom OpenAI-compatible Talkie completion service
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/osoleve/mechinterp-play
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/osoleve/gpu-art/triangle-lab/.venv/bin/uvicorn glitchloom_talkie_api:app --host 0.0.0.0 --port 8790
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target
