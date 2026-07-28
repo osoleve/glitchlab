@@ -65,7 +65,7 @@ function summary(data: LoomNodeData): string {
     case "write_file":
       return String(config.path ?? "");
     default:
-      return data.definition.description;
+      return "";
   }
 }
 
@@ -75,13 +75,17 @@ function categoryClass(category: string): string {
 
 export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
   const Icon = ICONS[data.kind] ?? Box;
+  const summaryText = summary(data);
+  const hasSummary = summaryText.length > 0;
   const portRows = Math.max(
     data.definition.inputs.length,
     data.definition.outputs.length,
     1,
   );
-  const minimumHeight = 102 + portRows * 28;
+  const minimumHeight = (hasSummary ? 102 : 74) + portRows * 28;
   const nodeStyle = {
+    "--node-base-height": hasSummary ? "102px" : "74px",
+    "--port-top": hasSummary ? "80px" : "52px",
     "--port-rows": portRows,
   } as CSSProperties;
 
@@ -115,7 +119,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
           <b>{data.runStatus === "completed" ? "done" : data.runStatus}</b>
         </span>
       </header>
-      <p className="node-summary">{summary(data) || "Configure in the inspector"}</p>
+      {hasSummary && <p className="node-summary">{summaryText}</p>}
 
       <div className="node-inputs">
         {data.definition.inputs.map((port) => (

@@ -817,9 +817,9 @@ summary:focus-visible {
 .loom-node {
   position: relative;
   width: 236px;
-  height: calc(102px + var(--port-rows) * 28px);
+  height: calc(var(--node-base-height) + var(--port-rows) * 28px);
   min-width: 220px;
-  min-height: calc(102px + var(--port-rows) * 28px);
+  min-height: calc(var(--node-base-height) + var(--port-rows) * 28px);
   padding: 12px 14px 10px 16px;
   overflow: visible;
   color: #e3dde6;
@@ -1075,7 +1075,7 @@ summary:focus-visible {
 .node-inputs,
 .node-outputs {
   position: absolute;
-  top: 80px;
+  top: var(--port-top);
   bottom: 10px;
   display: flex;
   width: calc(50% - 5px);
