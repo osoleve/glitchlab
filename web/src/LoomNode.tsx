@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import {
   Binary,
   BookOpenText,
@@ -80,6 +80,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
     data.definition.outputs.length,
     1,
   );
+  const minimumHeight = 102 + portRows * 28;
   const nodeStyle = {
     "--port-rows": portRows,
   } as CSSProperties;
@@ -91,6 +92,15 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
       } status-${data.runStatus}`}
       style={nodeStyle}
     >
+      <NodeResizer
+        isVisible={selected}
+        minWidth={220}
+        minHeight={minimumHeight}
+        maxWidth={520}
+        maxHeight={520}
+        handleClassName="loom-resize-handle"
+        lineClassName="loom-resize-line"
+      />
       <div className="node-thread" aria-hidden="true" />
       <header className="node-header">
         <span className="node-icon" aria-hidden="true">

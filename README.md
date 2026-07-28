@@ -22,7 +22,11 @@ surfaces compact model, finish, token, latency, cache, revision, and seed contex
 and leaves request details plus the complete JSON available on demand.
 The workbench also tracks unsaved graph changes, confirms and can undo a starter
 reset, preserves the current selection while a run completes, and labels
-collected completion cards with their source node titles.
+collected completion cards with their source node titles. Selected canvas nodes
+have working resize handles, `Delete` / `Backspace` removes the current canvas
+selection, and `Ctrl+Enter` runs the loom. The node library and inspector use
+standard draggable dividers, support arrow-key resizing when focused, and reset
+to their responsive defaults on double-click.
 
 ## Run on Windows
 

@@ -348,12 +348,17 @@ summary:focus-visible {
 .workspace {
   --inspector-width: 380px;
   --palette-width: 232px;
+  position: relative;
   display: grid;
   min-width: 0;
   min-height: 0;
   grid-template-columns: var(--palette-width) minmax(0, 1fr)
     var(--inspector-width);
   transition: grid-template-columns 160ms ease;
+}
+
+.workspace.is-panel-resizing {
+  transition: none;
 }
 
 .workspace.palette-closed {
@@ -365,7 +370,7 @@ summary:focus-visible {
 }
 
 .workspace.palette-closed .palette,
-.workspace.inspector-closed .inspector {
+.workspace.inspector-closed .inspector-shell {
   display: none;
 }
 
@@ -374,6 +379,56 @@ summary:focus-visible {
   min-height: 0;
   color: var(--text-soft);
   background: var(--panel);
+}
+
+.inspector-shell {
+  min-width: 0;
+  min-height: 0;
+  grid-column: 3;
+}
+
+.inspector-shell > .inspector {
+  height: 100%;
+}
+
+.panel-resizer {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  padding: 0;
+  touch-action: none;
+  cursor: col-resize;
+  outline: 0;
+}
+
+.panel-resizer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: transparent;
+  content: "";
+  transition:
+    width 110ms ease,
+    background 110ms ease;
+}
+
+.panel-resizer:hover::after,
+.panel-resizer:focus-visible::after,
+.is-panel-resizing .panel-resizer::after {
+  width: 2px;
+  background: #87719f;
+}
+
+.palette-resizer {
+  left: calc(var(--palette-width) - 4px);
+}
+
+.inspector-resizer {
+  right: calc(var(--inspector-width) - 4px);
 }
 
 .palette {
@@ -763,6 +818,8 @@ summary:focus-visible {
   position: relative;
   width: 236px;
   height: calc(102px + var(--port-rows) * 28px);
+  min-width: 220px;
+  min-height: calc(102px + var(--port-rows) * 28px);
   padding: 12px 14px 10px 16px;
   overflow: visible;
   color: #e3dde6;
@@ -804,16 +861,68 @@ summary:focus-visible {
   --accent: var(--thread-inspect);
 }
 
-.loom-node::after {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 13px;
-  height: 13px;
-  border-right: 1px solid color-mix(in srgb, var(--accent) 48%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 48%, transparent);
-  content: "";
-  pointer-events: none;
+.react-flow__node[style*="width"] .loom-node {
+  width: 100%;
+}
+
+.react-flow__node[style*="height"] .loom-node {
+  height: 100%;
+}
+
+.loom-resize-line {
+  z-index: 4;
+  --resize-line-color: color-mix(in srgb, var(--accent) 54%, transparent);
+  border: 0 !important;
+}
+
+.loom-resize-line.left,
+.loom-resize-line.right {
+  width: 18px !important;
+  background: linear-gradient(
+    90deg,
+    transparent calc(50% - 0.5px),
+    var(--resize-line-color) calc(50% - 0.5px),
+    var(--resize-line-color) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+.loom-resize-line.top,
+.loom-resize-line.bottom {
+  height: 18px !important;
+  background: linear-gradient(
+    0deg,
+    transparent calc(50% - 0.5px),
+    var(--resize-line-color) calc(50% - 0.5px),
+    var(--resize-line-color) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+.loom-resize-line:hover {
+  --resize-line-color: color-mix(in srgb, var(--accent) 84%, #efe3ef);
+}
+
+.loom-resize-handle {
+  z-index: 5;
+  width: 9px !important;
+  height: 9px !important;
+  background: #17131a !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 78%, #f3e7f2) !important;
+  border-radius: 2px !important;
+  box-shadow:
+    0 0 0 2px #17131a,
+    0 0 9px color-mix(in srgb, var(--accent) 24%, transparent);
+  transition:
+    width 110ms ease,
+    height 110ms ease,
+    background 110ms ease;
+}
+
+.loom-resize-handle:hover {
+  width: 12px !important;
+  height: 12px !important;
+  background: var(--accent) !important;
 }
 
 .loom-node:hover {
@@ -967,10 +1076,11 @@ summary:focus-visible {
 .node-outputs {
   position: absolute;
   top: 80px;
+  bottom: 10px;
   display: flex;
   width: calc(50% - 5px);
   flex-direction: column;
-  gap: 2px;
+  justify-content: space-evenly;
 }
 
 .node-inputs {
@@ -987,6 +1097,8 @@ summary:focus-visible {
   position: relative;
   display: flex;
   height: 28px;
+  min-height: 28px;
+  flex: 0 0 28px;
   align-items: center;
   gap: 5px;
   color: #d0c7d2;
@@ -1025,6 +1137,7 @@ summary:focus-visible {
 }
 
 .react-flow__handle {
+  z-index: 6;
   width: 12px;
   height: 12px;
   background: #18141b;

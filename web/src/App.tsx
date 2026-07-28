@@ -12,6 +12,7 @@ import {
   type Connection,
   type EdgeChange,
   type NodeChange,
+  type Viewport,
   useNodesInitialized,
   useReactFlow,
 } from "@xyflow/react";
@@ -36,6 +37,11 @@ import {
   useMemo,
   useRef,
   useState,
+} from "react";
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
 } from "react";
 import { ApiError, fetchCatalog, runGraph } from "./api";
 import { Inspector } from "./Inspector";
@@ -129,6 +135,48 @@ function formatElapsed(seconds: number): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`;
 }
 
+function isEditableTarget(target: EventTarget | null): target is HTMLElement {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.matches("input, textarea, select, [role='textbox']"))
+  );
+}
+
+type ResizablePanel = "palette" | "inspector";
+
+const PANEL_LIMITS = {
+  palette: { minimum: 184, maximum: 400 },
+  inspector: { minimum: 300, maximum: 640 },
+} as const;
+const MINIMUM_CANVAS_WIDTH = 420;
+
+function clampPanelWidth(
+  panel: ResizablePanel,
+  width: number,
+  otherPanelWidth: number,
+): number {
+  const limits = PANEL_LIMITS[panel];
+  const maximum = Math.max(
+    limits.minimum,
+    Math.min(
+      limits.maximum,
+      window.innerWidth * 0.48,
+      window.innerWidth - otherPanelWidth - MINIMUM_CANVAS_WIDTH,
+    ),
+  );
+  return Math.min(
+    maximum,
+    Math.max(limits.minimum, width),
+  );
+}
+
+function responsivePanelDefault(panel: ResizablePanel): number {
+  const compact = window.matchMedia("(max-width: 1400px)").matches;
+  if (panel === "palette") return compact ? 214 : 232;
+  return compact ? 348 : 380;
+}
+
 function GlitchloomApp() {
   const [catalog, setCatalog] = useState<CatalogResponse>();
   const [catalogError, setCatalogError] = useState<string>();
@@ -147,9 +195,15 @@ function GlitchloomApp() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [undoSnapshot, setUndoSnapshot] = useState<GraphSnapshot>();
   const [runElapsed, setRunElapsed] = useState(0);
+  const [paletteWidth, setPaletteWidth] = useState<number>();
+  const [inspectorWidth, setInspectorWidth] = useState<number>();
+  const [resizingPanel, setResizingPanel] = useState<ResizablePanel>();
   const runStartedAt = useRef(0);
   const canvasRef = useRef<HTMLElement>(null);
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const paletteRef = useRef<HTMLElement>(null);
+  const inspectorRef = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition, fitView, getViewport, setViewport } =
+    useReactFlow();
   const nodesInitialized = useNodesInitialized();
 
   useEffect(() => {
@@ -217,6 +271,26 @@ function GlitchloomApp() {
   }, []);
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
+  useEffect(() => {
+    if (selectedId && !selectedNode) {
+      setSelectedId(undefined);
+      setInspectorOpen(false);
+    }
+  }, [selectedId, selectedNode]);
+
+  useEffect(() => {
+    setNodes((current) => {
+      let changed = false;
+      const next = current.map((node) => {
+        const selected = node.id === selectedId;
+        if (Boolean(node.selected) === selected) return node;
+        changed = true;
+        return { ...node, selected };
+      });
+      return changed ? next : current;
+    });
+  }, [selectedId]);
+
   const groupedCatalog = useMemo(() => {
     const groups = new Map<string, NodeDefinition[]>();
     const query = paletteQuery.trim().toLowerCase();
@@ -242,6 +316,7 @@ function GlitchloomApp() {
         changes.some(
           (change) =>
             change.type === "position" ||
+            (change.type === "dimensions" && Boolean(change.resizing)) ||
             change.type === "add" ||
             change.type === "remove",
         )
@@ -461,6 +536,173 @@ function GlitchloomApp() {
     }
   };
 
+  const preserveVisibleCanvas = (
+    previousBounds: DOMRect,
+    previousViewport: Viewport,
+  ) => {
+    window.requestAnimationFrame(() => {
+      const nextBounds = canvasRef.current?.getBoundingClientRect();
+      if (!nextBounds || nextBounds.width >= previousBounds.width - 0.5) return;
+
+      const widthRatio = nextBounds.width / previousBounds.width;
+      const nextZoom = Math.max(0.32, previousViewport.zoom * widthRatio);
+      const worldCenterX =
+        (previousBounds.width / 2 - previousViewport.x) /
+        previousViewport.zoom;
+      const worldCenterY =
+        (previousBounds.height / 2 - previousViewport.y) /
+        previousViewport.zoom;
+      void setViewport(
+        {
+          x: nextBounds.width / 2 - worldCenterX * nextZoom,
+          y: nextBounds.height / 2 - worldCenterY * nextZoom,
+          zoom: nextZoom,
+        },
+        { duration: 160 },
+      );
+    });
+  };
+
+  const beginPanelResize = (
+    panel: ResizablePanel,
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    event.preventDefault();
+    const panelElement =
+      panel === "palette" ? paletteRef.current : inspectorRef.current;
+    if (!panelElement) return;
+    const otherPanelElement =
+      panel === "palette" ? inspectorRef.current : paletteRef.current;
+
+    const startX = event.clientX;
+    const startWidth = panelElement.getBoundingClientRect().width;
+    const previousCanvasBounds = canvasRef.current?.getBoundingClientRect();
+    const previousViewport = getViewport();
+    const otherPanelWidth =
+      otherPanelElement?.getBoundingClientRect().width ?? 0;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    setResizingPanel(panel);
+
+    const update = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const width = clampPanelWidth(
+        panel,
+        startWidth + (panel === "palette" ? delta : -delta),
+        otherPanelWidth,
+      );
+      if (panel === "palette") setPaletteWidth(width);
+      else setInspectorWidth(width);
+    };
+    const finish = () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      setResizingPanel(undefined);
+      window.removeEventListener("pointermove", update);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      if (previousCanvasBounds) {
+        preserveVisibleCanvas(previousCanvasBounds, previousViewport);
+      }
+    };
+
+    window.addEventListener("pointermove", update);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  };
+
+  const resizePanelFromKeyboard = (
+    panel: ResizablePanel,
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const panelElement =
+      panel === "palette" ? paletteRef.current : inspectorRef.current;
+    if (!panelElement) return;
+    const previousCanvasBounds = canvasRef.current?.getBoundingClientRect();
+    const previousViewport = getViewport();
+    const otherPanelElement =
+      panel === "palette" ? inspectorRef.current : paletteRef.current;
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const width = clampPanelWidth(
+      panel,
+      panelElement.getBoundingClientRect().width +
+        direction * (panel === "palette" ? 12 : -12),
+      otherPanelElement?.getBoundingClientRect().width ?? 0,
+    );
+    if (panel === "palette") setPaletteWidth(width);
+    else setInspectorWidth(width);
+    if (previousCanvasBounds) {
+      preserveVisibleCanvas(previousCanvasBounds, previousViewport);
+    }
+  };
+
+  const resetPanelWidth = (panel: ResizablePanel) => {
+    const previousCanvasBounds = canvasRef.current?.getBoundingClientRect();
+    const previousViewport = getViewport();
+    if (panel === "palette") setPaletteWidth(undefined);
+    else setInspectorWidth(undefined);
+    if (previousCanvasBounds) {
+      preserveVisibleCanvas(previousCanvasBounds, previousViewport);
+    }
+  };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      const editable = isEditableTarget(event.target);
+
+      if (event.key === "Escape") {
+        if (resetDialogOpen) {
+          event.preventDefault();
+          setResetDialogOpen(false);
+        } else if (editable) {
+          event.target.blur();
+        } else if (selectedId) {
+          event.preventDefault();
+          setSelectedId(undefined);
+          setInspectorOpen(false);
+        }
+        return;
+      }
+
+      const commandKey = event.ctrlKey || event.metaKey;
+      if (commandKey && event.key === "Enter" && !running && nodes.length > 0) {
+        event.preventDefault();
+        void execute();
+        return;
+      }
+
+      if (
+        commandKey &&
+        event.key.toLowerCase() === "z" &&
+        !editable &&
+        undoSnapshot
+      ) {
+        event.preventDefault();
+        undoStarterReset();
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  });
+
+  const workspaceStyle = {
+    "--palette-width": paletteOpen
+      ? paletteWidth === undefined
+        ? undefined
+        : `${paletteWidth}px`
+      : "0px",
+    "--inspector-width": inspectorOpen
+      ? inspectorWidth === undefined
+        ? undefined
+        : `${inspectorWidth}px`
+      : "0px",
+  } as CSSProperties;
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -518,6 +760,7 @@ function GlitchloomApp() {
             className="run-button"
             onClick={() => void execute()}
             disabled={running || nodes.length === 0}
+            title="Run loom (Ctrl+Enter)"
           >
             {running ? (
               <LoaderCircle className="spin-icon" size={16} />
@@ -532,9 +775,10 @@ function GlitchloomApp() {
       <main
         className={`workspace ${paletteOpen ? "" : "palette-closed"} ${
           inspectorOpen ? "" : "inspector-closed"
-        }`}
+        } ${resizingPanel ? "is-panel-resizing" : ""}`}
+        style={workspaceStyle}
       >
-        <aside className="palette">
+        <aside ref={paletteRef} className="palette">
           <div className="palette-heading">
             <span>Node library</span>
             <button
@@ -598,6 +842,24 @@ function GlitchloomApp() {
             </p>
           )}
         </aside>
+        {paletteOpen && (
+          <div
+            className="panel-resizer palette-resizer"
+            role="separator"
+            aria-label="Resize node library"
+            aria-orientation="vertical"
+            aria-valuemin={PANEL_LIMITS.palette.minimum}
+            aria-valuemax={PANEL_LIMITS.palette.maximum}
+            aria-valuenow={Math.round(
+              paletteWidth ?? responsivePanelDefault("palette"),
+            )}
+            tabIndex={0}
+            title="Drag to resize · double-click to reset"
+            onPointerDown={(event) => beginPanelResize("palette", event)}
+            onKeyDown={(event) => resizePanelFromKeyboard("palette", event)}
+            onDoubleClick={() => resetPanelWidth("palette")}
+          />
+        )}
 
         <section
           ref={canvasRef}
@@ -655,6 +917,7 @@ function GlitchloomApp() {
             fitViewOptions={{ padding: 0.03, minZoom: 0.52, maxZoom: 0.95 }}
             minZoom={0.32}
             maxZoom={1.7}
+            deleteKeyCode={["Backspace", "Delete"]}
             colorMode="dark"
             connectionLineStyle={{ stroke: "#b8a4e6", strokeWidth: 2 }}
             proOptions={{ hideAttribution: true }}
@@ -700,40 +963,64 @@ function GlitchloomApp() {
           )}
         </section>
 
-        <Inspector
-          selectedNode={selectedNode}
-          nodes={nodes}
-          edges={edges}
-          glitchlings={catalog?.glitchlings ?? []}
-          run={run}
-          error={runError}
-          onUpdateTitle={(title) =>
-            updateSelected((node) => ({
-              ...node,
-              data: { ...node.data, title },
-            }))
-          }
-          onUpdateField={(field, value) =>
-            updateSelected((node) => ({
-              ...node,
-              data: {
-                ...node.data,
-                config: { ...node.data.config, [field]: value },
-                runStatus: "idle",
-              },
-            }))
-          }
-          onDelete={deleteSelected}
-          onClose={() => setInspectorOpen(false)}
-        />
+        <div ref={inspectorRef} className="inspector-shell">
+          <Inspector
+            selectedNode={selectedNode}
+            nodes={nodes}
+            edges={edges}
+            glitchlings={catalog?.glitchlings ?? []}
+            run={run}
+            error={runError}
+            onUpdateTitle={(title) =>
+              updateSelected((node) => ({
+                ...node,
+                data: { ...node.data, title },
+              }))
+            }
+            onUpdateField={(field, value) =>
+              updateSelected((node) => ({
+                ...node,
+                data: {
+                  ...node.data,
+                  config: { ...node.data.config, [field]: value },
+                  runStatus: "idle",
+                },
+              }))
+            }
+            onDelete={deleteSelected}
+            onClose={() => setInspectorOpen(false)}
+          />
+        </div>
+        {inspectorOpen && (
+          <div
+            className="panel-resizer inspector-resizer"
+            role="separator"
+            aria-label="Resize inspector"
+            aria-orientation="vertical"
+            aria-valuemin={PANEL_LIMITS.inspector.minimum}
+            aria-valuemax={PANEL_LIMITS.inspector.maximum}
+            aria-valuenow={Math.round(
+              inspectorWidth ?? responsivePanelDefault("inspector"),
+            )}
+            tabIndex={0}
+            title="Drag to resize · double-click to reset"
+            onPointerDown={(event) => beginPanelResize("inspector", event)}
+            onKeyDown={(event) => resizePanelFromKeyboard("inspector", event)}
+            onDoubleClick={() => resetPanelWidth("inspector")}
+          />
+        )}
       </main>
       {resetDialogOpen && (
-        <div className="dialog-backdrop">
+        <div
+          className="dialog-backdrop"
+          onClick={() => setResetDialogOpen(false)}
+        >
           <section
             className="reset-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="reset-dialog-title"
+            onClick={(event) => event.stopPropagation()}
           >
             <span className="reset-dialog-icon" aria-hidden="true">
               <AlertTriangle size={18} />
@@ -750,6 +1037,7 @@ function GlitchloomApp() {
                 type="button"
                 className="secondary-button"
                 onClick={() => setResetDialogOpen(false)}
+                autoFocus
               >
                 Keep working
               </button>
