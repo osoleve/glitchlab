@@ -16,6 +16,13 @@ The starter loom expresses the experiment entirely with generic nodes: one
 OpenAI-compatible endpoint, two model references, and four completion branches
 run the original prompt and a seeded Typogre corruption through both Talkies.
 Their normalized completion records are collected and exposed in the inspector.
+The output view recognizes both those records and raw OpenAI-compatible completion
+envelopes, including lists of either shape. It keeps generated text prominent,
+surfaces compact model, finish, token, latency, cache, revision, and seed context,
+and leaves request details plus the complete JSON available on demand.
+The workbench also tracks unsaved graph changes, confirms and can undo a starter
+reset, preserves the current selection while a run completes, and labels
+collected completion cards with their source node titles.
 
 ## Run on Windows
 

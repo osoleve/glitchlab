@@ -16,15 +16,17 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import {
+  AlertTriangle,
   Bug,
-  ChevronDown,
-  CircleStop,
-  Info,
+  LoaderCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightOpen,
   Play,
   Plus,
   RotateCcw,
   Search,
-  Sparkles,
+  Undo2,
   X,
 } from "lucide-react";
 import {
@@ -32,6 +34,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { ApiError, fetchCatalog, runGraph } from "./api";
@@ -48,6 +51,15 @@ import type {
 
 const nodeTypes = { loomNode: LoomNodeCard };
 
+interface GraphSnapshot {
+  nodes: LoomNode[];
+  edges: LoomEdge[];
+  run?: RunResponse;
+  runError?: string;
+  selectedId?: string;
+  loomName: string;
+}
+
 function defaultConfig(definition: NodeDefinition): Record<string, unknown> {
   return Object.fromEntries(
     definition.fields.map((field) => [field.name, field.default]),
@@ -56,6 +68,65 @@ function defaultConfig(definition: NodeDefinition): Record<string, unknown> {
 
 function categorySlug(value: string): string {
   return value.toLowerCase().replace(/\s+/g, "-");
+}
+
+function nodeSize(node: LoomNode): { width: number; height: number } {
+  return {
+    width: node.measured?.width ?? 236,
+    height:
+      node.measured?.height ??
+      102 +
+        Math.max(
+          node.data.definition.inputs.length,
+          node.data.definition.outputs.length,
+          1,
+        ) *
+          28,
+  };
+}
+
+function nearestOpenPosition(
+  preferred: { x: number; y: number },
+  nodes: LoomNode[],
+): { x: number; y: number } {
+  const stepX = 260;
+  const stepY = 220;
+  const candidates: Array<{ x: number; y: number; distance: number }> = [];
+  for (let row = -5; row <= 5; row += 1) {
+    for (let column = -5; column <= 5; column += 1) {
+      candidates.push({
+        x: preferred.x + column * stepX,
+        y: preferred.y + row * stepY,
+        distance: column * column + row * row,
+      });
+    }
+  }
+  candidates.sort(
+    (left, right) =>
+      left.distance - right.distance ||
+      Math.abs(left.y - preferred.y) - Math.abs(right.y - preferred.y) ||
+      left.x - right.x,
+  );
+
+  return (
+    candidates.find((candidate) =>
+      nodes.every((node) => {
+        const size = nodeSize(node);
+        const margin = 24;
+        return (
+          candidate.x + 236 + margin <= node.position.x ||
+          candidate.x >= node.position.x + size.width + margin ||
+          candidate.y + 190 + margin <= node.position.y ||
+          candidate.y >= node.position.y + size.height + margin
+        );
+      }),
+    ) ?? preferred
+  );
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s elapsed`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`;
 }
 
 function GlitchloomApp() {
@@ -70,6 +141,14 @@ function GlitchloomApp() {
   const [loomName, setLoomName] = useState("Talkie perturbation pair");
   const [paletteQuery, setPaletteQuery] = useState("");
   const [needsFit, setNeedsFit] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [undoSnapshot, setUndoSnapshot] = useState<GraphSnapshot>();
+  const [runElapsed, setRunElapsed] = useState(0);
+  const runStartedAt = useRef(0);
+  const canvasRef = useRef<HTMLElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
 
@@ -80,6 +159,7 @@ function GlitchloomApp() {
         const starter = talkieStarter(response.nodes);
         setNodes(starter.nodes);
         setEdges(starter.edges);
+        setIsDirty(false);
         setNeedsFit(true);
       })
       .catch((error: unknown) => {
@@ -91,15 +171,50 @@ function GlitchloomApp() {
     if (!needsFit || !nodesInitialized || nodes.length === 0) return;
     const frame = window.requestAnimationFrame(() => {
       void fitView({
-        padding: 0.015,
-        minZoom: 0.68,
-        maxZoom: 0.96,
+        padding: 0.03,
+        minZoom: 0.52,
+        maxZoom: 0.95,
         duration: 350,
       });
       setNeedsFit(false);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [fitView, needsFit, nodes.length, nodesInitialized]);
+
+  useEffect(() => {
+    if (!nodesInitialized || nodes.length === 0 || needsFit) return;
+    const timer = window.setTimeout(() => {
+      void fitView({
+        padding: 0.03,
+        minZoom: 0.52,
+        maxZoom: 0.95,
+        duration: 260,
+      });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [
+    fitView,
+    inspectorOpen,
+    needsFit,
+    nodes.length,
+    nodesInitialized,
+    paletteOpen,
+  ]);
+
+  useEffect(() => {
+    if (!running) return;
+    const updateElapsed = () => {
+      setRunElapsed(Math.floor((Date.now() - runStartedAt.current) / 1000));
+    };
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  const markDirty = useCallback(() => {
+    setIsDirty(true);
+    setUndoSnapshot(undefined);
+  }, []);
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const groupedCatalog = useMemo(() => {
@@ -123,50 +238,84 @@ function GlitchloomApp() {
 
   const onNodesChange = useCallback(
     (changes: NodeChange<LoomNode>[]) => {
+      if (
+        changes.some(
+          (change) =>
+            change.type === "position" ||
+            change.type === "add" ||
+            change.type === "remove",
+        )
+      ) {
+        markDirty();
+      }
       setNodes((current) => applyNodeChanges(changes, current));
     },
-    [],
+    [markDirty],
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange<LoomEdge>[]) => {
+      if (changes.some((change) => change.type !== "select")) markDirty();
       setEdges((current) => applyEdgeChanges(changes, current));
     },
-    [],
+    [markDirty],
   );
-  const onConnect = useCallback((connection: Connection) => {
-    setEdges((current) =>
-      addEdge(
-        {
-          ...connection,
-          id: crypto.randomUUID(),
-          markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
-        },
-        current,
-      ),
-    );
-  }, []);
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      markDirty();
+      setEdges((current) =>
+        addEdge(
+          {
+            ...connection,
+            id: crypto.randomUUID(),
+            markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
+          },
+          current,
+        ),
+      );
+    },
+    [markDirty],
+  );
 
   const addNode = useCallback(
     (definition: NodeDefinition, position?: { x: number; y: number }) => {
       const id = `${definition.kind}-${crypto.randomUUID().slice(0, 6)}`;
-      setNodes((current) => [
-        ...current,
-        {
-          id,
-          type: "loomNode",
-          position: position ?? screenToFlowPosition({ x: 430, y: 300 }),
-          data: {
-            kind: definition.kind,
-            title: definition.label,
-            definition,
-            config: defaultConfig(definition),
-            runStatus: "idle",
+      markDirty();
+      setNodes((current) => {
+        let nextPosition = position;
+        if (!nextPosition) {
+          const canvasBounds = canvasRef.current?.getBoundingClientRect();
+          const screenCenter = canvasBounds
+            ? {
+                x: canvasBounds.left + canvasBounds.width / 2,
+                y: canvasBounds.top + canvasBounds.height / 2,
+              }
+            : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+          const flowCenter = screenToFlowPosition(screenCenter);
+          nextPosition = nearestOpenPosition(
+            { x: flowCenter.x - 118, y: flowCenter.y - 95 },
+            current,
+          );
+        }
+        return [
+          ...current,
+          {
+            id,
+            type: "loomNode",
+            position: nextPosition,
+            data: {
+              kind: definition.kind,
+              title: definition.label,
+              definition,
+              config: defaultConfig(definition),
+              runStatus: "idle",
+            },
           },
-        },
-      ]);
+        ];
+      });
       setSelectedId(id);
+      setInspectorOpen(true);
     },
-    [screenToFlowPosition],
+    [markDirty, screenToFlowPosition],
   );
 
   const onPaletteDrag = (
@@ -189,12 +338,14 @@ function GlitchloomApp() {
 
   const updateSelected = (updater: (node: LoomNode) => LoomNode) => {
     if (!selectedId) return;
+    markDirty();
     setNodes((current) =>
       current.map((node) => (node.id === selectedId ? updater(node) : node)),
     );
   };
   const deleteSelected = () => {
     if (!selectedId) return;
+    markDirty();
     setNodes((current) => current.filter((node) => node.id !== selectedId));
     setEdges((current) =>
       current.filter(
@@ -202,8 +353,9 @@ function GlitchloomApp() {
       ),
     );
     setSelectedId(undefined);
+    setInspectorOpen(false);
   };
-  const resetStarter = () => {
+  const applyStarter = () => {
     if (!catalog) return;
     const starter = talkieStarter(catalog.nodes);
     setNodes(starter.nodes);
@@ -211,10 +363,50 @@ function GlitchloomApp() {
     setRun(undefined);
     setRunError(undefined);
     setSelectedId(undefined);
+    setInspectorOpen(false);
+    setIsDirty(false);
+    setNeedsFit(true);
+  };
+
+  const requestStarterReset = () => {
+    if (isDirty || run) {
+      setResetDialogOpen(true);
+      return;
+    }
+    applyStarter();
+  };
+
+  const confirmStarterReset = () => {
+    setUndoSnapshot({
+      nodes,
+      edges,
+      run,
+      runError,
+      selectedId,
+      loomName,
+    });
+    setResetDialogOpen(false);
+    applyStarter();
+  };
+
+  const undoStarterReset = () => {
+    if (!undoSnapshot) return;
+    setNodes(undoSnapshot.nodes);
+    setEdges(undoSnapshot.edges);
+    setRun(undoSnapshot.run);
+    setRunError(undoSnapshot.runError);
+    setSelectedId(undoSnapshot.selectedId);
+    setLoomName(undoSnapshot.loomName);
+    setInspectorOpen(Boolean(undoSnapshot.selectedId));
+    setIsDirty(true);
+    setUndoSnapshot(undefined);
     setNeedsFit(true);
   };
 
   const execute = async () => {
+    const selectedBeforeRun = selectedId;
+    runStartedAt.current = Date.now();
+    setRunElapsed(0);
     setRunning(true);
     setRunError(undefined);
     setNodes((current) =>
@@ -236,7 +428,10 @@ function GlitchloomApp() {
           },
         })),
       );
-      setSelectedId("preview");
+      if (!selectedBeforeRun && nodes.some((node) => node.id === "preview")) {
+        setSelectedId("preview");
+        setInspectorOpen(true);
+      }
     } catch (error) {
       const detail =
         error instanceof ApiError
@@ -257,7 +452,10 @@ function GlitchloomApp() {
           },
         })),
       );
-      if (detail.node_id) setSelectedId(detail.node_id);
+      if (detail.node_id) {
+        setSelectedId(detail.node_id);
+        setInspectorOpen(true);
+      }
     } finally {
       setRunning(false);
     }
@@ -272,19 +470,25 @@ function GlitchloomApp() {
             <span />
             <span />
           </div>
-          <div>
-            <strong>Glitchloom</strong>
-            <span>structured inference apparatus</span>
-          </div>
+          <strong>Glitchloom</strong>
         </div>
         <div className="loom-title">
           <span className="loom-title-label">loom</span>
           <input
             aria-label="Loom name"
             value={loomName}
-            onChange={(event) => setLoomName(event.target.value)}
+            onChange={(event) => {
+              setLoomName(event.target.value);
+              markDirty();
+            }}
           />
-          <ChevronDown size={14} aria-hidden="true" />
+          {isDirty && (
+            <span
+              className="dirty-indicator"
+              aria-label="Unsaved graph changes"
+              title="Unsaved graph changes"
+            />
+          )}
         </div>
         <div className="topbar-actions">
           <span
@@ -292,13 +496,22 @@ function GlitchloomApp() {
               catalog?.plugin.available ? "is-ready" : "is-offline"
             }`}
             title={catalog?.plugin.error ?? catalog?.plugin.path}
+            aria-label={
+              catalog?.plugin.available
+                ? "Glitchlings available"
+                : "Glitchlings unavailable"
+            }
           >
             <Bug size={13} />
-            <span>{catalog?.plugin.available ? "Glitchlings ready" : "Plugin offline"}</span>
           </span>
-          <button type="button" className="secondary-button" onClick={resetStarter}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={requestStarterReset}
+            title="Reset to the starter graph"
+          >
             <RotateCcw size={15} />
-            Starter
+            Reset starter
           </button>
           <button
             type="button"
@@ -306,20 +519,33 @@ function GlitchloomApp() {
             onClick={() => void execute()}
             disabled={running || nodes.length === 0}
           >
-            {running ? <CircleStop size={16} /> : <Play size={16} fill="currentColor" />}
+            {running ? (
+              <LoaderCircle className="spin-icon" size={16} />
+            ) : (
+              <Play size={16} fill="currentColor" />
+            )}
             {running ? "Running…" : "Run loom"}
           </button>
         </div>
       </header>
 
-      <main className="workspace">
+      <main
+        className={`workspace ${paletteOpen ? "" : "palette-closed"} ${
+          inspectorOpen ? "" : "inspector-closed"
+        }`}
+      >
         <aside className="palette">
           <div className="palette-heading">
-            <div>
-              <span>Node library</span>
-              <small>{catalog?.nodes.length ?? 0} instruments</small>
-            </div>
-            <Sparkles size={15} />
+            <span>Node library</span>
+            <button
+              type="button"
+              className="panel-close-button"
+              onClick={() => setPaletteOpen(false)}
+              aria-label="Close node library"
+              title="Close node library"
+            >
+              <PanelLeftClose size={15} />
+            </button>
           </div>
           <label className="palette-search">
             <Search size={13} aria-hidden="true" />
@@ -340,32 +566,31 @@ function GlitchloomApp() {
               </button>
             )}
           </label>
-          <div className="palette-hint">
-            <Info size={12} aria-hidden="true" />
-            <span>Click to place or drag onto the loom.</span>
-          </div>
           {catalogError && <p className="error-copy">{catalogError}</p>}
           {[...groupedCatalog.entries()].map(([category, definitions]) => (
-            <section className="palette-group" key={category}>
-              <h2>{category}</h2>
-              {definitions.map((definition) => (
-                <button
-                  type="button"
-                  draggable
-                  className={`palette-node category-${categorySlug(category)}`}
-                  key={definition.kind}
-                  onDragStart={(event) => onPaletteDrag(event, definition)}
-                  onClick={() => addNode(definition)}
-                >
-                  <span className="palette-thread" />
-                  <span>
-                    <strong>{definition.label}</strong>
-                    <small>{definition.description}</small>
-                  </span>
-                  <Plus size={14} />
-                </button>
-              ))}
-            </section>
+            <details className="palette-group" key={category} open>
+              <summary>{category}</summary>
+              <div>
+                {definitions.map((definition) => (
+                  <button
+                    type="button"
+                    draggable
+                    className={`palette-node category-${categorySlug(category)}`}
+                    key={definition.kind}
+                    onDragStart={(event) => onPaletteDrag(event, definition)}
+                    onClick={() => addNode(definition)}
+                    title={definition.description}
+                  >
+                    <span className="palette-thread" />
+                    <span>
+                      <strong>{definition.label}</strong>
+                      <small>{definition.description}</small>
+                    </span>
+                    <Plus size={14} />
+                  </button>
+                ))}
+              </div>
+            </details>
           ))}
           {catalog && groupedCatalog.size === 0 && (
             <p className="empty-copy palette-empty">
@@ -375,6 +600,7 @@ function GlitchloomApp() {
         </aside>
 
         <section
+          ref={canvasRef}
           className="canvas"
           onDrop={onDrop}
           onDragOver={(event) => {
@@ -382,11 +608,30 @@ function GlitchloomApp() {
             event.dataTransfer.dropEffect = "move";
           }}
         >
-          <div className="canvas-readout" aria-hidden="true">
-            <span>graph / live</span>
-            <i />
-            <span>{nodes.length} nodes · {edges.length} threads</span>
-          </div>
+          {(!paletteOpen || !inspectorOpen) && (
+            <div className="canvas-panel-controls">
+              {!paletteOpen && (
+                <button
+                  type="button"
+                  onClick={() => setPaletteOpen(true)}
+                  aria-label="Open node library"
+                >
+                  <PanelLeftOpen size={15} />
+                  Nodes
+                </button>
+              )}
+              {!inspectorOpen && (
+                <button
+                  type="button"
+                  onClick={() => setInspectorOpen(true)}
+                  aria-label="Open inspector"
+                >
+                  <PanelRightOpen size={15} />
+                  Inspector
+                </button>
+              )}
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges.map((edge) => ({
@@ -398,11 +643,17 @@ function GlitchloomApp() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            onNodeClick={(_, node) => setSelectedId(node.id)}
-            onPaneClick={() => setSelectedId(undefined)}
+            onNodeClick={(_, node) => {
+              setSelectedId(node.id);
+              setInspectorOpen(true);
+            }}
+            onPaneClick={() => {
+              setSelectedId(undefined);
+              setInspectorOpen(false);
+            }}
             fitView
-            fitViewOptions={{ padding: 0.015, minZoom: 0.68, maxZoom: 0.96 }}
-            minZoom={0.38}
+            fitViewOptions={{ padding: 0.03, minZoom: 0.52, maxZoom: 0.95 }}
+            minZoom={0.32}
             maxZoom={1.7}
             colorMode="dark"
             connectionLineStyle={{ stroke: "#b8a4e6", strokeWidth: 2 }}
@@ -433,7 +684,9 @@ function GlitchloomApp() {
             <div className="run-overlay">
               <span className="shuttle" />
               <strong>Throwing the shuttle</strong>
-              <small>Model endpoints may lazily load weights on the first run</small>
+              <small>
+                {formatElapsed(runElapsed)} · model endpoints may lazily load weights
+              </small>
             </div>
           )}
           {runError && !running && (
@@ -449,6 +702,8 @@ function GlitchloomApp() {
 
         <Inspector
           selectedNode={selectedNode}
+          nodes={nodes}
+          edges={edges}
           glitchlings={catalog?.glitchlings ?? []}
           run={run}
           error={runError}
@@ -469,8 +724,66 @@ function GlitchloomApp() {
             }))
           }
           onDelete={deleteSelected}
+          onClose={() => setInspectorOpen(false)}
         />
       </main>
+      {resetDialogOpen && (
+        <div className="dialog-backdrop">
+          <section
+            className="reset-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-dialog-title"
+          >
+            <span className="reset-dialog-icon" aria-hidden="true">
+              <AlertTriangle size={18} />
+            </span>
+            <div>
+              <h2 id="reset-dialog-title">Reset to the starter graph?</h2>
+              <p>
+                Your current nodes, connections, configuration, and run output will be
+                replaced. You can undo immediately after resetting.
+              </p>
+            </div>
+            <div className="reset-dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setResetDialogOpen(false)}
+              >
+                Keep working
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={confirmStarterReset}
+              >
+                Reset graph
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {undoSnapshot && !resetDialogOpen && (
+        <div className="undo-toast" role="status">
+          <div>
+            <strong>Starter graph restored</strong>
+            <span>Your previous graph is still recoverable.</span>
+          </div>
+          <button type="button" onClick={undoStarterReset}>
+            <Undo2 size={14} />
+            Undo
+          </button>
+          <button
+            type="button"
+            className="undo-dismiss"
+            onClick={() => setUndoSnapshot(undefined)}
+            aria-label="Dismiss undo"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

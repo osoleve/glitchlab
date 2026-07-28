@@ -133,10 +133,6 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
           </div>
         ))}
       </div>
-      <footer className="node-footer">
-        <span>{data.kind.replaceAll("_", " ")}</span>
-        <span>{data.definition.inputs.length} in / {data.definition.outputs.length} out</span>
-      </footer>
     </article>
   );
 }
