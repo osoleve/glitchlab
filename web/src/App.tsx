@@ -20,6 +20,7 @@ import {
 import {
   AlertTriangle,
   Bug,
+  Columns3,
   Copy,
   FilePlus2,
   Focus,
@@ -32,6 +33,7 @@ import {
   Pencil,
   Play,
   Plus,
+  Rows3,
   RotateCcw,
   Search,
   Save,
@@ -112,10 +114,27 @@ interface GraphTab {
 }
 
 type ContextMenuState =
-  | { x: number; y: number; scope: "node"; nodeId: string }
-  | { x: number; y: number; scope: "selection" }
-  | { x: number; y: number; scope: "edge"; edgeId: string }
-  | { x: number; y: number; scope: "pane" };
+  | {
+      x: number;
+      y: number;
+      scope: "node";
+      nodeId: string;
+      nodeIds: string[];
+    }
+  | { x: number; y: number; scope: "selection"; nodeIds: string[] }
+  | {
+      x: number;
+      y: number;
+      scope: "edge";
+      edgeId: string;
+      flowPosition: { x: number; y: number };
+    }
+  | {
+      x: number;
+      y: number;
+      scope: "pane";
+      flowPosition: { x: number; y: number };
+    };
 
 interface WorkflowMenuState {
   x: number;
@@ -302,6 +321,8 @@ function GlitchloomApp() {
   const [inspectorWidth, setInspectorWidth] = useState<number>();
   const [resizingPanel, setResizingPanel] = useState<ResizablePanel>();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>();
+  const [quickAddQuery, setQuickAddQuery] = useState("");
+  const [quickAddIndex, setQuickAddIndex] = useState(0);
   const [workflowMenu, setWorkflowMenu] = useState<WorkflowMenuState>();
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveDialogPurpose, setSaveDialogPurpose] = useState<
@@ -557,6 +578,30 @@ function GlitchloomApp() {
     }
     return groups;
   }, [catalog, paletteQuery]);
+  const quickAddDefinitions = useMemo(() => {
+    const query = quickAddQuery.trim().toLowerCase();
+    return [...(catalog?.nodes ?? [])]
+      .filter(
+        (definition) =>
+          !query ||
+          `${definition.label} ${definition.description} ${definition.category} ${definition.kind}`
+            .toLowerCase()
+            .includes(query),
+      )
+      .sort((left, right) => {
+        const leftStarts = left.label.toLowerCase().startsWith(query);
+        const rightStarts = right.label.toLowerCase().startsWith(query);
+        if (leftStarts !== rightStarts) return leftStarts ? -1 : 1;
+        return left.label.localeCompare(right.label);
+      })
+      .slice(0, 9);
+  }, [catalog, quickAddQuery]);
+
+  useEffect(() => {
+    setQuickAddIndex((current) =>
+      Math.min(current, Math.max(0, quickAddDefinitions.length - 1)),
+    );
+  }, [quickAddDefinitions.length]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<LoomNode>[]) => {
@@ -749,13 +794,14 @@ function GlitchloomApp() {
       }),
     );
   };
-  const deleteSelected = () => {
+  const deleteSelected = (explicitIds?: string[]) => {
     const ids = new Set(
-      selectedNodes.length > 0
+      explicitIds ??
+      (selectedNodes.length > 0
         ? selectedNodes.map((node) => node.id)
         : selectedId
           ? [selectedId]
-          : [],
+          : []),
     );
     if (ids.size === 0) return;
     markDirty();
@@ -768,9 +814,11 @@ function GlitchloomApp() {
     setSelectedId(undefined);
     setInspectorOpen(false);
   };
-  const duplicateSelected = () => {
-    const sourceNodes =
-      selectedNodes.length > 0
+  const duplicateSelected = (explicitIds?: string[]) => {
+    const explicit = explicitIds ? new Set(explicitIds) : undefined;
+    const sourceNodes = explicit
+      ? nodes.filter((node) => explicit.has(node.id))
+      : selectedNodes.length > 0
         ? selectedNodes
         : selectedNode
           ? [selectedNode]
@@ -788,7 +836,12 @@ function GlitchloomApp() {
       id: replacements.get(node.id)!,
       position: { x: node.position.x + 36, y: node.position.y + 36 },
       selected: true,
-      data: { ...node.data, runStatus: "idle" as const },
+      data: {
+        ...node.data,
+        config: structuredClone(node.data.config),
+        controlPorts: { ...node.data.controlPorts },
+        runStatus: "idle" as const,
+      },
     }));
     const copiedEdges = edges
       .filter(
@@ -808,6 +861,153 @@ function GlitchloomApp() {
     ]);
     setEdges((current) => [...current, ...copiedEdges]);
     setSelectedId(copies[0].id);
+    setInspectorOpen(true);
+    setContextMenu(undefined);
+  };
+
+  const selectDownstream = (sourceIds: string[]) => {
+    const reachable = new Set(sourceIds);
+    const queue = [...sourceIds];
+    while (queue.length > 0) {
+      const source = queue.shift()!;
+      for (const edge of edges) {
+        if (edge.source !== source || reachable.has(edge.target)) continue;
+        reachable.add(edge.target);
+        queue.push(edge.target);
+      }
+    }
+    setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        selected: reachable.has(node.id),
+      })),
+    );
+    const anchor = sourceIds.at(-1);
+    setSelectedId(anchor);
+    setInspectorOpen(Boolean(anchor));
+    setContextMenu(undefined);
+  };
+
+  const arrangeSelection = (
+    nodeIds: string[],
+    action: "align-left" | "align-top" | "distribute-x" | "distribute-y",
+  ) => {
+    const selectedSet = new Set(nodeIds);
+    const targets = nodes.filter((node) => selectedSet.has(node.id));
+    if (targets.length < 2) return;
+    const positions = new Map<string, { x: number; y: number }>();
+    if (action === "align-left") {
+      const left = Math.min(...targets.map((node) => node.position.x));
+      for (const node of targets) positions.set(node.id, { ...node.position, x: left });
+    } else if (action === "align-top") {
+      const top = Math.min(...targets.map((node) => node.position.y));
+      for (const node of targets) positions.set(node.id, { ...node.position, y: top });
+    } else {
+      if (targets.length < 3) return;
+      const horizontal = action === "distribute-x";
+      const ordered = [...targets].sort((left, right) => {
+        const leftSize = nodeSize(left);
+        const rightSize = nodeSize(right);
+        const leftCenter = horizontal
+          ? left.position.x + leftSize.width / 2
+          : left.position.y + leftSize.height / 2;
+        const rightCenter = horizontal
+          ? right.position.x + rightSize.width / 2
+          : right.position.y + rightSize.height / 2;
+        return leftCenter - rightCenter || left.id.localeCompare(right.id);
+      });
+      const first = ordered[0];
+      const last = ordered.at(-1)!;
+      const firstSize = nodeSize(first);
+      const lastSize = nodeSize(last);
+      const firstCenter = horizontal
+        ? first.position.x + firstSize.width / 2
+        : first.position.y + firstSize.height / 2;
+      const lastCenter = horizontal
+        ? last.position.x + lastSize.width / 2
+        : last.position.y + lastSize.height / 2;
+      const step = (lastCenter - firstCenter) / (ordered.length - 1);
+      ordered.forEach((node, index) => {
+        const size = nodeSize(node);
+        const center = firstCenter + step * index;
+        positions.set(node.id, {
+          x: horizontal ? center - size.width / 2 : node.position.x,
+          y: horizontal ? node.position.y : center - size.height / 2,
+        });
+      });
+    }
+    markDirty();
+    setNodes((current) =>
+      current.map((node) => {
+        const position = positions.get(node.id);
+        return position ? { ...node, position } : node;
+      }),
+    );
+    setContextMenu(undefined);
+  };
+
+  const insertPassthrough = (
+    edgeId: string,
+    flowPosition: { x: number; y: number },
+  ) => {
+    const edge = edges.find((candidate) => candidate.id === edgeId);
+    const definition = catalog?.nodes.find(
+      (candidate) => candidate.kind === "passthrough",
+    );
+    if (!edge || !definition || !edge.sourceHandle || !edge.targetHandle) return;
+    const nodeId = `passthrough-${crypto.randomUUID().slice(0, 6)}`;
+    const position = {
+      x: flowPosition.x - 118,
+      y: flowPosition.y - 72,
+    };
+    const markerEnd = {
+      type: MarkerType.ArrowClosed,
+      width: 18,
+      height: 18,
+    };
+    markDirty();
+    setNodes((current) => [
+      ...current.map((node) => ({ ...node, selected: false })),
+      {
+        id: nodeId,
+        type: "loomNode",
+        position,
+        selected: true,
+        data: {
+          kind: definition.kind,
+          title: definition.label,
+          definition,
+          config: defaultConfig(definition),
+          controlPorts: {},
+          runStatus: "idle",
+        },
+      },
+    ]);
+    setEdges((current) =>
+      current.flatMap((candidate) =>
+        candidate.id === edgeId
+          ? [
+              {
+                id: crypto.randomUUID(),
+                source: candidate.source,
+                sourceHandle: candidate.sourceHandle,
+                target: nodeId,
+                targetHandle: "value",
+                markerEnd,
+              },
+              {
+                id: crypto.randomUUID(),
+                source: nodeId,
+                sourceHandle: "value",
+                target: candidate.target,
+                targetHandle: candidate.targetHandle,
+                markerEnd,
+              },
+            ]
+          : [candidate],
+      ),
+    );
+    setSelectedId(nodeId);
     setInspectorOpen(true);
     setContextMenu(undefined);
   };
@@ -1295,6 +1495,16 @@ function GlitchloomApp() {
     setInspectorOpen(nodes.length > 0);
     setContextMenu(undefined);
   };
+  const addQuickNode = (definition: NodeDefinition) => {
+    if (contextMenu?.scope !== "pane") return;
+    addNode(definition, {
+      x: contextMenu.flowPosition.x - 118,
+      y: contextMenu.flowPosition.y - 72,
+    });
+    setContextMenu(undefined);
+    setQuickAddQuery("");
+    setQuickAddIndex(0);
+  };
   const applyStarter = () => {
     if (!catalog) return;
     const starter = talkieStarter(catalog.nodes);
@@ -1628,6 +1838,10 @@ function GlitchloomApp() {
         : `${inspectorWidth}px`
       : "0px",
   } as CSSProperties;
+  const contextSelectionIds =
+    contextMenu?.scope === "node" || contextMenu?.scope === "selection"
+      ? contextMenu.nodeIds
+      : [];
 
   return (
     <div className={`app-shell ${afterHours ? "is-after-hours" : ""}`}>
@@ -2057,6 +2271,10 @@ function GlitchloomApp() {
             }}
             onNodeContextMenu={(event, node) => {
               event.preventDefault();
+              const nodeIds =
+                node.selected && selectedNodes.length > 0
+                  ? selectedNodes.map((item) => item.id)
+                  : [node.id];
               if (!node.selected) {
                 setNodes((current) =>
                   current.map((item) => ({
@@ -2072,6 +2290,7 @@ function GlitchloomApp() {
                 y: event.clientY,
                 scope: "node",
                 nodeId: node.id,
+                nodeIds,
               });
             }}
             onSelectionContextMenu={(event) => {
@@ -2080,6 +2299,7 @@ function GlitchloomApp() {
                 x: event.clientX,
                 y: event.clientY,
                 scope: "selection",
+                nodeIds: selectedNodes.map((node) => node.id),
               });
             }}
             onEdgeContextMenu={(event, edge) => {
@@ -2089,14 +2309,24 @@ function GlitchloomApp() {
                 y: event.clientY,
                 scope: "edge",
                 edgeId: edge.id,
+                flowPosition: screenToFlowPosition({
+                  x: event.clientX,
+                  y: event.clientY,
+                }),
               });
             }}
             onPaneContextMenu={(event) => {
               event.preventDefault();
+              setQuickAddQuery("");
+              setQuickAddIndex(0);
               setContextMenu({
                 x: event.clientX,
                 y: event.clientY,
                 scope: "pane",
+                flowPosition: screenToFlowPosition({
+                  x: event.clientX,
+                  y: event.clientY,
+                }),
               });
             }}
             fitView
@@ -2149,11 +2379,20 @@ function GlitchloomApp() {
           )}
           {contextMenu && (
             <div
-              className="context-menu"
+              className={`context-menu ${
+                contextMenu.scope === "pane" ? "quick-add-menu" : ""
+              }`}
               role="menu"
               style={{
                 left: Math.min(contextMenu.x, window.innerWidth - 226),
-                top: Math.min(contextMenu.y, window.innerHeight - 220),
+                top: Math.max(
+                  8,
+                  Math.min(
+                    contextMenu.y,
+                    window.innerHeight -
+                      (contextMenu.scope === "pane" ? 470 : 300),
+                  ),
+                ),
               }}
               onContextMenu={(event) => event.preventDefault()}
             >
@@ -2190,14 +2429,114 @@ function GlitchloomApp() {
                       <span className="context-menu-separator" />
                     </>
                   )}
-                  <button type="button" role="menuitem" onClick={duplicateSelected}>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => duplicateSelected(contextSelectionIds)}
+                  >
                     <Copy size={14} />
                     Duplicate
                     <kbd>Ctrl+D</kbd>
                   </button>
+                  {contextMenu.scope === "node" && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => selectDownstream(contextMenu.nodeIds)}
+                    >
+                      <Columns3 size={14} />
+                      Select downstream
+                    </button>
+                  )}
                   <button type="button" role="menuitem" onClick={openSaveWorkflow}>
                     <Save size={14} />
                     Save as workflow
+                  </button>
+                  {contextSelectionIds.length >= 2 && (
+                    <>
+                      <span className="context-menu-separator" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() =>
+                          arrangeSelection(contextSelectionIds, "align-left")
+                        }
+                      >
+                        <Columns3 size={14} />
+                        Align left
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() =>
+                          arrangeSelection(contextSelectionIds, "align-top")
+                        }
+                      >
+                        <Rows3 size={14} />
+                        Align top
+                      </button>
+                      {contextSelectionIds.length >= 3 && (
+                        <>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() =>
+                              arrangeSelection(
+                                contextSelectionIds,
+                                "distribute-x",
+                              )
+                            }
+                          >
+                            <Columns3 size={14} />
+                            Distribute horizontally
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() =>
+                              arrangeSelection(
+                                contextSelectionIds,
+                                "distribute-y",
+                              )
+                            }
+                          >
+                            <Rows3 size={14} />
+                            Distribute vertically
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                  <span className="context-menu-separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    onClick={() => {
+                      deleteSelected(contextSelectionIds);
+                      setContextMenu(undefined);
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    Delete {contextSelectionIds.length > 1 ? "selection" : "node"}
+                    <kbd>Del</kbd>
+                  </button>
+                </>
+              )}
+              {contextMenu.scope === "edge" && (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() =>
+                      insertPassthrough(
+                        contextMenu.edgeId,
+                        contextMenu.flowPosition,
+                      )
+                    }
+                  >
+                    <Plus size={14} />
+                    Insert passthrough
                   </button>
                   <span className="context-menu-separator" />
                   <button
@@ -2205,35 +2544,75 @@ function GlitchloomApp() {
                     role="menuitem"
                     className="is-danger"
                     onClick={() => {
-                      deleteSelected();
+                      markDirty();
+                      setEdges((current) =>
+                        current.filter((edge) => edge.id !== contextMenu.edgeId),
+                      );
                       setContextMenu(undefined);
                     }}
                   >
-                    <Trash2 size={14} />
-                    Delete {selectedNodes.length > 1 ? "selection" : "node"}
-                    <kbd>Del</kbd>
+                    <Unplug size={14} />
+                    Disconnect wire
                   </button>
                 </>
               )}
-              {contextMenu.scope === "edge" && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="is-danger"
-                  onClick={() => {
-                    markDirty();
-                    setEdges((current) =>
-                      current.filter((edge) => edge.id !== contextMenu.edgeId),
-                    );
-                    setContextMenu(undefined);
-                  }}
-                >
-                  <Unplug size={14} />
-                  Disconnect wire
-                </button>
-              )}
               {contextMenu.scope === "pane" && (
                 <>
+                  <label className="quick-add-search">
+                    <Search size={14} aria-hidden="true" />
+                    <input
+                      type="search"
+                      value={quickAddQuery}
+                      onChange={(event) => {
+                        setQuickAddQuery(event.target.value);
+                        setQuickAddIndex(0);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setQuickAddIndex((current) =>
+                            Math.min(
+                              current + 1,
+                              Math.max(0, quickAddDefinitions.length - 1),
+                            ),
+                          );
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setQuickAddIndex((current) => Math.max(0, current - 1));
+                        } else if (event.key === "Enter") {
+                          event.preventDefault();
+                          const definition = quickAddDefinitions[quickAddIndex];
+                          if (definition) addQuickNode(definition);
+                        }
+                      }}
+                      placeholder="Add a node…"
+                      aria-label="Find a node to add"
+                      autoFocus
+                    />
+                  </label>
+                  <div className="quick-add-results" role="listbox">
+                    {quickAddDefinitions.map((definition, index) => (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={index === quickAddIndex}
+                        className={index === quickAddIndex ? "is-active" : ""}
+                        key={definition.kind}
+                        onMouseEnter={() => setQuickAddIndex(index)}
+                        onClick={() => addQuickNode(definition)}
+                      >
+                        <Plus size={13} />
+                        <span>
+                          <strong>{definition.label}</strong>
+                          <small>{definition.category}</small>
+                        </span>
+                      </button>
+                    ))}
+                    {quickAddDefinitions.length === 0 && (
+                      <p>No matching nodes</p>
+                    )}
+                  </div>
+                  <span className="context-menu-separator" />
                   <button type="button" role="menuitem" onClick={selectAllNodes}>
                     <Focus size={14} />
                     Select all nodes
@@ -2286,7 +2665,7 @@ function GlitchloomApp() {
               }))
             }
             onUpdateControlPort={updateControlPort}
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected()}
             onClose={() => setInspectorOpen(false)}
           />
         </div>

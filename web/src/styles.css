@@ -2272,6 +2272,12 @@ summary:focus-visible {
   box-shadow: 0 20px 52px rgba(0, 0, 0, 0.5);
 }
 
+.context-menu.quick-add-menu {
+  width: 286px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+}
+
 .context-menu button {
   display: grid;
   min-height: 34px;
@@ -2291,6 +2297,11 @@ summary:focus-visible {
 .context-menu button:hover {
   color: #f2eaf3;
   background: #29222f;
+}
+
+.context-menu button.is-active {
+  color: #f2eaf3;
+  background: #30273a;
 }
 
 .context-menu button:disabled {
@@ -2317,6 +2328,72 @@ summary:focus-visible {
   height: 1px;
   margin: 4px 5px;
   background: #39313e;
+}
+
+.quick-add-search {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  margin: 2px 2px 5px;
+  padding: 0 7px;
+  color: #8c8191;
+  background: #100d13;
+  border: 1px solid #4a3e50;
+  border-radius: 4px;
+}
+
+.quick-add-search:focus-within {
+  color: var(--brass);
+  border-color: #82684d;
+}
+
+.quick-add-search input {
+  min-width: 0;
+  padding: 9px 0;
+  color: #eee7ef;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 10px;
+}
+
+.quick-add-results {
+  display: grid;
+  max-height: 296px;
+  overflow: auto;
+}
+
+.context-menu .quick-add-results button {
+  min-height: 40px;
+}
+
+.quick-add-results button > span {
+  min-width: 0;
+}
+
+.quick-add-results strong,
+.quick-add-results small {
+  display: block;
+}
+
+.quick-add-results strong {
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-add-results small {
+  margin-top: 2px;
+  color: #756b7b;
+  font-size: 7px;
+}
+
+.quick-add-results p {
+  margin: 6px 8px 10px;
+  color: #7f7584;
+  font-size: 8px;
 }
 
 .workflow-dialog {
