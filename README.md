@@ -31,6 +31,32 @@ disconnects it. `Ctrl+Enter` runs the loom. The node library and inspector use
 standard draggable dividers, support arrow-key resizing when focused, and reset
 to their responsive defaults on double-click.
 
+## Saved looms and templates
+
+Top-level looms are editable documents, deliberately separate from immutable
+reusable workflows. **Save** updates the current saved loom with revision
+protection; **Save as** always creates a new document. Saved looms reopen in
+closable graph tabs, while **Open as copy** removes the source identity and starts
+an unsaved tab. This makes a saved loom useful as an experiment template without
+risking its source document or any versioned workflow node it contains.
+
+Checked-in graphs under `examples/` appear as read-only templates and also always
+open as copies. Mutable loom documents live under
+`GLITCHLOOM_WORKSPACE/.glitchloom/looms`; deletion uses recoverable local trash.
+Exact workflow versions referenced by a loom are retained when it loads rather
+than being silently replaced by the latest catalog version. `Ctrl+S` saves the
+current loom and `Ctrl+Shift+S` opens Save as.
+
+## Canvas context actions
+
+Right-click an empty part of the canvas to search the complete catalog and add a
+node at that graph position. Node and multi-node menus support duplication,
+downstream selection, alignment, distribution, workflow extraction, and
+deletion. A wire can be disconnected or split by inserting the one-input,
+one-output **Passthrough** node. That initial insertion action preserves the
+original endpoint handles and leaves room for a future type-aware compatible-node
+picker.
+
 ## Promoted control ports
 
 Every catalog-driven node control can stay **Local**, become a typed **In** port,
@@ -176,8 +202,8 @@ Vite proxies `/api` to the backend on port 8788.
 ## Spike boundaries
 
 This version intentionally does not yet implement arbitrary Python `Apply func`,
-model-server lifecycle management, persistent whole-loom files, streaming
-tokens, or bounded iteration. Reusable workflows are the abstraction for named
+model-server lifecycle management, streaming tokens, or bounded iteration.
+Reusable workflows are the abstraction for named
 bundles such as “run both Talkies”; they do not become model-specific native
 nodes. The plugin boundary should become a versioned, typed operation manifest
 rather than executing arbitrary callables from saved graphs.
