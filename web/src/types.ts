@@ -136,6 +136,79 @@ export interface RunErrorDetail {
   nodes?: NodeRunResult[];
 }
 
+export interface GraphNodeSpec {
+  id: string;
+  kind: string;
+  title?: string | null;
+  config: Record<string, unknown>;
+  control_ports: Record<string, ControlPortMode>;
+  position: { x: number; y: number };
+}
+
+export interface GraphEdgeSpec {
+  id: string;
+  source: string;
+  source_port: string;
+  target: string;
+  target_port: string;
+}
+
+export interface GraphSpec {
+  name: string;
+  nodes: GraphNodeSpec[];
+  edges: GraphEdgeSpec[];
+}
+
+export interface LoomDraft {
+  graph: GraphSpec;
+}
+
+export interface LoomSpec extends LoomDraft {
+  id: string;
+  revision: number;
+  digest: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoomSummary {
+  id: string;
+  name: string;
+  revision: number;
+  digest: string;
+  created_at: string;
+  updated_at: string;
+  node_count: number;
+}
+
+export interface LoomTemplateSummary {
+  id: string;
+  name: string;
+  node_count: number;
+}
+
+export interface LoadLoomResponse {
+  loom: LoomSpec;
+  definitions: NodeDefinition[];
+}
+
+export interface LoadLoomTemplateResponse {
+  template: {
+    id: string;
+    graph: GraphSpec;
+  };
+  definitions: NodeDefinition[];
+}
+
+export interface DeleteLoomResponse {
+  deleted: {
+    id: string;
+    name: string;
+    revision: number;
+    recoverable_path: string;
+  };
+}
+
 export interface WorkflowInput extends PortDefinition {
   node_id: string;
   node_port: string;
@@ -152,24 +225,7 @@ export interface WorkflowOutput {
 export interface WorkflowDraft {
   name: string;
   description: string;
-  graph: {
-    name: string;
-    nodes: Array<{
-      id: string;
-      kind: string;
-      title?: string | null;
-      config: Record<string, unknown>;
-      control_ports: Record<string, ControlPortMode>;
-      position: { x: number; y: number };
-    }>;
-    edges: Array<{
-      id: string;
-      source: string;
-      source_port: string;
-      target: string;
-      target_port: string;
-    }>;
-  };
+  graph: GraphSpec;
   inputs: WorkflowInput[];
   outputs: WorkflowOutput[];
 }

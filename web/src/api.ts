@@ -1,14 +1,23 @@
 import type {
   CatalogResponse,
+  DeleteLoomResponse,
   DeleteWorkflowResponse,
+  GraphSpec,
+  LoadLoomResponse,
+  LoadLoomTemplateResponse,
+  LoomDraft,
   LoadWorkflowResponse,
   LoomEdge,
   LoomNode,
+  LoomSpec,
+  LoomSummary,
+  LoomTemplateSummary,
   RunErrorDetail,
   RunResponse,
   SaveWorkflowResponse,
   WorkflowDraft,
 } from "./types";
+import { serializeGraph } from "./graph";
 
 export class ApiError extends Error {
   readonly detail: RunErrorDetail;
@@ -35,24 +44,7 @@ export async function runGraph(
   const response = await fetch("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name,
-      nodes: nodes.map((node) => ({
-        id: node.id,
-        kind: node.data.kind,
-        title: node.data.title,
-        config: node.data.config,
-        control_ports: node.data.controlPorts,
-        position: node.position,
-      })),
-      edges: edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        source_port: edge.sourceHandle,
-        target: edge.target,
-        target_port: edge.targetHandle,
-      })),
-    }),
+    body: JSON.stringify(serializeGraph(name, nodes, edges)),
   });
   const payload = await response.json();
   if (!response.ok) {
@@ -60,6 +52,109 @@ export async function runGraph(
     throw new ApiError(detail ?? { message: `Run failed with ${response.status}.` });
   }
   return payload as RunResponse;
+}
+
+async function documentResponseError(
+  response: Response,
+  fallback: string,
+): Promise<Error> {
+  const payload = (await response.json().catch(() => ({}))) as {
+    detail?: {
+      message?: string;
+      current_revision?: number;
+      current_digest?: string;
+    } | string;
+  };
+  const detail =
+    typeof payload.detail === "string"
+      ? payload.detail
+      : payload.detail?.message;
+  return new Error(detail ?? `${fallback} (${response.status}).`);
+}
+
+export async function fetchLooms(): Promise<LoomSummary[]> {
+  const response = await fetch("/api/looms");
+  if (!response.ok) {
+    throw await documentResponseError(response, "Loom list failed");
+  }
+  const payload = (await response.json()) as { looms: LoomSummary[] };
+  return payload.looms;
+}
+
+export async function createLoom(draft: LoomDraft): Promise<LoomSpec> {
+  const response = await fetch("/api/looms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(draft),
+  });
+  if (!response.ok) {
+    throw await documentResponseError(response, "Loom save failed");
+  }
+  const payload = (await response.json()) as { loom: LoomSpec };
+  return payload.loom;
+}
+
+export async function fetchLoom(loomId: string): Promise<LoadLoomResponse> {
+  const response = await fetch(`/api/looms/${encodeURIComponent(loomId)}`);
+  if (!response.ok) {
+    throw await documentResponseError(response, "Loom load failed");
+  }
+  return response.json() as Promise<LoadLoomResponse>;
+}
+
+export async function updateLoom(
+  loomId: string,
+  expectedRevision: number,
+  graph: GraphSpec,
+): Promise<LoomSpec> {
+  const response = await fetch(`/api/looms/${encodeURIComponent(loomId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      graph,
+      expected_revision: expectedRevision,
+    }),
+  });
+  if (!response.ok) {
+    throw await documentResponseError(response, "Loom update failed");
+  }
+  const payload = (await response.json()) as { loom: LoomSpec };
+  return payload.loom;
+}
+
+export async function deleteLoom(
+  loomId: string,
+): Promise<DeleteLoomResponse> {
+  const response = await fetch(`/api/looms/${encodeURIComponent(loomId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw await documentResponseError(response, "Loom delete failed");
+  }
+  return response.json() as Promise<DeleteLoomResponse>;
+}
+
+export async function fetchLoomTemplates(): Promise<LoomTemplateSummary[]> {
+  const response = await fetch("/api/loom-templates");
+  if (!response.ok) {
+    throw await documentResponseError(response, "Template list failed");
+  }
+  const payload = (await response.json()) as {
+    templates: LoomTemplateSummary[];
+  };
+  return payload.templates;
+}
+
+export async function fetchLoomTemplate(
+  templateId: string,
+): Promise<LoadLoomTemplateResponse> {
+  const response = await fetch(
+    `/api/loom-templates/${encodeURIComponent(templateId)}`,
+  );
+  if (!response.ok) {
+    throw await documentResponseError(response, "Template load failed");
+  }
+  return response.json() as Promise<LoadLoomTemplateResponse>;
 }
 
 export async function saveWorkflow(

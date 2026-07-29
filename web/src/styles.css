@@ -199,6 +199,27 @@ summary:focus-visible {
   opacity: 0.6;
 }
 
+.graph-tab-add {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  margin: 0 0 1px 3px;
+  padding: 0;
+  color: #8f8694;
+  background: #17131a;
+  border: 1px solid #302936;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+}
+
+.graph-tab-add:hover {
+  color: #e8dfea;
+  background: #27202b;
+  border-color: #59465c;
+}
+
 .topbar {
   position: relative;
   z-index: 20;
@@ -395,6 +416,11 @@ summary:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.compact-action-button {
+  width: 36px;
+  padding: 0;
 }
 
 .plugin-chip {
@@ -2306,6 +2332,167 @@ summary:focus-visible {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
 }
 
+.loom-library-dialog {
+  display: grid;
+  width: min(720px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  gap: 15px;
+  padding: 20px;
+  background:
+    linear-gradient(135deg, rgba(90, 169, 162, 0.055), transparent 48%),
+    #18141b;
+  border: 1px solid #405e5c;
+  border-radius: 6px 6px 14px 6px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
+}
+
+.loom-library-dialog h2 {
+  margin: 1px 0 6px;
+  color: #eee7ef;
+  font-size: 14px;
+}
+
+.loom-library-dialog p {
+  margin: 0;
+  color: #9f95a3;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.loom-library-dialog .workflow-dialog-heading > span {
+  color: var(--thread-text);
+  background: #172523;
+  border-color: #365e59;
+}
+
+.loom-library-scroll {
+  display: grid;
+  min-height: 0;
+  gap: 18px;
+  overflow: auto;
+  padding-right: 5px;
+}
+
+.loom-library-section {
+  display: grid;
+  gap: 8px;
+}
+
+.loom-library-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.loom-library-section-heading strong {
+  color: #cfc7d2;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.loom-library-section-heading span {
+  color: #756c7a;
+  font-size: 8px;
+}
+
+.loom-library-list {
+  display: grid;
+  gap: 5px;
+}
+
+.loom-library-item {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  color: #cfc7d2;
+  text-align: left;
+  background: #100d13;
+  border: 1px solid #342d38;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button.loom-library-item:hover,
+.saved-loom-item:hover {
+  color: #efe8f0;
+  background: #1d1821;
+  border-color: #4c414f;
+}
+
+.loom-library-item strong,
+.loom-library-item small {
+  display: block;
+}
+
+.loom-library-item strong {
+  font-size: 10px;
+}
+
+.loom-library-item small {
+  margin-top: 4px;
+  color: #7f7584;
+  font-size: 8px;
+}
+
+.saved-loom-item {
+  position: relative;
+  padding: 0;
+}
+
+.saved-loom-item > button:first-child {
+  min-width: 0;
+  padding: 9px 11px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.loom-copy-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  margin-right: 8px;
+  padding: 0;
+  color: #968b9b;
+  background: #1d1821;
+  border: 1px solid #3d3442;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.loom-copy-button:hover {
+  color: var(--thread-text);
+  border-color: #4d6e69;
+}
+
+.loom-open-spinner {
+  position: absolute;
+  top: 18px;
+  right: 54px;
+  color: var(--thread-text);
+}
+
+.loom-library-dialog .workflow-error {
+  padding: 8px 9px;
+  color: #e6a1a7;
+  background: #2b1a20;
+  border: 1px solid #5b343c;
+  border-radius: 4px;
+}
+
+.loom-save-dialog {
+  width: min(520px, 100%);
+}
+
 .workflow-dialog-heading {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr);
@@ -2545,6 +2732,10 @@ summary:focus-visible {
   border: 1px solid #634d64;
   border-radius: 5px 5px 12px 5px;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+}
+
+.loom-toast {
+  border-color: #40645f;
 }
 
 .workflow-toast strong,

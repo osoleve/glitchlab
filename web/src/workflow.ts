@@ -7,6 +7,7 @@ import type {
   WorkflowOutput,
   WorkflowSpec,
 } from "./types";
+import { serializeGraph } from "./graph";
 
 function portKey(nodeId: string, portName: string): string {
   return `${nodeId}\u0000${portName}`;
@@ -132,30 +133,17 @@ export function inferWorkflowDraft(
 
   const minimumX = Math.min(...selectedNodes.map((node) => node.position.x));
   const minimumY = Math.min(...selectedNodes.map((node) => node.position.y));
+  const normalizedNodes = selectedNodes.map((node) => ({
+    ...node,
+    position: {
+      x: node.position.x - minimumX,
+      y: node.position.y - minimumY,
+    },
+  }));
   return {
     name: name.trim(),
     description: description.trim(),
-    graph: {
-      name: name.trim(),
-      nodes: selectedNodes.map((node) => ({
-        id: node.id,
-        kind: node.data.kind,
-        title: node.data.title,
-        config: node.data.config,
-        control_ports: node.data.controlPorts,
-        position: {
-          x: node.position.x - minimumX,
-          y: node.position.y - minimumY,
-        },
-      })),
-      edges: internalEdges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        source_port: edge.sourceHandle!,
-        target: edge.target,
-        target_port: edge.targetHandle!,
-      })),
-    },
+    graph: serializeGraph(name.trim(), normalizedNodes, internalEdges),
     inputs,
     outputs,
   };

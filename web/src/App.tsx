@@ -21,7 +21,9 @@ import {
   AlertTriangle,
   Bug,
   Copy,
+  FilePlus2,
   Focus,
+  FolderOpen,
   LayoutDashboard,
   LoaderCircle,
   PanelLeftClose,
@@ -54,20 +56,31 @@ import type {
 } from "react";
 import {
   ApiError,
+  createLoom,
+  fetchLoom,
+  fetchLooms,
+  fetchLoomTemplate,
+  fetchLoomTemplates,
   deleteWorkflow,
   fetchCatalog,
   fetchWorkflow,
   runGraph,
   saveWorkflow,
+  updateLoom,
   updateWorkflow,
 } from "./api";
 import { controlPortName, withControlPorts } from "./controlPorts";
+import { hydrateGraph, serializeGraph } from "./graph";
 import { Inspector } from "./Inspector";
 import { LoomNodeCard } from "./LoomNode";
 import { talkieStarter } from "./starter";
 import type {
   CatalogResponse,
   ControlPortMode,
+  GraphSpec,
+  LoomSpec,
+  LoomSummary,
+  LoomTemplateSummary,
   LoomEdge,
   LoomNode,
   NodeDefinition,
@@ -92,6 +105,8 @@ interface GraphSnapshot {
 interface GraphTab {
   id: string;
   type: "loom" | "workflow";
+  loom?: LoomSpec;
+  sourceTemplateId?: string;
   workflow?: WorkflowSpec;
   snapshot: GraphSnapshot;
 }
@@ -300,6 +315,17 @@ function GlitchloomApp() {
   const [workflowError, setWorkflowError] = useState<string>();
   const [savingWorkflow, setSavingWorkflow] = useState(false);
   const [workflowNotice, setWorkflowNotice] = useState<string>();
+  const [looms, setLooms] = useState<LoomSummary[]>([]);
+  const [loomTemplates, setLoomTemplates] = useState<LoomTemplateSummary[]>([]);
+  const [loomLibraryOpen, setLoomLibraryOpen] = useState(false);
+  const [loomLibraryError, setLoomLibraryError] = useState<string>();
+  const [loadingDocumentId, setLoadingDocumentId] = useState<string>();
+  const [loomSaveDialogOpen, setLoomSaveDialogOpen] = useState(false);
+  const [loomSaveAs, setLoomSaveAs] = useState(false);
+  const [loomSaveName, setLoomSaveName] = useState("");
+  const [savingLoom, setSavingLoom] = useState(false);
+  const [loomSaveError, setLoomSaveError] = useState<string>();
+  const [loomNotice, setLoomNotice] = useState<string>();
   const [afterHours, setAfterHours] = useState(false);
   const [loadingWorkflowId, setLoadingWorkflowId] = useState<string>();
   const [deleteDefinition, setDeleteDefinition] = useState<NodeDefinition>();
@@ -318,6 +344,9 @@ function GlitchloomApp() {
   const activeWorkflow = activeTab.type === "workflow"
     ? activeTab.workflow
     : undefined;
+  const activeLoom = activeTab.type === "loom" ? activeTab.loom : undefined;
+  const loadingGraph = Boolean(loadingWorkflowId || loadingDocumentId);
+  const graphBusy = loadingGraph || savingLoom;
 
   const captureSnapshot = useCallback(
     (): GraphSnapshot => ({
@@ -349,7 +378,7 @@ function GlitchloomApp() {
 
   const switchGraphTab = useCallback(
     (tabId: string) => {
-      if (tabId === activeTabId || running) return;
+      if (tabId === activeTabId || running || graphBusy) return;
       const target = tabs.find((tab) => tab.id === tabId);
       if (!target) return;
       const currentSnapshot = captureSnapshot();
@@ -363,7 +392,7 @@ function GlitchloomApp() {
       setActiveTabId(tabId);
       applySnapshot(target.snapshot);
     },
-    [activeTabId, applySnapshot, captureSnapshot, running, tabs],
+    [activeTabId, applySnapshot, captureSnapshot, graphBusy, running, tabs],
   );
 
   useEffect(() => {
@@ -395,6 +424,19 @@ function GlitchloomApp() {
         setCatalogError(error instanceof Error ? error.message : String(error));
       });
   }, [fitView]);
+
+  useEffect(() => {
+    void Promise.all([fetchLooms(), fetchLoomTemplates()])
+      .then(([savedLooms, templates]) => {
+        setLooms(savedLooms);
+        setLoomTemplates(templates);
+      })
+      .catch((error: unknown) => {
+        setLoomLibraryError(
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+  }, []);
 
   useEffect(() => {
     if (!needsFit || !nodesInitialized || nodes.length === 0) return;
@@ -792,58 +834,14 @@ function GlitchloomApp() {
     setLoadingWorkflowId(metadata.id);
     try {
       const response = await fetchWorkflow(metadata.id, metadata.version);
-      const definitions = new Map(
-        response.definitions.map((item) => [item.kind, item]),
-      );
-      for (const item of catalog?.nodes ?? []) {
-        definitions.set(item.kind, item);
-      }
-      const workflowNodes: LoomNode[] = response.workflow.graph.nodes.map(
-        (node) => {
-          const nodeDefinition = definitions.get(node.kind);
-          if (!nodeDefinition) {
-            throw new Error(`No definition is available for ${node.kind}.`);
-          }
-          const boundaryLabel = [
-            ...response.workflow.inputs,
-            ...response.workflow.outputs,
-          ].find((binding) => binding.node_id === node.id)?.label;
-          const controlPorts = node.control_ports ?? {};
-          return {
-            id: node.id,
-            type: "loomNode",
-            position: node.position,
-            data: {
-              kind: node.kind,
-              title:
-                node.title ||
-                boundaryLabel?.split(" · ")[0] ||
-                nodeDefinition.label,
-              definition: withControlPorts(nodeDefinition, controlPorts),
-              config: node.config,
-              controlPorts,
-              runStatus: "idle",
-            },
-          };
-        },
-      );
-      const workflowEdges: LoomEdge[] = response.workflow.graph.edges.map(
-        (edge) => ({
-          id: edge.id,
-          source: edge.source,
-          sourceHandle: edge.source_port,
-          target: edge.target,
-          targetHandle: edge.target_port,
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 18,
-            height: 18,
-          },
-        }),
+      const hydrated = hydrateGraph(
+        response.workflow.graph,
+        catalog?.nodes ?? [],
+        response.definitions,
       );
       const snapshot: GraphSnapshot = {
-        nodes: workflowNodes,
-        edges: workflowEdges,
+        nodes: hydrated.nodes,
+        edges: hydrated.edges,
         loomName: response.workflow.name,
         isDirty: false,
       };
@@ -870,6 +868,205 @@ function GlitchloomApp() {
     } finally {
       setLoadingWorkflowId(undefined);
     }
+  };
+
+  const rememberLoom = (loom: LoomSpec) => {
+    const summary: LoomSummary = {
+      id: loom.id,
+      name: loom.graph.name,
+      revision: loom.revision,
+      digest: loom.digest,
+      created_at: loom.created_at,
+      updated_at: loom.updated_at,
+      node_count: loom.graph.nodes.length,
+    };
+    setLooms((current) =>
+      [
+        ...current.filter((item) => item.id !== loom.id),
+        summary,
+      ].sort((left, right) => left.name.localeCompare(right.name)),
+    );
+  };
+
+  const openHydratedDraft = (
+    graph: GraphSpec,
+    exactDefinitions: NodeDefinition[] = [],
+    sourceTemplateId?: string,
+  ) => {
+    const hydrated = hydrateGraph(
+      graph,
+      catalog?.nodes ?? [],
+      exactDefinitions,
+    );
+    const snapshot: GraphSnapshot = {
+      nodes: hydrated.nodes,
+      edges: hydrated.edges,
+      loomName: graph.name,
+      isDirty: true,
+    };
+    const tabId = `draft:${crypto.randomUUID()}`;
+    const currentSnapshot = captureSnapshot();
+    setTabs((current) => [
+      ...current.map((tab) =>
+        tab.id === activeTabId ? { ...tab, snapshot: currentSnapshot } : tab,
+      ),
+      {
+        id: tabId,
+        type: "loom",
+        sourceTemplateId,
+        snapshot,
+      },
+    ]);
+    setActiveTabId(tabId);
+    applySnapshot(snapshot);
+    setLoomLibraryOpen(false);
+  };
+
+  const openSavedLoom = async (loomId: string, asCopy = false) => {
+    const existing = !asCopy
+      ? tabs.find((tab) => tab.loom?.id === loomId)
+      : undefined;
+    if (existing) {
+      setLoomLibraryOpen(false);
+      switchGraphTab(existing.id);
+      return;
+    }
+    setLoadingDocumentId(`loom:${loomId}:${asCopy ? "copy" : "open"}`);
+    setLoomLibraryError(undefined);
+    try {
+      const response = await fetchLoom(loomId);
+      if (asCopy) {
+        openHydratedDraft(
+          {
+            ...response.loom.graph,
+            name: `${response.loom.graph.name} copy`,
+          },
+          response.definitions,
+        );
+        return;
+      }
+      const hydrated = hydrateGraph(
+        response.loom.graph,
+        catalog?.nodes ?? [],
+        response.definitions,
+      );
+      const snapshot: GraphSnapshot = {
+        nodes: hydrated.nodes,
+        edges: hydrated.edges,
+        loomName: response.loom.graph.name,
+        isDirty: false,
+      };
+      const tabId = `loom:${response.loom.id}`;
+      const currentSnapshot = captureSnapshot();
+      setTabs((current) => [
+        ...current.map((tab) =>
+          tab.id === activeTabId ? { ...tab, snapshot: currentSnapshot } : tab,
+        ),
+        {
+          id: tabId,
+          type: "loom",
+          loom: response.loom,
+          snapshot,
+        },
+      ]);
+      setActiveTabId(tabId);
+      applySnapshot(snapshot);
+      setLoomLibraryOpen(false);
+    } catch (error) {
+      setLoomLibraryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingDocumentId(undefined);
+    }
+  };
+
+  const openLoomTemplate = async (templateId: string) => {
+    setLoadingDocumentId(`template:${templateId}`);
+    setLoomLibraryError(undefined);
+    try {
+      const response = await fetchLoomTemplate(templateId);
+      openHydratedDraft(
+        response.template.graph,
+        response.definitions,
+        response.template.id,
+      );
+    } catch (error) {
+      setLoomLibraryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingDocumentId(undefined);
+    }
+  };
+
+  const openStarterCopy = () => {
+    if (!catalog) return;
+    const starter = talkieStarter(catalog.nodes);
+    openHydratedDraft(
+      serializeGraph("Talkie perturbation pair", starter.nodes, starter.edges),
+      [],
+      "starter",
+    );
+  };
+
+  const persistCurrentLoom = async (
+    name: string,
+    options: { createNew: boolean },
+  ) => {
+    if (activeWorkflow) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setLoomSaveError("Give this loom a name.");
+      return;
+    }
+    setSavingLoom(true);
+    setLoomSaveError(undefined);
+    try {
+      const graph = serializeGraph(trimmedName, nodes, edges);
+      const saved =
+        activeLoom && !options.createNew
+          ? await updateLoom(activeLoom.id, activeLoom.revision, graph)
+          : await createLoom({ graph });
+      const nextSnapshot: GraphSnapshot = {
+        ...captureSnapshot(),
+        loomName: saved.graph.name,
+        isDirty: false,
+      };
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.id === activeTabId
+            ? {
+                ...tab,
+                loom: saved,
+                sourceTemplateId: undefined,
+                snapshot: nextSnapshot,
+              }
+            : tab,
+        ),
+      );
+      setLoomName(saved.graph.name);
+      setIsDirty(false);
+      rememberLoom(saved);
+      setLoomSaveDialogOpen(false);
+      setLoomNotice(
+        `${saved.graph.name} saved at revision ${saved.revision}.`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (loomSaveDialogOpen) setLoomSaveError(message);
+      else setLoomNotice(message);
+    } finally {
+      setSavingLoom(false);
+    }
+  };
+
+  const requestSaveLoom = (saveAs = false) => {
+    if (activeWorkflow) return;
+    if (activeLoom && !saveAs) {
+      void persistCurrentLoom(loomName, { createNew: false });
+      return;
+    }
+    setLoomSaveAs(saveAs);
+    setLoomSaveName(loomName);
+    setLoomSaveError(undefined);
+    setLoomSaveDialogOpen(true);
   };
 
   const performCloseTab = (tabId: string) => {
@@ -1328,6 +1525,12 @@ function GlitchloomApp() {
           event.preventDefault();
           setContextMenu(undefined);
           setWorkflowMenu(undefined);
+        } else if (loomLibraryOpen) {
+          event.preventDefault();
+          setLoomLibraryOpen(false);
+        } else if (loomSaveDialogOpen && !savingLoom) {
+          event.preventDefault();
+          setLoomSaveDialogOpen(false);
         } else if (deleteDefinition && !deletingWorkflow) {
           event.preventDefault();
           setDeleteDefinition(undefined);
@@ -1357,6 +1560,18 @@ function GlitchloomApp() {
       }
 
       const commandKey = event.ctrlKey || event.metaKey;
+      if (
+        commandKey &&
+        event.key.toLowerCase() === "s" &&
+        !activeWorkflow &&
+        !editable &&
+        !saveDialogOpen &&
+        !loomSaveDialogOpen
+      ) {
+        event.preventDefault();
+        requestSaveLoom(event.shiftKey);
+        return;
+      }
       if (
         commandKey &&
         event.key.toLowerCase() === "a" &&
@@ -1437,7 +1652,11 @@ function GlitchloomApp() {
         </button>
         <div className="loom-title">
           <span className="loom-title-label">
-            {activeWorkflow ? "workflow" : "loom"}
+            {activeWorkflow
+              ? "workflow"
+              : activeLoom
+                ? `saved loom · r${activeLoom.revision}`
+                : "loom draft"}
           </span>
           <input
             aria-label={activeWorkflow ? "Workflow name" : "Loom name"}
@@ -1469,6 +1688,19 @@ function GlitchloomApp() {
           >
             <Bug size={13} />
           </span>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setLoomLibraryError(undefined);
+              setLoomLibraryOpen(true);
+            }}
+            disabled={running || graphBusy}
+            title="Open a saved loom or template"
+          >
+            <FolderOpen size={15} />
+            Open
+          </button>
           {activeWorkflow ? (
             <button
               type="button"
@@ -1481,15 +1713,43 @@ function GlitchloomApp() {
               Save version
             </button>
           ) : (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={requestStarterReset}
-              title="Reset to the starter graph"
-            >
-              <RotateCcw size={15} />
-              Reset starter
-            </button>
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => requestSaveLoom(false)}
+                disabled={savingLoom || running}
+                title="Save loom (Ctrl+S)"
+              >
+                {savingLoom ? (
+                  <LoaderCircle className="spin-icon" size={15} />
+                ) : (
+                  <Save size={15} />
+                )}
+                Save
+              </button>
+              <button
+                type="button"
+                className="secondary-button compact-action-button"
+                onClick={() => requestSaveLoom(true)}
+                disabled={savingLoom || running}
+                title="Save as a new loom (Ctrl+Shift+S)"
+                aria-label="Save as a new loom"
+              >
+                <FilePlus2 size={15} />
+              </button>
+              {activeTabId === MAIN_TAB_ID && (
+                <button
+                  type="button"
+                  className="secondary-button compact-action-button"
+                  onClick={requestStarterReset}
+                  title="Reset to the starter graph"
+                  aria-label="Reset to starter graph"
+                >
+                  <RotateCcw size={15} />
+                </button>
+              )}
+            </>
           )}
           <button
             type="button"
@@ -1516,6 +1776,9 @@ function GlitchloomApp() {
           const version = active
             ? activeWorkflow?.version
             : tab.workflow?.version;
+          const revision = active
+            ? activeLoom?.revision
+            : tab.loom?.revision;
           return (
             <div
               className={`graph-tab ${active ? "is-active" : ""}`}
@@ -1536,11 +1799,12 @@ function GlitchloomApp() {
                 )}
                 <span>{title}</span>
                 {version && <em>v{version}</em>}
+                {revision && <em>r{revision}</em>}
                 {dirty && (
                   <i aria-label="Unsaved changes" title="Unsaved changes" />
                 )}
               </button>
-              {tab.type === "workflow" && (
+              {tab.id !== MAIN_TAB_ID && (
                 <button
                   type="button"
                   className="graph-tab-close"
@@ -1555,6 +1819,16 @@ function GlitchloomApp() {
             </div>
           );
         })}
+        <button
+          type="button"
+          className="graph-tab-add"
+          onClick={() => setLoomLibraryOpen(true)}
+          disabled={running || graphBusy}
+          aria-label="Open loom or template"
+          title="Open loom or template"
+        >
+          <Plus size={14} />
+        </button>
       </nav>
 
       <main
@@ -2071,6 +2345,207 @@ function GlitchloomApp() {
           </button>
         </div>
       )}
+      {loomLibraryOpen && (
+        <div
+          className="dialog-backdrop"
+          onClick={() => !loadingDocumentId && setLoomLibraryOpen(false)}
+        >
+          <section
+            className="loom-library-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="loom-library-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="workflow-dialog-heading">
+              <span aria-hidden="true">
+                <FolderOpen size={18} />
+              </span>
+              <div>
+                <h2 id="loom-library-title">Open a loom</h2>
+                <p>
+                  Saved looms reopen as editable documents. Templates and copies
+                  always start in a new unsaved tab.
+                </p>
+              </div>
+            </div>
+            <div className="loom-library-scroll">
+              <section className="loom-library-section">
+                <div className="loom-library-section-heading">
+                  <strong>Templates</strong>
+                  <span>read-only starting points</span>
+                </div>
+                <div className="loom-library-list">
+                  <button
+                    type="button"
+                    className="loom-library-item"
+                    onClick={openStarterCopy}
+                    disabled={Boolean(loadingDocumentId) || !catalog}
+                  >
+                    <span>
+                      <strong>Talkie perturbation pair</strong>
+                      <small>Built-in starter · opens as a copy</small>
+                    </span>
+                    <FilePlus2 size={15} />
+                  </button>
+                  {loomTemplates.map((template) => (
+                    <button
+                      type="button"
+                      className="loom-library-item"
+                      key={template.id}
+                      onClick={() => void openLoomTemplate(template.id)}
+                      disabled={Boolean(loadingDocumentId)}
+                    >
+                      <span>
+                        <strong>{template.name}</strong>
+                        <small>
+                          {template.node_count} node
+                          {template.node_count === 1 ? "" : "s"} · opens as a copy
+                        </small>
+                      </span>
+                      {loadingDocumentId === `template:${template.id}` ? (
+                        <LoaderCircle className="spin-icon" size={15} />
+                      ) : (
+                        <FilePlus2 size={15} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section className="loom-library-section">
+                <div className="loom-library-section-heading">
+                  <strong>Saved looms</strong>
+                  <span>{looms.length} local document{looms.length === 1 ? "" : "s"}</span>
+                </div>
+                <div className="loom-library-list">
+                  {looms.map((loom) => (
+                    <div className="loom-library-item saved-loom-item" key={loom.id}>
+                      <button
+                        type="button"
+                        onClick={() => void openSavedLoom(loom.id)}
+                        disabled={Boolean(loadingDocumentId)}
+                      >
+                        <strong>{loom.name}</strong>
+                        <small>
+                          r{loom.revision} · {loom.node_count} node
+                          {loom.node_count === 1 ? "" : "s"} · updated{" "}
+                          {new Date(loom.updated_at).toLocaleString()}
+                        </small>
+                      </button>
+                      <button
+                        type="button"
+                        className="loom-copy-button"
+                        onClick={() => void openSavedLoom(loom.id, true)}
+                        disabled={Boolean(loadingDocumentId)}
+                        title="Open as an unsaved copy"
+                        aria-label={`Open ${loom.name} as a copy`}
+                      >
+                        {loadingDocumentId === `loom:${loom.id}:copy` ? (
+                          <LoaderCircle className="spin-icon" size={14} />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                      {loadingDocumentId === `loom:${loom.id}:open` && (
+                        <LoaderCircle className="spin-icon loom-open-spinner" size={14} />
+                      )}
+                    </div>
+                  ))}
+                  {looms.length === 0 && (
+                    <p className="empty-copy">
+                      No saved looms yet. Save the current tab to create one.
+                    </p>
+                  )}
+                </div>
+              </section>
+            </div>
+            {loomLibraryError && (
+              <p className="workflow-error">{loomLibraryError}</p>
+            )}
+            <div className="workflow-dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setLoomLibraryOpen(false)}
+                disabled={Boolean(loadingDocumentId)}
+              >
+                Close
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {loomSaveDialogOpen && (
+        <div
+          className="dialog-backdrop"
+          onClick={() => !savingLoom && setLoomSaveDialogOpen(false)}
+        >
+          <section
+            className="workflow-dialog loom-save-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="loom-save-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="workflow-dialog-heading">
+              <span aria-hidden="true">
+                <Save size={18} />
+              </span>
+              <div>
+                <h2 id="loom-save-title">
+                  {loomSaveAs || activeLoom ? "Save as a new loom" : "Save loom"}
+                </h2>
+                <p>
+                  {loomSaveAs
+                    ? "This creates a separate document; the source loom and workflow definitions stay unchanged."
+                    : "This tab will become a saved top-level document. Reusable workflows remain separately versioned."}
+                </p>
+              </div>
+            </div>
+            <label>
+              <span>Name</span>
+              <input
+                value={loomSaveName}
+                onChange={(event) => setLoomSaveName(event.target.value)}
+                autoFocus
+                disabled={savingLoom}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && loomSaveName.trim()) {
+                    event.preventDefault();
+                    void persistCurrentLoom(loomSaveName, { createNew: true });
+                  }
+                }}
+              />
+            </label>
+            {loomSaveError && <p className="workflow-error">{loomSaveError}</p>}
+            <div className="workflow-dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setLoomSaveDialogOpen(false)}
+                disabled={savingLoom}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="run-button"
+                onClick={() =>
+                  void persistCurrentLoom(loomSaveName, { createNew: true })
+                }
+                disabled={savingLoom || !loomSaveName.trim()}
+              >
+                {savingLoom ? (
+                  <LoaderCircle className="spin-icon" size={15} />
+                ) : (
+                  <Save size={15} />
+                )}
+                {savingLoom ? "Saving…" : "Save loom"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {resetDialogOpen && (
         <div
           className="dialog-backdrop"
@@ -2342,11 +2817,13 @@ function GlitchloomApp() {
               <AlertTriangle size={18} />
             </span>
             <div>
-              <h2 id="close-tab-title">Discard unsaved workflow edits?</h2>
+              <h2 id="close-tab-title">Discard unsaved changes?</h2>
               <p>
                 Closing “
-                {tabs.find((tab) => tab.id === closeTabId)?.snapshot.loomName}
-                ” will discard changes made since its last saved version.
+                {closeTabId === activeTabId
+                  ? loomName
+                  : tabs.find((tab) => tab.id === closeTabId)?.snapshot.loomName}
+                ” will discard changes made since it was opened or last saved.
               </p>
             </div>
             <div className="reset-dialog-actions">
@@ -2400,6 +2877,22 @@ function GlitchloomApp() {
             className="undo-dismiss"
             onClick={() => setWorkflowNotice(undefined)}
             aria-label="Dismiss workflow notice"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+      {loomNotice && !loomSaveDialogOpen && (
+        <div className="workflow-toast loom-toast" role="status">
+          <div>
+            <strong>Loom document</strong>
+            <span>{loomNotice}</span>
+          </div>
+          <button
+            type="button"
+            className="undo-dismiss"
+            onClick={() => setLoomNotice(undefined)}
+            aria-label="Dismiss loom notice"
           >
             <X size={13} />
           </button>
