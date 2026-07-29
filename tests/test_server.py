@@ -62,6 +62,128 @@ async def test_health_and_catalog_contract() -> None:
         ("template", "Template", "template"),
         ("text", "Bound text", "text"),
     ]
+    passthrough = next(
+        node for node in catalog.json()["nodes"] if node["kind"] == "passthrough"
+    )
+    assert passthrough["inputs"][0]["type"] == "any"
+    assert passthrough["outputs"][0]["type"] == "any"
+
+
+@pytest.mark.asyncio
+async def test_loom_documents_roundtrip_revision_guard_and_trash(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    graph = {
+        "name": "Prompt sketch",
+        "nodes": [
+            {
+                "id": "prompt",
+                "kind": "text_input",
+                "title": "Keep whitespace",
+                "config": {"text": "  semantically spaced  "},
+                "control_ports": {"text": "output"},
+                "position": {"x": 12.5, "y": 30},
+            },
+            {
+                "id": "pass",
+                "kind": "passthrough",
+                "config": {},
+                "position": {"x": 280, "y": 30},
+            },
+        ],
+        "edges": [
+            {
+                "id": "prompt-pass",
+                "source": "prompt",
+                "source_port": "text",
+                "target": "pass",
+                "target_port": "value",
+            }
+        ],
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        created = await client.post("/api/looms", json={"graph": graph})
+        duplicate_name = await client.post("/api/looms", json={"graph": graph})
+        loom_id = created.json()["loom"]["id"]
+        listed = await client.get("/api/looms")
+        loaded = await client.get(f"/api/looms/{loom_id}")
+        updated_graph = {
+            **graph,
+            "nodes": [
+                {
+                    **graph["nodes"][0],
+                    "config": {"text": "\n next revision \n"},
+                },
+                graph["nodes"][1],
+            ],
+        }
+        updated = await client.put(
+            f"/api/looms/{loom_id}",
+            json={"graph": updated_graph, "expected_revision": 1},
+        )
+        idempotent = await client.put(
+            f"/api/looms/{loom_id}",
+            json={"graph": updated_graph, "expected_revision": 2},
+        )
+        stale = await client.put(
+            f"/api/looms/{loom_id}",
+            json={"graph": graph, "expected_revision": 1},
+        )
+        deleted = await client.delete(f"/api/looms/{loom_id}")
+
+    assert created.status_code == 201
+    assert duplicate_name.status_code == 201
+    assert duplicate_name.json()["loom"]["id"] != loom_id
+    assert len(listed.json()["looms"]) == 2
+    assert loaded.status_code == 200
+    assert loaded.json()["loom"]["graph"]["nodes"][0]["title"] == "Keep whitespace"
+    assert loaded.json()["loom"]["graph"]["nodes"][0]["config"]["text"] == (
+        "  semantically spaced  "
+    )
+    assert {
+        definition["kind"] for definition in loaded.json()["definitions"]
+    } == {"text_input", "passthrough"}
+    assert updated.status_code == 200
+    assert updated.json()["loom"]["revision"] == 2
+    assert idempotent.status_code == 200
+    assert idempotent.json()["loom"]["revision"] == 2
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["current_revision"] == 2
+    assert deleted.status_code == 200
+    recoverable = deleted.json()["deleted"]["recoverable_path"]
+    assert (tmp_path / recoverable).is_file()
+
+
+@pytest.mark.asyncio
+async def test_checked_in_loom_templates_are_read_only(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        listed = await client.get("/api/loom-templates")
+        loaded = await client.get("/api/loom-templates/talkie-smoke")
+        traversal = await client.get("/api/loom-templates/..%2Fpyproject")
+
+    assert listed.status_code == 200
+    assert any(
+        item["id"] == "talkie-smoke" for item in listed.json()["templates"]
+    )
+    assert loaded.status_code == 200
+    assert loaded.json()["template"]["graph"]["name"] == (
+        "Talkie generic completion smoke"
+    )
+    assert loaded.json()["template"]["graph"]["nodes"]
+    assert traversal.status_code == 404
+    assert not (tmp_path / ".glitchloom" / "looms").exists()
 
 
 @pytest.mark.asyncio

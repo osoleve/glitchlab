@@ -15,7 +15,8 @@ from . import __version__
 from .catalog import get_catalog
 from .engine import GraphEngine
 from .glitchlings_adapter import discover_glitchlings, plugin_status
-from .models import GraphRunFailure, GraphSpec, WorkflowDraft
+from .looms import LoomConflictError, LoomStore, LoomTemplateStore
+from .models import GraphRunFailure, GraphSpec, LoomDraft, LoomUpdate, WorkflowDraft
 from .workflows import WorkflowInUseError, WorkflowStore, workflow_definition
 
 app = FastAPI(title="Glitchloom", version=__version__)
@@ -64,6 +65,118 @@ def catalog() -> dict[str, Any]:
         ],
         "glitchlings": discovered,
         "plugin": status,
+    }
+
+
+@app.get("/api/looms")
+def list_looms() -> dict[str, Any]:
+    """Return saved editable graph documents without their full graph bodies."""
+
+    store = LoomStore(GraphEngine().workspace)
+    return {
+        "looms": [loom.model_dump(mode="json") for loom in store.list()]
+    }
+
+
+@app.post("/api/looms", status_code=201)
+def create_loom(draft: LoomDraft) -> dict[str, Any]:
+    """Create a mutable top-level loom document."""
+
+    store = LoomStore(GraphEngine().workspace)
+    try:
+        loom = store.create(draft)
+    except LoomConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+                "current_digest": exc.current_digest,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
+    return {"loom": loom.model_dump(mode="json")}
+
+
+@app.get("/api/looms/{loom_id}")
+def get_loom(loom_id: str) -> dict[str, Any]:
+    """Load a saved document and exact definitions for its versioned nodes."""
+
+    store = LoomStore(GraphEngine().workspace)
+    try:
+        loom = store.get(loom_id)
+        definitions = store.definitions(loom.graph)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+    return {
+        "loom": loom.model_dump(mode="json"),
+        "definitions": definitions,
+    }
+
+
+@app.put("/api/looms/{loom_id}")
+def update_loom(loom_id: str, draft: LoomUpdate) -> dict[str, Any]:
+    """Update a mutable loom with optimistic revision protection."""
+
+    store = LoomStore(GraphEngine().workspace)
+    try:
+        loom = store.update(
+            loom_id,
+            LoomDraft(graph=draft.graph),
+            expected_revision=draft.expected_revision,
+        )
+    except LoomConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "current_revision": exc.current_revision,
+                "current_digest": exc.current_digest,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
+    return {"loom": loom.model_dump(mode="json")}
+
+
+@app.delete("/api/looms/{loom_id}")
+def delete_loom(loom_id: str) -> dict[str, Any]:
+    """Move a saved top-level loom to recoverable trash."""
+
+    store = LoomStore(GraphEngine().workspace)
+    try:
+        deleted = store.delete(loom_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+    return {"deleted": deleted}
+
+
+@app.get("/api/loom-templates")
+def list_loom_templates() -> dict[str, Any]:
+    """List checked-in graphs that always open as unsaved copies."""
+
+    store = LoomTemplateStore(GraphEngine().workspace)
+    return {
+        "templates": [
+            template.model_dump(mode="json") for template in store.list()
+        ]
+    }
+
+
+@app.get("/api/loom-templates/{template_id}")
+def get_loom_template(template_id: str) -> dict[str, Any]:
+    """Load one read-only template and exact definitions for its graph."""
+
+    store = LoomTemplateStore(GraphEngine().workspace)
+    try:
+        template = store.get(template_id)
+        definitions = store.definitions(template.graph)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+    return {
+        "template": template.model_dump(mode="json"),
+        "definitions": definitions,
     }
 
 

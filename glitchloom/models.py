@@ -45,6 +45,55 @@ class GraphSpec(BaseModel):
     edges: list[GraphEdge]
 
 
+class LoomDraft(BaseModel):
+    """An editable top-level graph before document identity is assigned."""
+
+    graph: GraphSpec
+
+
+class LoomUpdate(LoomDraft):
+    """A guarded update to an existing mutable loom document."""
+
+    expected_revision: int = Field(ge=1)
+
+
+class LoomSpec(LoomDraft):
+    """A mutable top-level graph document stored independently of workflows."""
+
+    id: str
+    revision: int
+    digest: str
+    created_at: str
+    updated_at: str
+
+
+class LoomSummary(BaseModel):
+    """Compact metadata used by the saved-loom picker."""
+
+    id: str
+    name: str
+    revision: int
+    digest: str
+    created_at: str
+    updated_at: str
+    node_count: int
+
+
+class LoomTemplate(BaseModel):
+    """A checked-in graph example exposed as a read-only starting point."""
+
+    id: str
+    graph: GraphSpec
+
+
+class LoomTemplateSummary(BaseModel):
+    """Compact metadata for the template picker."""
+
+    id: str
+    name: str
+    node_count: int
+
+
 class WorkflowInput(BaseModel):
     """One public workflow input bound to an internal node port."""
 

@@ -192,6 +192,15 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "fields": [_field("path", "text", "text")],
     },
     {
+        "kind": "passthrough",
+        "label": "Passthrough",
+        "category": "Flow",
+        "description": "Pass one value through unchanged.",
+        "inputs": [_port("value", "any")],
+        "outputs": [_port("value", "any")],
+        "fields": [],
+    },
+    {
         "kind": "endpoint",
         "label": "Completion endpoint",
         "category": "Models",

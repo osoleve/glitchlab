@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import definitions_by_kind, with_control_ports
-from .models import WorkflowDraft, WorkflowSpec
+from .models import LoomSpec, WorkflowDraft, WorkflowSpec
 
 WORKFLOW_KIND_PREFIX = "workflow:"
 WORKFLOW_KIND_PATTERN = re.compile(
@@ -371,6 +371,22 @@ class WorkflowStore:
             )
             if references_target:
                 dependents.append(f"{record.name} v{record.version}")
+        loom_root = self.root.parent / "looms"
+        if loom_root.is_dir():
+            for path in sorted(loom_root.glob("*.json")):
+                try:
+                    loom = LoomSpec.model_validate_json(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                references_target = any(
+                    (
+                        match := WORKFLOW_KIND_PATTERN.fullmatch(node.kind)
+                    ) is not None
+                    and match["workflow_id"] == workflow_id
+                    for node in loom.graph.nodes
+                )
+                if references_target:
+                    dependents.append(f"Loom {loom.graph.name}")
         dependents = sorted(set(dependents))
         if dependents and not force:
             raise WorkflowInUseError(dependents)

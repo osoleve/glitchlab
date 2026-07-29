@@ -40,6 +40,22 @@ def edge(
 
 
 @pytest.mark.asyncio
+async def test_passthrough_preserves_any_value(tmp_path: Path) -> None:
+    graph = GraphSpec(
+        name="passthrough",
+        nodes=[
+            node("source", "list_input", items=["one", {"two": 2}]),
+            node("pass", "passthrough"),
+        ],
+        edges=[edge("source", "items", "pass", "value")],
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph)
+
+    assert response.terminal_outputs["pass"]["value"] == ["one", {"two": 2}]
+
+
+@pytest.mark.asyncio
 async def test_promoted_controls_connect_as_typed_ports(tmp_path: Path) -> None:
     replacement_port = control_port_name("replacement")
     literal_port = control_port_name("text")

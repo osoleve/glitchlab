@@ -659,6 +659,8 @@ class GraphEngine:
             }
         if kind == "select_field":
             return {"value": _select_path(inputs["value"], str(config.get("path", "")))}
+        if kind == "passthrough":
+            return {"value": inputs["value"]}
         if kind == "endpoint":
             return {
                 "endpoint": {
