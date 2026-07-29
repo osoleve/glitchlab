@@ -20,10 +20,29 @@ The partial-execution tranche described below is now implemented as Glitchloom
 - the Inspector output-tab dependency fix; and
 - automated backend/frontend gates plus live 1365x768 and 1920x1080 QA.
 
-The next recommended direction is the deterministic left-to-right
-**Tidy selection / Tidy graph** tranche under “Auto-layout and edge legibility
-follow-up.” General resume, cancellation, streaming status, and intermediate-node
-caching remain deliberately deferred.
+The remaining recommended direction at that point was the deterministic
+left-to-right **Tidy selection / Tidy graph** tranche under “Auto-layout and
+edge legibility follow-up.” Its implementation status is recorded below.
+
+## 2026-07-29 graph-legibility update
+
+The recommended auto-layout tranche is now implemented:
+
+- deterministic left-to-right Dagre layout for a selection or the complete
+  graph;
+- measured node sizes with stable defaults, non-overlapping ranks, and visual
+  center preservation, plus an automatic full-graph refit;
+- layout-only dirty-state behavior, so tidy actions persist without making
+  execution results stale;
+- smooth stepped wire routing and upstream/downstream path emphasis for the
+  current selection, without obscuring a selected wire; and
+- pure Vitest coverage for determinism, non-overlap, center preservation,
+  out-of-scope edge filtering, and cyclic draft tolerance.
+
+The next recommended direction is a small durable run-provenance tranche:
+versioned success/failure envelopes and an explicit run-bundle download, as
+described by `TECH_DEBT_REPORT.md:TD-05`. General resume, cancellation,
+streaming status, and intermediate-node caching remain deliberately deferred.
 
 This is the starting context for the next implementation session. The two
 workstreams should be designed together: the graph traversal that determines a

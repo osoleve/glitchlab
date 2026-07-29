@@ -28,6 +28,7 @@ import {
   GitMerge,
   LayoutDashboard,
   LoaderCircle,
+  Network,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightOpen,
@@ -74,6 +75,7 @@ import {
 } from "./api";
 import { controlPortName, withControlPorts } from "./controlPorts";
 import { hydrateGraph, serializeGraph } from "./graph";
+import { tidyNodeLayout } from "./graphLayout";
 import {
   downstreamClosure,
   inducedEdgeIds,
@@ -1025,6 +1027,53 @@ function GlitchloomApp() {
         return position ? { ...node, position } : node;
       }),
     );
+    setContextMenu(undefined);
+  };
+
+  const tidyNodes = (nodeIds?: string[]) => {
+    const included = nodeIds ? new Set(nodeIds) : undefined;
+    const targets = included
+      ? nodes.filter((node) => included.has(node.id))
+      : nodes;
+    if (targets.length < 2) {
+      setContextMenu(undefined);
+      return;
+    }
+    const positions = tidyNodeLayout(
+      targets.map((node) => ({
+        id: node.id,
+        position: node.position,
+        ...nodeSize(node),
+      })),
+      edges,
+    );
+    const changed = targets.some((node) => {
+      const position = positions.get(node.id);
+      return (
+        position !== undefined &&
+        (Math.abs(position.x - node.position.x) > 0.01 ||
+          Math.abs(position.y - node.position.y) > 0.01)
+      );
+    });
+    if (changed) {
+      markDirty();
+      setNodes((current) =>
+        current.map((node) => {
+          const position = positions.get(node.id);
+          return position ? { ...node, position } : node;
+        }),
+      );
+      if (!included) {
+        window.setTimeout(() => {
+          void fitView({
+            padding: 0.08,
+            minZoom: 0.25,
+            maxZoom: 1,
+            duration: 300,
+          });
+        }, 0);
+      }
+    }
     setContextMenu(undefined);
   };
 
@@ -2042,6 +2091,25 @@ function GlitchloomApp() {
   const scopedNodeIdSet = new Set(executionScope?.nodeIds ?? []);
   const targetNodeIdSet = new Set(executionScope?.targetNodeIds ?? []);
   const scopedEdgeIdSet = new Set(executionScope?.edgeIds ?? []);
+  const selectedNodeIds = nodes
+    .filter((node) => node.selected)
+    .map((node) => node.id);
+  const selectedUpstreamIds = upstreamClosure(
+    nodes.map((node) => node.id),
+    edges,
+    selectedNodeIds,
+  );
+  const selectedDownstreamIds = downstreamClosure(
+    nodes.map((node) => node.id),
+    edges,
+    selectedNodeIds,
+  );
+  const selectedPathEdgeIdSet = new Set([
+    ...inducedEdgeIds(edges, selectedUpstreamIds),
+    ...inducedEdgeIds(edges, selectedDownstreamIds),
+  ]);
+  const showSelectedPaths =
+    executionScope === undefined && selectedNodeIds.length > 0;
   const flowNodes = nodes.map((node) => ({
     ...node,
     data: {
@@ -2058,13 +2126,19 @@ function GlitchloomApp() {
   }));
   const flowEdges = edges.map((edge) => {
     const inScope = !executionScope || scopedEdgeIdSet.has(edge.id);
+    const className = executionScope
+      ? inScope
+        ? "execution-scope-edge"
+        : "execution-unrelated-edge"
+      : showSelectedPaths
+        ? selectedPathEdgeIdSet.has(edge.id)
+          ? "selection-path-edge"
+          : "selection-unrelated-edge"
+        : undefined;
     return {
       ...edge,
-      className: executionScope
-        ? inScope
-          ? "execution-scope-edge"
-          : "execution-unrelated-edge"
-        : undefined,
+      type: "smoothstep",
+      className,
       animated: running && inScope,
       markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
     };
@@ -2683,7 +2757,7 @@ function GlitchloomApp() {
                         ? 470
                         : contextMenu.scope === "node" ||
                             contextMenu.scope === "selection"
-                          ? 460
+                          ? 520
                           : 220),
                   ),
                 ),
@@ -2789,6 +2863,14 @@ function GlitchloomApp() {
                   {contextSelectionIds.length >= 2 && (
                     <>
                       <span className="context-menu-separator" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => tidyNodes(contextSelectionIds)}
+                      >
+                        <Network size={14} />
+                        Tidy selection
+                      </button>
                       <button
                         type="button"
                         role="menuitem"
@@ -2951,6 +3033,15 @@ function GlitchloomApp() {
                     <Focus size={14} />
                     Select all nodes
                     <kbd>Ctrl+A</kbd>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={nodes.length < 2}
+                    onClick={() => tidyNodes()}
+                  >
+                    <Network size={14} />
+                    Tidy graph
                   </button>
                   <button
                     type="button"

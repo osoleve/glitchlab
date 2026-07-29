@@ -1079,6 +1079,14 @@ summary:focus-visible {
   stroke: #716979;
   stroke-width: 1.65;
   filter: drop-shadow(0 0 3px rgba(160, 135, 185, 0.12));
+  transition:
+    stroke 140ms ease,
+    stroke-width 140ms ease,
+    filter 140ms ease;
+}
+
+.react-flow__edge {
+  transition: opacity 140ms ease;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
@@ -1096,7 +1104,14 @@ summary:focus-visible {
   filter: drop-shadow(0 0 5px rgba(188, 152, 224, 0.28));
 }
 
-.react-flow__edge.execution-unrelated-edge {
+.react-flow__edge.selection-path-edge .react-flow__edge-path {
+  stroke: #a994c2;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(169, 148, 194, 0.22));
+}
+
+.react-flow__edge.selection-unrelated-edge:not(.selected),
+.react-flow__edge.execution-unrelated-edge:not(.selected) {
   opacity: 0.18;
 }
 
@@ -2414,6 +2429,8 @@ summary:focus-visible {
   z-index: 80;
   display: grid;
   width: 214px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
   padding: 5px;
   background:
     linear-gradient(145deg, rgba(207, 128, 189, 0.035), transparent 48%),

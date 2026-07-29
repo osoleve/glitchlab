@@ -73,10 +73,17 @@ current loom and `Ctrl+Shift+S` opens Save as.
 Right-click an empty part of the canvas to search the complete catalog and add a
 node at that graph position. Node and multi-node menus support partial execution,
 upstream/downstream selection, duplication, alignment, distribution, workflow
-extraction, and deletion. A wire can be disconnected or split by inserting the one-input,
-one-output **Passthrough** node. That initial insertion action preserves the
-original endpoint handles and leaves room for a future type-aware compatible-node
-picker.
+extraction, and deletion. **Tidy selection** and **Tidy graph** apply a
+deterministic left-to-right DAG layout using the nodes' measured sizes, preserve
+the arranged region's visual center, and persist the resulting positions without
+invalidating run freshness. A full-graph tidy also refits the completed layout;
+selection tidy leaves the surrounding spatial context in place. Selecting nodes
+emphasizes their complete upstream and downstream wire paths; unrelated wires
+recede while a selected wire remains fully visible. Wires use smooth stepped
+routing to keep parallel branches legible. A wire can be disconnected or split
+by inserting the one-input, one-output **Passthrough** node. That initial
+insertion action preserves the original endpoint handles and leaves room for a
+future type-aware compatible-node picker.
 
 ## Promoted control ports
 
