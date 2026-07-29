@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +21,9 @@ from .models import (
     LoomTemplateSummary,
 )
 from .workflows import WorkflowStore
+
+_LOOM_LOCKS_GUARD = threading.Lock()
+_LOOM_LOCKS: dict[tuple[Path, str], threading.RLock] = {}
 
 
 class LoomConflictError(ValueError):
@@ -73,6 +77,13 @@ class LoomStore:
             except (OSError, ValueError):
                 continue
         return records
+
+    def _document_lock(self, loom_id: str) -> threading.RLock:
+        """Share one lock across every store instance for a saved document."""
+
+        key = (self.root, loom_id)
+        with _LOOM_LOCKS_GUARD:
+            return _LOOM_LOCKS.setdefault(key, threading.RLock())
 
     @staticmethod
     def _validate_name(graph: GraphSpec) -> GraphSpec:
@@ -216,30 +227,32 @@ class LoomStore:
     ) -> LoomSpec:
         """Replace a document only when the caller still has its latest revision."""
 
-        current = self.get(loom_id)
-        if current.revision != expected_revision:
-            raise LoomConflictError(
-                f"{current.graph.name!r} is now revision {current.revision}; "
-                f"this tab was opened at revision {expected_revision}.",
-                current_revision=current.revision,
-                current_digest=current.digest,
-            )
+        loom_id = self._validated_id(loom_id)
         graph = self._validate_name(draft.graph)
         self._validate_graph(graph)
         digest = self._digest(graph)
-        if current.digest == digest:
-            return current
-        revision = current.revision + 1
-        record = LoomSpec(
-            id=current.id,
-            revision=revision,
-            digest=digest,
-            created_at=current.created_at,
-            updated_at=datetime.now(UTC).isoformat(),
-            graph=graph,
-        )
-        self._write(record)
-        return record
+        with self._document_lock(loom_id):
+            current = self.get(loom_id)
+            if current.revision != expected_revision:
+                raise LoomConflictError(
+                    f"{current.graph.name!r} is now revision {current.revision}; "
+                    f"this tab was opened at revision {expected_revision}.",
+                    current_revision=current.revision,
+                    current_digest=current.digest,
+                )
+            if current.digest == digest:
+                return current
+            revision = current.revision + 1
+            record = LoomSpec(
+                id=current.id,
+                revision=revision,
+                digest=digest,
+                created_at=current.created_at,
+                updated_at=datetime.now(UTC).isoformat(),
+                graph=graph,
+            )
+            self._write(record)
+            return record
 
     def definitions(self, graph: GraphSpec) -> list[dict[str, Any]]:
         """Return exact definitions needed to rehydrate stored workflow nodes."""
@@ -252,19 +265,23 @@ class LoomStore:
     def delete(self, loom_id: str) -> dict[str, Any]:
         """Move a saved loom to recoverable local trash."""
 
-        record = self.get(loom_id)
-        source = self.root / f"{record.id}.json"
-        trash_root = self.root / ".trash"
-        trash_root.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-        destination = trash_root / f"{record.id}-{timestamp}.json"
-        source.replace(destination)
-        return {
-            "id": record.id,
-            "name": record.graph.name,
-            "revision": record.revision,
-            "recoverable_path": str(destination.relative_to(self.root.parent.parent)),
-        }
+        loom_id = self._validated_id(loom_id)
+        with self._document_lock(loom_id):
+            record = self.get(loom_id)
+            source = self.root / f"{record.id}.json"
+            trash_root = self.root / ".trash"
+            trash_root.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+            destination = trash_root / f"{record.id}-{timestamp}.json"
+            source.replace(destination)
+            return {
+                "id": record.id,
+                "name": record.graph.name,
+                "revision": record.revision,
+                "recoverable_path": str(
+                    destination.relative_to(self.root.parent.parent)
+                ),
+            }
 
 
 class LoomTemplateStore:

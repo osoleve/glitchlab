@@ -2235,6 +2235,14 @@ summary:focus-visible {
   font-size: 9px;
 }
 
+.edit-lock-overlay {
+  position: absolute;
+  z-index: 75;
+  inset: 0;
+  cursor: wait;
+  background: transparent;
+}
+
 .run-error-banner strong {
   color: #ef9da4;
 }

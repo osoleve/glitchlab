@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -8,11 +11,13 @@ import pytest
 
 from glitchloom.catalog import control_port_name
 from glitchloom.engine import GraphEngine
+from glitchloom.looms import LoomConflictError, LoomStore
 from glitchloom.models import (
     GraphEdge,
     GraphNode,
     GraphRunFailure,
     GraphSpec,
+    LoomDraft,
     WorkflowDraft,
     WorkflowInput,
     WorkflowOutput,
@@ -53,6 +58,126 @@ async def test_passthrough_preserves_any_value(tmp_path: Path) -> None:
     response = await GraphEngine(workspace=tmp_path).run(graph)
 
     assert response.terminal_outputs["pass"]["value"] == ["one", {"two": 2}]
+
+
+def test_saved_loom_pins_workflow_version_and_blocks_its_deletion(
+    tmp_path: Path,
+) -> None:
+    workflows = WorkflowStore(tmp_path)
+    first = workflows.save(
+        WorkflowDraft(
+            name="Pinned source",
+            graph=GraphSpec(
+                name="Pinned source",
+                nodes=[node("text", "text_input", text="v1")],
+                edges=[],
+            ),
+            outputs=[
+                WorkflowOutput(
+                    name="text",
+                    label="Text",
+                    type="text",
+                    node_id="text",
+                    node_port="text",
+                )
+            ],
+        )
+    )
+    looms = LoomStore(tmp_path, workflow_store=workflows)
+    consumer = looms.create(
+        LoomDraft(
+            graph=GraphSpec(
+                name="Pinned consumer",
+                nodes=[
+                    node(
+                        "workflow",
+                        workflow_kind(first.id, first.version),
+                        workflow_digest=first.digest,
+                    )
+                ],
+                edges=[],
+            )
+        )
+    )
+    workflows.save(
+        WorkflowDraft(
+            name="Pinned source renamed",
+            graph=GraphSpec(
+                name="Pinned source renamed",
+                nodes=[node("text", "text_input", text="v2")],
+                edges=[],
+            ),
+            outputs=[
+                WorkflowOutput(
+                    name="text",
+                    label="Updated text",
+                    type="text",
+                    node_id="text",
+                    node_port="text",
+                )
+            ],
+        ),
+        workflow_id=first.id,
+    )
+
+    definitions = looms.definitions(consumer.graph)
+
+    assert definitions[0]["workflow"]["version"] == 1
+    assert definitions[0]["outputs"][0]["label"] == "Text"
+    with pytest.raises(WorkflowInUseError, match="Loom Pinned consumer"):
+        workflows.delete(first.id)
+    looms.delete(consumer.id)
+    assert workflows.delete(first.id)["versions"] == 2
+
+
+def test_concurrent_loom_updates_allow_exactly_one_revision_winner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = LoomStore(tmp_path)
+    created = store.create(
+        LoomDraft(
+            graph=GraphSpec(
+                name="Concurrent loom",
+                nodes=[node("text", "text_input", text="original")],
+                edges=[],
+            )
+        )
+    )
+    original_write = LoomStore._write
+    start = threading.Barrier(2)
+
+    def slow_revision_write(self: LoomStore, record) -> None:
+        if record.id == created.id and record.revision == 2:
+            time.sleep(0.1)
+        original_write(self, record)
+
+    monkeypatch.setattr(LoomStore, "_write", slow_revision_write)
+
+    def update(value: str) -> tuple[str, int]:
+        start.wait(timeout=2)
+        draft = LoomDraft(
+            graph=GraphSpec(
+                name="Concurrent loom",
+                nodes=[node("text", "text_input", text=value)],
+                edges=[],
+            )
+        )
+        try:
+            saved = LoomStore(tmp_path).update(
+                created.id,
+                draft,
+                expected_revision=1,
+            )
+        except LoomConflictError as error:
+            return ("conflict", error.current_revision or 0)
+        return ("saved", saved.revision)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(update, ["left", "right"]))
+
+    assert sorted(outcomes) == [("conflict", 2), ("saved", 2)]
+    assert LoomStore(tmp_path).get(created.id).revision == 2
 
 
 @pytest.mark.asyncio

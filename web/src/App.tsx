@@ -355,6 +355,7 @@ function GlitchloomApp() {
   const [closeTabId, setCloseTabId] = useState<string>();
   const runStartedAt = useRef(0);
   const reconnectSuccessful = useRef(false);
+  const hasOpenedGraph = useRef(false);
   const canvasRef = useRef<HTMLElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
   const inspectorRef = useRef<HTMLDivElement>(null);
@@ -368,6 +369,9 @@ function GlitchloomApp() {
   const activeLoom = activeTab.type === "loom" ? activeTab.loom : undefined;
   const loadingGraph = Boolean(loadingWorkflowId || loadingDocumentId);
   const graphBusy = loadingGraph || savingLoom;
+  const hasUnsavedTabs =
+    isDirty ||
+    tabs.some((tab) => tab.id !== activeTabId && tab.snapshot.isDirty);
 
   const captureSnapshot = useCallback(
     (): GraphSnapshot => ({
@@ -420,6 +424,7 @@ function GlitchloomApp() {
     void fetchCatalog()
       .then((response) => {
         setCatalog(response);
+        if (hasOpenedGraph.current) return;
         const starter = talkieStarter(response.nodes);
         setNodes(starter.nodes);
         setEdges(starter.edges);
@@ -458,6 +463,16 @@ function GlitchloomApp() {
         );
       });
   }, []);
+
+  useEffect(() => {
+    if (!hasUnsavedTabs) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [hasUnsavedTabs]);
 
   useEffect(() => {
     if (!needsFit || !nodesInitialized || nodes.length === 0) return;
@@ -1093,6 +1108,7 @@ function GlitchloomApp() {
     exactDefinitions: NodeDefinition[] = [],
     sourceTemplateId?: string,
   ) => {
+    hasOpenedGraph.current = true;
     const hydrated = hydrateGraph(
       graph,
       catalog?.nodes ?? [],
@@ -1150,6 +1166,7 @@ function GlitchloomApp() {
         catalog?.nodes ?? [],
         response.definitions,
       );
+      hasOpenedGraph.current = true;
       const snapshot: GraphSnapshot = {
         nodes: hydrated.nodes,
         edges: hydrated.edges,
@@ -1217,6 +1234,10 @@ function GlitchloomApp() {
       return;
     }
     setSavingLoom(true);
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setContextMenu(undefined);
     setLoomSaveError(undefined);
     try {
       const graph = serializeGraph(trimmedName, nodes, edges);
@@ -1229,11 +1250,14 @@ function GlitchloomApp() {
         loomName: saved.graph.name,
         isDirty: false,
       };
+      const nextTabId =
+        activeTabId === MAIN_TAB_ID ? MAIN_TAB_ID : `loom:${saved.id}`;
       setTabs((current) =>
         current.map((tab) =>
           tab.id === activeTabId
             ? {
                 ...tab,
+                id: nextTabId,
                 loom: saved,
                 sourceTemplateId: undefined,
                 snapshot: nextSnapshot,
@@ -1241,6 +1265,7 @@ function GlitchloomApp() {
             : tab,
         ),
       );
+      if (nextTabId !== activeTabId) setActiveTabId(nextTabId);
       setLoomName(saved.graph.name);
       setIsDirty(false);
       rememberLoom(saved);
@@ -1508,13 +1533,32 @@ function GlitchloomApp() {
   const applyStarter = () => {
     if (!catalog) return;
     const starter = talkieStarter(catalog.nodes);
+    const starterName = "Talkie perturbation pair";
     setNodes(starter.nodes);
     setEdges(starter.edges);
     setRun(undefined);
     setRunError(undefined);
     setSelectedId(undefined);
     setInspectorOpen(false);
+    setLoomName(starterName);
     setIsDirty(false);
+    setTabs((current) =>
+      current.map((tab) =>
+        tab.id === activeTabId
+          ? {
+              ...tab,
+              loom: undefined,
+              sourceTemplateId: "starter",
+              snapshot: {
+                nodes: starter.nodes,
+                edges: starter.edges,
+                loomName: starterName,
+                isDirty: false,
+              },
+            }
+          : tab,
+      ),
+    );
     setNeedsFit(true);
   };
 
@@ -1774,9 +1818,12 @@ function GlitchloomApp() {
         commandKey &&
         event.key.toLowerCase() === "s" &&
         !activeWorkflow &&
-        !editable &&
+        !running &&
+        !loadingGraph &&
+        !loomLibraryOpen &&
         !saveDialogOpen &&
-        !loomSaveDialogOpen
+        !loomSaveDialogOpen &&
+        !savingLoom
       ) {
         event.preventDefault();
         requestSaveLoom(event.shiftKey);
@@ -1787,7 +1834,8 @@ function GlitchloomApp() {
         event.key.toLowerCase() === "a" &&
         !editable &&
         !resetDialogOpen &&
-        !saveDialogOpen
+        !saveDialogOpen &&
+        !savingLoom
       ) {
         event.preventDefault();
         selectAllNodes();
@@ -1799,13 +1847,20 @@ function GlitchloomApp() {
         !editable &&
         !resetDialogOpen &&
         !saveDialogOpen &&
+        !savingLoom &&
         selectedNodes.length > 0
       ) {
         event.preventDefault();
         duplicateSelected();
         return;
       }
-      if (commandKey && event.key === "Enter" && !running && nodes.length > 0) {
+      if (
+        commandKey &&
+        event.key === "Enter" &&
+        !running &&
+        !savingLoom &&
+        nodes.length > 0
+      ) {
         event.preventDefault();
         void execute();
         return;
@@ -1815,6 +1870,7 @@ function GlitchloomApp() {
         commandKey &&
         event.key.toLowerCase() === "z" &&
         !editable &&
+        !savingLoom &&
         undoSnapshot
       ) {
         event.preventDefault();
@@ -1875,6 +1931,7 @@ function GlitchloomApp() {
           <input
             aria-label={activeWorkflow ? "Workflow name" : "Loom name"}
             value={loomName}
+            disabled={savingLoom || running}
             onChange={(event) => {
               setLoomName(event.target.value);
               markDirty();
@@ -1909,7 +1966,7 @@ function GlitchloomApp() {
               setLoomLibraryError(undefined);
               setLoomLibraryOpen(true);
             }}
-            disabled={running || graphBusy}
+            disabled={running || graphBusy || !catalog}
             title="Open a saved loom or template"
           >
             <FolderOpen size={15} />
@@ -1932,7 +1989,7 @@ function GlitchloomApp() {
                 type="button"
                 className="secondary-button"
                 onClick={() => requestSaveLoom(false)}
-                disabled={savingLoom || running}
+                disabled={savingLoom || running || !catalog}
                 title="Save loom (Ctrl+S)"
               >
                 {savingLoom ? (
@@ -1946,17 +2003,18 @@ function GlitchloomApp() {
                 type="button"
                 className="secondary-button compact-action-button"
                 onClick={() => requestSaveLoom(true)}
-                disabled={savingLoom || running}
+                disabled={savingLoom || running || !catalog}
                 title="Save as a new loom (Ctrl+Shift+S)"
                 aria-label="Save as a new loom"
               >
                 <FilePlus2 size={15} />
               </button>
-              {activeTabId === MAIN_TAB_ID && (
+              {activeTabId === MAIN_TAB_ID && !activeLoom && (
                 <button
                   type="button"
                   className="secondary-button compact-action-button"
                   onClick={requestStarterReset}
+                  disabled={savingLoom || running || !catalog}
                   title="Reset to the starter graph"
                   aria-label="Reset to starter graph"
                 >
@@ -1969,7 +2027,7 @@ function GlitchloomApp() {
             type="button"
             className="run-button"
             onClick={() => void execute()}
-            disabled={running || nodes.length === 0}
+            disabled={running || savingLoom || nodes.length === 0}
             title="Run loom (Ctrl+Enter)"
           >
             {running ? (
@@ -2003,7 +2061,7 @@ function GlitchloomApp() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => switchGraphTab(tab.id)}
-                disabled={running}
+                disabled={running || graphBusy}
                 title={title}
               >
                 {tab.type === "workflow" ? (
@@ -2023,7 +2081,7 @@ function GlitchloomApp() {
                   type="button"
                   className="graph-tab-close"
                   onClick={() => requestCloseTab(tab)}
-                  disabled={running}
+                  disabled={running || graphBusy}
                   aria-label={`Close ${title}`}
                   title="Close tab"
                 >
@@ -2037,7 +2095,7 @@ function GlitchloomApp() {
           type="button"
           className="graph-tab-add"
           onClick={() => setLoomLibraryOpen(true)}
-          disabled={running || graphBusy}
+          disabled={running || graphBusy || !catalog}
           aria-label="Open loom or template"
           title="Open loom or template"
         >
@@ -2333,7 +2391,7 @@ function GlitchloomApp() {
             fitViewOptions={{ padding: 0.03, minZoom: 0.52, maxZoom: 0.95 }}
             minZoom={0.32}
             maxZoom={1.7}
-            deleteKeyCode={["Backspace", "Delete"]}
+            deleteKeyCode={savingLoom ? null : ["Backspace", "Delete"]}
             colorMode="dark"
             connectionLineStyle={{ stroke: "#b8a4e6", strokeWidth: 2 }}
             proOptions={{ hideAttribution: true }}
@@ -2384,7 +2442,14 @@ function GlitchloomApp() {
               }`}
               role="menu"
               style={{
-                left: Math.min(contextMenu.x, window.innerWidth - 226),
+                left: Math.max(
+                  8,
+                  Math.min(
+                    contextMenu.x,
+                    window.innerWidth -
+                      (contextMenu.scope === "pane" ? 294 : 226),
+                  ),
+                ),
                 top: Math.max(
                   8,
                   Math.min(
@@ -2686,6 +2751,9 @@ function GlitchloomApp() {
             onKeyDown={(event) => resizePanelFromKeyboard("inspector", event)}
             onDoubleClick={() => resetPanelWidth("inspector")}
           />
+        )}
+        {savingLoom && (
+          <div className="edit-lock-overlay" aria-hidden="true" />
         )}
       </main>
       {workflowMenu && (
