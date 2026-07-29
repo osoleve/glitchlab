@@ -7,17 +7,15 @@ import type {
   LoadLoomTemplateResponse,
   LoomDraft,
   LoadWorkflowResponse,
-  LoomEdge,
-  LoomNode,
   LoomSpec,
   LoomSummary,
   LoomTemplateSummary,
   RunErrorDetail,
   RunResponse,
+  RunScope,
   SaveWorkflowResponse,
   WorkflowDraft,
 } from "./types";
-import { serializeGraph } from "./graph";
 
 export class ApiError extends Error {
   readonly detail: RunErrorDetail;
@@ -37,14 +35,13 @@ export async function fetchCatalog(): Promise<CatalogResponse> {
 }
 
 export async function runGraph(
-  name: string,
-  nodes: LoomNode[],
-  edges: LoomEdge[],
+  graph: GraphSpec,
+  scope: RunScope,
 ): Promise<RunResponse> {
   const response = await fetch("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(serializeGraph(name, nodes, edges)),
+    body: JSON.stringify({ graph, scope }),
   });
   const payload = await response.json();
   if (!response.ok) {

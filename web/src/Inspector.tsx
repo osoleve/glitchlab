@@ -186,7 +186,7 @@ export function Inspector({
     setActiveTab(
       selectedNode?.data.kind === "preview" || hasOutput ? "output" : "configure",
     );
-  }, [selectedNode?.id]);
+  }, [hasOutput, selectedNode?.data.kind, selectedNode?.id]);
 
   return (
     <aside className="inspector">
@@ -205,6 +205,11 @@ export function Inspector({
           <PanelRightClose size={15} />
         </button>
       </div>
+      {run?.client?.stale && (
+        <p className="stale-run-notice">
+          Prior output — the graph changed after this run was submitted.
+        </p>
+      )}
       {selectedNode ? (
         <>
           <div className="inspector-tabs" role="tablist" aria-label="Inspector view">
@@ -431,9 +436,16 @@ export function Inspector({
           </p>
           {run && (
             <div className="run-summary">
-              <span>Last run</span>
+              <span>{run.client?.stale ? "Prior run · stale" : "Last run"}</span>
               <code>{run.manifest.run_id.slice(0, 8)}</code>
-              <strong>{run.nodes.length} nodes completed</strong>
+              <strong>
+                {run.nodes.length} nodes completed ·{" "}
+                {run.manifest.scope.mode === "targets"
+                  ? `${run.manifest.scope.target_node_ids.length} target${
+                      run.manifest.scope.target_node_ids.length === 1 ? "" : "s"
+                    }`
+                  : "full loom"}
+              </strong>
             </div>
           )}
           {error && <p className="error-copy">{error}</p>}

@@ -14,9 +14,13 @@ def main() -> int:
     graph_path = project_root / "examples" / "talkie-smoke.json"
     result_path = project_root / "talkie-smoke.result.json"
     error_path = project_root / "talkie-smoke.error.log"
+    request_payload = {
+        "graph": json.loads(graph_path.read_text(encoding="utf-8")),
+        "scope": {"mode": "full", "target_node_ids": []},
+    }
     request = urllib.request.Request(
         "http://127.0.0.1:8788/api/runs",
-        data=graph_path.read_bytes(),
+        data=json.dumps(request_payload).encode(),
         headers={"Content-Type": "application/json"},
         method="POST",
     )

@@ -1090,6 +1090,16 @@ summary:focus-visible {
   stroke: #c9b4e9;
 }
 
+.react-flow__edge.execution-scope-edge .react-flow__edge-path {
+  stroke: #b99bdd;
+  stroke-width: 2.15;
+  filter: drop-shadow(0 0 5px rgba(188, 152, 224, 0.28));
+}
+
+.react-flow__edge.execution-unrelated-edge {
+  opacity: 0.18;
+}
+
 .react-flow__edgeupdater {
   cursor: grab;
   fill: transparent;
@@ -1283,6 +1293,47 @@ summary:focus-visible {
     0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
     0 20px 42px rgba(0, 0, 0, 0.32),
     0 0 28px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.loom-node.execution-scope-required {
+  border-color: color-mix(in srgb, var(--accent) 56%, #8e789e);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent),
+    0 18px 38px rgba(0, 0, 0, 0.28);
+}
+
+.loom-node.execution-scope-target {
+  border-color: color-mix(in srgb, var(--accent) 62%, #ead8f3);
+  box-shadow:
+    0 0 0 2px rgba(212, 176, 236, 0.24),
+    0 20px 44px rgba(0, 0, 0, 0.34),
+    0 0 30px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.loom-node.execution-scope-target::after {
+  position: absolute;
+  top: -8px;
+  right: 10px;
+  padding: 2px 6px;
+  color: #efe3f4;
+  background: #4d3e58;
+  border: 1px solid #806c91;
+  border-radius: 2px;
+  content: "target";
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.loom-node.execution-scope-unrelated {
+  opacity: 0.26;
+  filter: saturate(0.4);
+}
+
+.loom-node.execution-scope-unrelated:hover,
+.loom-node.execution-scope-unrelated.is-selected {
+  opacity: 0.72;
 }
 
 .node-thread {
@@ -2164,6 +2215,98 @@ summary:focus-visible {
   grid-column: 1 / -1;
   color: #cec5d1;
   font-size: 9.5px;
+}
+
+.stale-run-notice {
+  margin: 0;
+  padding: 8px 12px;
+  color: #d8bd91;
+  background: rgba(71, 49, 28, 0.46);
+  border-bottom: 1px solid #5b4931;
+  font-size: 8.5px;
+  line-height: 1.45;
+}
+
+.execution-scope-bar {
+  position: absolute;
+  z-index: 19;
+  top: 14px;
+  left: 50%;
+  display: grid;
+  min-width: 270px;
+  grid-template-columns: 8px minmax(0, 1fr) 28px 28px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px 8px 11px;
+  color: #dcd2e1;
+  background: rgba(24, 20, 28, 0.96);
+  border: 1px solid #5b4b69;
+  border-radius: 4px 4px 10px 4px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.36);
+  transform: translateX(-50%);
+}
+
+.execution-scope-mark {
+  width: 5px;
+  height: 28px;
+  background: #a98bc3;
+  border-radius: 1px;
+  box-shadow: 0 0 9px rgba(188, 152, 224, 0.3);
+}
+
+.execution-scope-bar div {
+  display: grid;
+  gap: 2px;
+}
+
+.execution-scope-bar strong {
+  font-size: 9.5px;
+}
+
+.execution-scope-bar small {
+  color: #968b9d;
+  font-size: 7.5px;
+}
+
+.execution-scope-bar button {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  color: #b8a9c2;
+  background: #211c25;
+  border: 1px solid #403647;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.execution-scope-bar button:hover:not(:disabled) {
+  color: #eee4f1;
+  border-color: #675772;
+}
+
+.execution-scope-bar button:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+
+.execution-scope-bar.status-completed .execution-scope-mark {
+  background: #69b8a3;
+  box-shadow: 0 0 9px rgba(105, 184, 163, 0.3);
+}
+
+.execution-scope-bar.status-failed .execution-scope-mark {
+  background: #d47d87;
+  box-shadow: 0 0 9px rgba(212, 125, 135, 0.3);
+}
+
+.execution-scope-bar.status-stale {
+  border-color: #705d3e;
+}
+
+.execution-scope-bar.status-stale .execution-scope-mark {
+  background: #c69d60;
+  box-shadow: 0 0 9px rgba(198, 157, 96, 0.3);
 }
 
 .run-overlay {

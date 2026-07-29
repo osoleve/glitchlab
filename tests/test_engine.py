@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from glitchloom.catalog import control_port_name
-from glitchloom.engine import GraphEngine
+from glitchloom.engine import GraphEngine, compute_execution_scope
 from glitchloom.looms import LoomConflictError, LoomStore
 from glitchloom.models import (
     GraphEdge,
@@ -18,6 +18,7 @@ from glitchloom.models import (
     GraphRunFailure,
     GraphSpec,
     LoomDraft,
+    RunScope,
     WorkflowDraft,
     WorkflowInput,
     WorkflowOutput,
@@ -44,6 +45,204 @@ def edge(
     )
 
 
+def branching_graph() -> GraphSpec:
+    return GraphSpec(
+        name="partial branch",
+        nodes=[
+            node("shared", "text_input", text="thread"),
+            node("left", "passthrough"),
+            node("left-preview", "preview"),
+            node("right", "passthrough"),
+            node("right-preview", "preview"),
+        ],
+        edges=[
+            edge("shared", "text", "left", "value"),
+            edge("left", "value", "left-preview", "value"),
+            edge("shared", "text", "right", "value"),
+            edge("right", "value", "right-preview", "value"),
+        ],
+    )
+
+
+def test_target_scope_is_the_stable_induced_upstream_closure() -> None:
+    graph = branching_graph()
+
+    scoped = compute_execution_scope(
+        graph,
+        RunScope(
+            mode="targets",
+            target_node_ids=["right-preview", "left", "right-preview"],
+        ),
+    )
+
+    assert scoped.target_node_ids == ("right-preview", "left")
+    assert [item.id for item in scoped.graph.nodes] == [
+        "shared",
+        "left",
+        "right",
+        "right-preview",
+    ]
+    assert [item.id for item in scoped.graph.edges] == [
+        "shared-left-value",
+        "shared-right-value",
+        "right-right-preview-value",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_target_run_executes_only_upstream_and_returns_requested_target(
+    tmp_path: Path,
+) -> None:
+    response = await GraphEngine(workspace=tmp_path).run(
+        branching_graph(),
+        scope=RunScope(mode="targets", target_node_ids=["left"]),
+    )
+
+    assert [result.node_id for result in response.nodes] == ["shared", "left"]
+    assert response.terminal_outputs == {"left": {"value": "thread"}}
+    assert response.manifest.scope.mode == "targets"
+    assert response.manifest.scope.target_node_ids == ["left"]
+    assert response.manifest.scope.executed_node_ids == ["shared", "left"]
+    assert len(response.manifest.graph.nodes) == 5
+
+
+@pytest.mark.asyncio
+async def test_multiple_targets_execute_their_union_once_in_stable_order(
+    tmp_path: Path,
+) -> None:
+    response = await GraphEngine(workspace=tmp_path).run(
+        branching_graph(),
+        scope=RunScope(
+            mode="targets",
+            target_node_ids=["right-preview", "left"],
+        ),
+    )
+
+    assert [result.node_id for result in response.nodes] == [
+        "shared",
+        "left",
+        "right",
+        "right-preview",
+    ]
+    assert response.terminal_outputs == {
+        "right-preview": {"value": "thread"},
+        "left": {"value": "thread"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_unrelated_invalid_branch_and_cycle_do_not_block_target_run(
+    tmp_path: Path,
+) -> None:
+    graph = branching_graph()
+    graph.nodes.extend(
+        [
+            node("missing-input", "preview"),
+            node("cycle-a", "passthrough"),
+            node("cycle-b", "passthrough"),
+        ]
+    )
+    graph.edges.extend(
+        [
+            edge("cycle-a", "value", "cycle-b", "value"),
+            edge("cycle-b", "value", "cycle-a", "value"),
+        ]
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(
+        graph,
+        scope=RunScope(mode="targets", target_node_ids=["left"]),
+    )
+
+    assert [result.node_id for result in response.nodes] == ["shared", "left"]
+
+
+@pytest.mark.asyncio
+async def test_invalidity_inside_target_closure_fails_before_execution(
+    tmp_path: Path,
+) -> None:
+    missing_input = GraphSpec(
+        name="missing",
+        nodes=[node("preview", "preview")],
+        edges=[],
+    )
+    cycle = GraphSpec(
+        name="cycle",
+        nodes=[
+            node("cycle-a", "passthrough"),
+            node("cycle-b", "passthrough"),
+        ],
+        edges=[
+            edge("cycle-a", "value", "cycle-b", "value"),
+            edge("cycle-b", "value", "cycle-a", "value"),
+        ],
+    )
+    engine = GraphEngine(workspace=tmp_path)
+
+    with pytest.raises(GraphRunFailure, match="missing required input") as missing:
+        await engine.run(
+            missing_input,
+            scope=RunScope(mode="targets", target_node_ids=["preview"]),
+        )
+    with pytest.raises(GraphRunFailure, match="cycles are not allowed") as cyclic:
+        await engine.run(
+            cycle,
+            scope=RunScope(mode="targets", target_node_ids=["cycle-a"]),
+        )
+
+    assert missing.value.results == []
+    assert cyclic.value.results == []
+
+
+@pytest.mark.asyncio
+async def test_target_run_does_not_execute_unrelated_side_effect(
+    tmp_path: Path,
+) -> None:
+    graph = branching_graph()
+    graph.nodes.append(node("write", "write_file", path="should-not-exist.txt"))
+    graph.edges.append(edge("shared", "text", "write", "value"))
+
+    await GraphEngine(workspace=tmp_path).run(
+        graph,
+        scope=RunScope(mode="targets", target_node_ids=["left"]),
+    )
+
+    assert not (tmp_path / "should-not-exist.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_target_validation_and_partial_failure_results(
+    tmp_path: Path,
+) -> None:
+    graph = GraphSpec(
+        name="failure",
+        nodes=[
+            node("source", "text_input", text="thread"),
+            node("broken", "replace", find="[", replacement="", regex=True),
+        ],
+        edges=[edge("source", "text", "broken", "text")],
+    )
+    engine = GraphEngine(workspace=tmp_path)
+
+    with pytest.raises(GraphRunFailure, match="Target node\\(s\\) not found") as missing:
+        await engine.run(
+            graph,
+            scope=RunScope(mode="targets", target_node_ids=["absent"]),
+        )
+    with pytest.raises(GraphRunFailure, match="Replace failed") as failed:
+        await engine.run(
+            graph,
+            scope=RunScope(
+                mode="targets",
+                target_node_ids=["broken", "broken"],
+            ),
+        )
+
+    assert missing.value.results == []
+    assert [result.node_id for result in failed.value.results] == ["source", "broken"]
+    assert [result.status for result in failed.value.results] == ["completed", "failed"]
+
+
 @pytest.mark.asyncio
 async def test_passthrough_preserves_any_value(tmp_path: Path) -> None:
     graph = GraphSpec(
@@ -58,6 +257,9 @@ async def test_passthrough_preserves_any_value(tmp_path: Path) -> None:
     response = await GraphEngine(workspace=tmp_path).run(graph)
 
     assert response.terminal_outputs["pass"]["value"] == ["one", {"two": 2}]
+    assert response.manifest.scope.mode == "full"
+    assert response.manifest.scope.target_node_ids == []
+    assert response.manifest.scope.executed_node_ids == ["source", "pass"]
 
 
 def test_saved_loom_pins_workflow_version_and_blocks_its_deletion(
@@ -710,10 +912,15 @@ async def test_versioned_workflow_executes_as_a_typed_node(tmp_path: Path) -> No
         ],
     )
 
-    response = await GraphEngine(
+    engine = GraphEngine(
         workspace=tmp_path,
         workflow_store=store,
-    ).run(graph)
+    )
+    response = await engine.run(graph)
+    partial = await engine.run(
+        graph,
+        scope=RunScope(mode="targets", target_node_ids=["workflow"]),
+    )
 
     assert response.terminal_outputs["preview"]["value"] == "Hello!"
     workflow_result = next(result for result in response.nodes if result.node_id == "workflow")
@@ -722,6 +929,8 @@ async def test_versioned_workflow_executes_as_a_typed_node(tmp_path: Path) -> No
         item for item in response.manifest.graph.nodes if item.id == "workflow"
     )
     assert frozen_workflow.config["workflow_digest"] == workflow.digest
+    assert [result.node_id for result in partial.nodes] == ["source", "workflow"]
+    assert partial.terminal_outputs == {"workflow": {"text": "Hello!"}}
 
 
 @pytest.mark.asyncio

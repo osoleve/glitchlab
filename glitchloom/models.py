@@ -45,6 +45,20 @@ class GraphSpec(BaseModel):
     edges: list[GraphEdge]
 
 
+class RunScope(BaseModel):
+    """Requested portion of a submitted graph to execute."""
+
+    mode: Literal["full", "targets"] = "full"
+    target_node_ids: list[str] = Field(default_factory=list)
+
+
+class RunRequest(BaseModel):
+    """Graph execution request with an explicit scope envelope."""
+
+    graph: GraphSpec
+    scope: RunScope = Field(default_factory=RunScope)
+
+
 class LoomDraft(BaseModel):
     """An editable top-level graph before document identity is assigned."""
 
@@ -146,6 +160,14 @@ class NodeRunResult(BaseModel):
     error: str | None = None
 
 
+class RunManifestScope(BaseModel):
+    """Normalized effective scope recorded for a graph run."""
+
+    mode: Literal["full", "targets"]
+    target_node_ids: list[str] = Field(default_factory=list)
+    executed_node_ids: list[str] = Field(default_factory=list)
+
+
 class RunManifest(BaseModel):
     """Reproducibility metadata for a complete graph run."""
 
@@ -158,6 +180,7 @@ class RunManifest(BaseModel):
     python_version: str
     workspace: str
     glitchlings_version: str | None = None
+    scope: RunManifestScope
     graph: GraphSpec
 
 

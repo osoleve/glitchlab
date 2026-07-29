@@ -70,6 +70,61 @@ async def test_health_and_catalog_contract() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_request_envelope_supports_target_scope(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    request = {
+        "graph": {
+            "name": "API partial",
+            "nodes": [
+                {
+                    "id": "source",
+                    "kind": "text_input",
+                    "config": {"text": "thread"},
+                },
+                {"id": "target", "kind": "passthrough"},
+                {"id": "downstream", "kind": "preview"},
+            ],
+            "edges": [
+                {
+                    "id": "source-target",
+                    "source": "source",
+                    "source_port": "text",
+                    "target": "target",
+                    "target_port": "value",
+                },
+                {
+                    "id": "target-downstream",
+                    "source": "target",
+                    "source_port": "value",
+                    "target": "downstream",
+                    "target_port": "value",
+                },
+            ],
+        },
+        "scope": {"mode": "targets", "target_node_ids": ["target"]},
+    }
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post("/api/runs", json=request)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [result["node_id"] for result in payload["nodes"]] == ["source", "target"]
+    assert payload["terminal_outputs"] == {"target": {"value": "thread"}}
+    assert payload["manifest"]["scope"] == {
+        "mode": "targets",
+        "target_node_ids": ["target"],
+        "executed_node_ids": ["source", "target"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_loom_documents_roundtrip_revision_guard_and_trash(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,

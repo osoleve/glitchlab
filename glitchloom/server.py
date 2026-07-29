@@ -16,7 +16,13 @@ from .catalog import get_catalog
 from .engine import GraphEngine
 from .glitchlings_adapter import discover_glitchlings, plugin_status
 from .looms import LoomConflictError, LoomStore, LoomTemplateStore
-from .models import GraphRunFailure, GraphSpec, LoomDraft, LoomUpdate, WorkflowDraft
+from .models import (
+    GraphRunFailure,
+    LoomDraft,
+    LoomUpdate,
+    RunRequest,
+    WorkflowDraft,
+)
 from .workflows import WorkflowInUseError, WorkflowStore, workflow_definition
 
 app = FastAPI(title="Glitchloom", version=__version__)
@@ -285,11 +291,11 @@ def delete_workflow(workflow_id: str, force: bool = False) -> dict[str, Any]:
 
 
 @app.post("/api/runs")
-async def run_graph(graph: GraphSpec) -> dict[str, Any]:
+async def run_graph(request: RunRequest) -> dict[str, Any]:
     """Execute a graph and surface node-scoped failures."""
 
     try:
-        response = await GraphEngine().run(graph)
+        response = await GraphEngine().run(request.graph, scope=request.scope)
     except GraphRunFailure as exc:
         raise HTTPException(
             status_code=422,

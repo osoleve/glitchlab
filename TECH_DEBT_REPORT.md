@@ -21,10 +21,30 @@ The UI iteration completed immediately after the audit partially mitigates
 - collected completion cards carry their source branch titles, so comparison
   does not require reconstructing edge order from the canvas.
 
-The core TD-01 correctness work remains open: result freshness is not yet tied to
-a semantic graph revision, semantic editing is not frozen or snapshot-separated
-during an in-flight run, and cancellation/stale-result behavior lacks automated
-coverage. The report's recommended implementation order is unchanged.
+At that point, the core TD-01 correctness work remained open: result freshness
+was not tied to a semantic graph revision, semantic editing was not frozen or
+snapshot-separated during an in-flight run, and cancellation/stale-result
+behavior lacked automated coverage.
+
+## 0.7.0 follow-up
+
+The partial-execution tranche on 2026-07-29 closes the misleading-result core of
+**TD-01**:
+
+- the client now fingerprints execution-affecting graph semantics while excluding
+  position, size, title, and loom-name changes;
+- every in-flight response is compared with both that submitted fingerprint and a
+  synchronously incremented semantic revision;
+- a response arriving after a semantic edit is retained only as a visibly stale
+  prior run, and semantic edits stale an already-completed result immediately;
+- node status and execution-scope highlighting are not presented as current for a
+  stale response; and
+- Vitest coverage fixes the semantic/layout fingerprint boundary and the Inspector
+  now reacts when output arrives for an already-selected node.
+
+Cancellation and durable failed-run manifests remain separate follow-ups. The
+historical evidence and line references below describe the original audit
+snapshot.
 
 ## Executive summary
 

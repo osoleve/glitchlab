@@ -101,6 +101,7 @@ export interface LoomNodeData extends Record<string, unknown> {
   config: Record<string, unknown>;
   controlPorts: Record<string, ControlPortMode>;
   runStatus: NodeRunStatus;
+  executionScopeRole?: "target" | "required" | "unrelated";
 }
 
 export type LoomNode = Node<LoomNodeData, "loomNode">;
@@ -125,9 +126,23 @@ export interface RunResponse {
     started_at: string;
     finished_at: string;
     glitchlings_version: string | null;
+    scope: {
+      mode: "full" | "targets";
+      target_node_ids: string[];
+      executed_node_ids: string[];
+    };
   };
   nodes: NodeRunResult[];
   terminal_outputs: Record<string, Record<string, unknown>>;
+  client?: {
+    execution_fingerprint: string;
+    stale: boolean;
+  };
+}
+
+export interface RunScope {
+  mode: "full" | "targets";
+  target_node_ids: string[];
 }
 
 export interface RunErrorDetail {

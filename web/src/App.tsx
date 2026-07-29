@@ -25,6 +25,7 @@ import {
   FilePlus2,
   Focus,
   FolderOpen,
+  GitMerge,
   LayoutDashboard,
   LoaderCircle,
   PanelLeftClose,
@@ -73,6 +74,12 @@ import {
 } from "./api";
 import { controlPortName, withControlPorts } from "./controlPorts";
 import { hydrateGraph, serializeGraph } from "./graph";
+import {
+  downstreamClosure,
+  inducedEdgeIds,
+  semanticExecutionFingerprint,
+  upstreamClosure,
+} from "./graphTraversal";
 import { Inspector } from "./Inspector";
 import { LoomNodeCard } from "./LoomNode";
 import { talkieStarter } from "./starter";
@@ -87,6 +94,7 @@ import type {
   LoomNode,
   NodeDefinition,
   RunResponse,
+  RunScope,
   WorkflowDraft,
   WorkflowSpec,
 } from "./types";
@@ -102,6 +110,7 @@ interface GraphSnapshot {
   selectedId?: string;
   loomName: string;
   isDirty: boolean;
+  executionScope?: ExecutionScopeState;
 }
 
 interface GraphTab {
@@ -140,6 +149,14 @@ interface WorkflowMenuState {
   x: number;
   y: number;
   definition: NodeDefinition;
+}
+
+interface ExecutionScopeState {
+  mode: "full" | "targets";
+  targetNodeIds: string[];
+  nodeIds: string[];
+  edgeIds: string[];
+  status: "running" | "completed" | "failed" | "stale";
 }
 
 const MAIN_TAB_ID = "main";
@@ -295,6 +312,7 @@ function GlitchloomApp() {
   const [running, setRunning] = useState(false);
   const [run, setRun] = useState<RunResponse>();
   const [runError, setRunError] = useState<string>();
+  const [executionScope, setExecutionScope] = useState<ExecutionScopeState>();
   const [loomName, setLoomName] = useState("Talkie perturbation pair");
   const [paletteQuery, setPaletteQuery] = useState("");
   const [needsFit, setNeedsFit] = useState(false);
@@ -354,6 +372,8 @@ function GlitchloomApp() {
   const [deleteWorkflowError, setDeleteWorkflowError] = useState<string>();
   const [closeTabId, setCloseTabId] = useState<string>();
   const runStartedAt = useRef(0);
+  const executionFingerprintRef = useRef("");
+  const semanticRevisionRef = useRef(0);
   const reconnectSuccessful = useRef(false);
   const hasOpenedGraph = useRef(false);
   const canvasRef = useRef<HTMLElement>(null);
@@ -362,6 +382,14 @@ function GlitchloomApp() {
   const { screenToFlowPosition, fitView, getViewport, setViewport } =
     useReactFlow();
   const nodesInitialized = useNodesInitialized();
+  const executionFingerprint = useMemo(
+    () =>
+      semanticExecutionFingerprint(
+        serializeGraph("Execution fingerprint", nodes, edges),
+      ),
+    [edges, nodes],
+  );
+  executionFingerprintRef.current = executionFingerprint;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const activeWorkflow = activeTab.type === "workflow"
     ? activeTab.workflow
@@ -382,8 +410,18 @@ function GlitchloomApp() {
       selectedId,
       loomName,
       isDirty,
+      executionScope,
     }),
-    [edges, isDirty, loomName, nodes, run, runError, selectedId],
+    [
+      edges,
+      executionScope,
+      isDirty,
+      loomName,
+      nodes,
+      run,
+      runError,
+      selectedId,
+    ],
   );
 
   const applySnapshot = useCallback((snapshot: GraphSnapshot) => {
@@ -391,6 +429,7 @@ function GlitchloomApp() {
     setEdges(snapshot.edges);
     setRun(snapshot.run);
     setRunError(snapshot.runError);
+    setExecutionScope(snapshot.executionScope);
     setSelectedId(snapshot.selectedId);
     setLoomName(snapshot.loomName);
     setIsDirty(snapshot.isDirty);
@@ -522,6 +561,30 @@ function GlitchloomApp() {
     setIsDirty(true);
     setUndoSnapshot(undefined);
   }, []);
+  const markSemanticDirty = useCallback(() => {
+    semanticRevisionRef.current += 1;
+    setIsDirty(true);
+    setUndoSnapshot(undefined);
+    setExecutionScope(undefined);
+    setRun((current) =>
+      current
+        ? {
+            ...current,
+            client: {
+              execution_fingerprint:
+                current.client?.execution_fingerprint ?? "",
+              stale: true,
+            },
+          }
+        : current,
+    );
+    setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        data: { ...node.data, runStatus: "idle" },
+      })),
+    );
+  }, []);
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const selectedNodes = useMemo(
@@ -620,31 +683,32 @@ function GlitchloomApp() {
 
   const onNodesChange = useCallback(
     (changes: NodeChange<LoomNode>[]) => {
-      if (
-        changes.some(
-          (change) =>
-            change.type === "position" ||
-            (change.type === "dimensions" && Boolean(change.resizing)) ||
-            change.type === "add" ||
-            change.type === "remove",
-        )
-      ) {
-        markDirty();
-      }
+      const semantic = changes.some(
+        (change) => change.type === "add" || change.type === "remove",
+      );
+      const layout = changes.some(
+        (change) =>
+          change.type === "position" ||
+          (change.type === "dimensions" && Boolean(change.resizing)),
+      );
+      if (semantic) markSemanticDirty();
+      else if (layout) markDirty();
       setNodes((current) => applyNodeChanges(changes, current));
     },
-    [markDirty],
+    [markDirty, markSemanticDirty],
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange<LoomEdge>[]) => {
-      if (changes.some((change) => change.type !== "select")) markDirty();
+      if (changes.some((change) => change.type !== "select")) {
+        markSemanticDirty();
+      }
       setEdges((current) => applyEdgeChanges(changes, current));
     },
-    [markDirty],
+    [markSemanticDirty],
   );
   const onConnect = useCallback(
     (connection: Connection) => {
-      markDirty();
+      markSemanticDirty();
       setEdges((current) =>
         addEdge(
           {
@@ -656,17 +720,17 @@ function GlitchloomApp() {
         ),
       );
     },
-    [markDirty],
+    [markSemanticDirty],
   );
   const onReconnect = useCallback(
     (oldEdge: LoomEdge, connection: Connection) => {
       reconnectSuccessful.current = true;
-      markDirty();
+      markSemanticDirty();
       setEdges((current) =>
         reconnectEdge(oldEdge, connection, current, { shouldReplaceId: false }),
       );
     },
-    [markDirty],
+    [markSemanticDirty],
   );
   const onReconnectEnd = useCallback(
     (
@@ -676,18 +740,18 @@ function GlitchloomApp() {
       connectionState: { isValid: boolean | null },
     ) => {
       if (!reconnectSuccessful.current && connectionState.isValid !== true) {
-        markDirty();
+        markSemanticDirty();
         setEdges((current) => current.filter((item) => item.id !== edge.id));
       }
       reconnectSuccessful.current = false;
     },
-    [markDirty],
+    [markSemanticDirty],
   );
 
   const addNode = useCallback(
     (definition: NodeDefinition, position?: { x: number; y: number }) => {
       const id = `${definition.kind}-${crypto.randomUUID().slice(0, 6)}`;
-      markDirty();
+      markSemanticDirty();
       setNodes((current) => {
         let nextPosition = position;
         if (!nextPosition) {
@@ -730,7 +794,7 @@ function GlitchloomApp() {
       setSelectedId(id);
       setInspectorOpen(true);
     },
-    [markDirty, screenToFlowPosition],
+    [markSemanticDirty, screenToFlowPosition],
   );
 
   const onPaletteDrag = (
@@ -751,9 +815,13 @@ function GlitchloomApp() {
     );
   };
 
-  const updateSelected = (updater: (node: LoomNode) => LoomNode) => {
+  const updateSelected = (
+    updater: (node: LoomNode) => LoomNode,
+    semantic = true,
+  ) => {
     if (!selectedId) return;
-    markDirty();
+    if (semantic) markSemanticDirty();
+    else markDirty();
     setNodes((current) =>
       current.map((node) => (node.id === selectedId ? updater(node) : node)),
     );
@@ -765,7 +833,7 @@ function GlitchloomApp() {
     if (!selectedId || !selectedNode) return;
     const previousMode = selectedNode.data.controlPorts[fieldName];
     if (previousMode === mode) return;
-    markDirty();
+    markSemanticDirty();
     const handle = controlPortName(fieldName);
     const hadInput =
       previousMode === "input" || previousMode === "passthrough";
@@ -819,7 +887,7 @@ function GlitchloomApp() {
           : []),
     );
     if (ids.size === 0) return;
-    markDirty();
+    markSemanticDirty();
     setNodes((current) => current.filter((node) => !ids.has(node.id)));
     setEdges((current) =>
       current.filter(
@@ -869,7 +937,7 @@ function GlitchloomApp() {
         target: replacements.get(edge.target)!,
         selected: false,
       }));
-    markDirty();
+    markSemanticDirty();
     setNodes((current) => [
       ...current.map((node) => ({ ...node, selected: false })),
       ...copies,
@@ -880,24 +948,23 @@ function GlitchloomApp() {
     setContextMenu(undefined);
   };
 
-  const selectDownstream = (sourceIds: string[]) => {
-    const reachable = new Set(sourceIds);
-    const queue = [...sourceIds];
-    while (queue.length > 0) {
-      const source = queue.shift()!;
-      for (const edge of edges) {
-        if (edge.source !== source || reachable.has(edge.target)) continue;
-        reachable.add(edge.target);
-        queue.push(edge.target);
-      }
-    }
+  const selectRelated = (
+    startIds: string[],
+    direction: "upstream" | "downstream",
+  ) => {
+    const nodeIds = nodes.map((node) => node.id);
+    const reachable = new Set(
+      direction === "upstream"
+        ? upstreamClosure(nodeIds, edges, startIds)
+        : downstreamClosure(nodeIds, edges, startIds),
+    );
     setNodes((current) =>
       current.map((node) => ({
         ...node,
         selected: reachable.has(node.id),
       })),
     );
-    const anchor = sourceIds.at(-1);
+    const anchor = startIds.at(-1);
     setSelectedId(anchor);
     setInspectorOpen(Boolean(anchor));
     setContextMenu(undefined);
@@ -980,7 +1047,7 @@ function GlitchloomApp() {
       width: 18,
       height: 18,
     };
-    markDirty();
+    markSemanticDirty();
     setNodes((current) => [
       ...current.map((node) => ({ ...node, selected: false })),
       {
@@ -1538,6 +1605,7 @@ function GlitchloomApp() {
     setEdges(starter.edges);
     setRun(undefined);
     setRunError(undefined);
+    setExecutionScope(undefined);
     setSelectedId(undefined);
     setInspectorOpen(false);
     setLoomName(starterName);
@@ -1579,6 +1647,7 @@ function GlitchloomApp() {
       selectedId,
       loomName,
       isDirty,
+      executionScope,
     });
     setResetDialogOpen(false);
     applyStarter();
@@ -1590,6 +1659,7 @@ function GlitchloomApp() {
     setEdges(undoSnapshot.edges);
     setRun(undoSnapshot.run);
     setRunError(undoSnapshot.runError);
+    setExecutionScope(undoSnapshot.executionScope);
     setSelectedId(undoSnapshot.selectedId);
     setLoomName(undoSnapshot.loomName);
     setInspectorOpen(Boolean(undoSnapshot.selectedId));
@@ -1598,32 +1668,90 @@ function GlitchloomApp() {
     setNeedsFit(true);
   };
 
-  const execute = async () => {
+  const execute = async (requestedTargetIds: string[] = []) => {
+    const graph = serializeGraph(loomName, nodes, edges);
+    const submittedFingerprint = semanticExecutionFingerprint(graph);
+    const submittedSemanticRevision = semanticRevisionRef.current;
+    const targetNodeIds = [
+      ...new Set(
+        requestedTargetIds.filter((nodeId) =>
+          nodes.some((node) => node.id === nodeId),
+        ),
+      ),
+    ];
+    const scope: RunScope =
+      targetNodeIds.length > 0
+        ? { mode: "targets", target_node_ids: targetNodeIds }
+        : { mode: "full", target_node_ids: [] };
+    const scopedNodeIds =
+      scope.mode === "targets"
+        ? upstreamClosure(
+            nodes.map((node) => node.id),
+            edges,
+            targetNodeIds,
+          )
+        : nodes.map((node) => node.id);
+    const submittedScope: ExecutionScopeState = {
+      mode: scope.mode,
+      targetNodeIds,
+      nodeIds: scopedNodeIds,
+      edgeIds: inducedEdgeIds(edges, scopedNodeIds),
+      status: "running",
+    };
+    const scopedNodeIdSet = new Set(scopedNodeIds);
     const selectedBeforeRun = selectedId;
     runStartedAt.current = Date.now();
     setRunElapsed(0);
     setRunning(true);
     setRunError(undefined);
+    setExecutionScope(submittedScope);
+    setContextMenu(undefined);
     setNodes((current) =>
       current.map((node) => ({
         ...node,
-        data: { ...node.data, runStatus: "running" },
+        data: {
+          ...node.data,
+          runStatus: scopedNodeIdSet.has(node.id) ? "running" : "idle",
+        },
       })),
     );
     try {
-      const response = await runGraph(loomName, nodes, edges);
-      setRun(response);
-      const complete = new Set(response.nodes.map((result) => result.node_id));
+      const response = await runGraph(graph, scope);
+      const stale =
+        semanticRevisionRef.current !== submittedSemanticRevision ||
+        executionFingerprintRef.current !== submittedFingerprint;
+      setRun({
+        ...response,
+        client: {
+          execution_fingerprint: submittedFingerprint,
+          stale,
+        },
+      });
+      const completedNodeIds = response.manifest.scope.executed_node_ids;
+      const completed = new Set(completedNodeIds);
+      setExecutionScope({
+        mode: response.manifest.scope.mode,
+        targetNodeIds: response.manifest.scope.target_node_ids,
+        nodeIds: completedNodeIds,
+        edgeIds: inducedEdgeIds(edges, completedNodeIds),
+        status: stale ? "stale" : "completed",
+      });
       setNodes((current) =>
         current.map((node) => ({
           ...node,
           data: {
             ...node.data,
-            runStatus: complete.has(node.id) ? "completed" : "idle",
+            runStatus:
+              !stale && completed.has(node.id) ? "completed" : "idle",
           },
         })),
       );
-      if (!selectedBeforeRun && nodes.some((node) => node.id === "preview")) {
+      if (
+        !stale &&
+        !selectedBeforeRun &&
+        scope.mode === "full" &&
+        nodes.some((node) => node.id === "preview")
+      ) {
         setSelectedId("preview");
         setInspectorOpen(true);
       }
@@ -1632,14 +1760,27 @@ function GlitchloomApp() {
         error instanceof ApiError
           ? error.detail
           : { message: error instanceof Error ? error.message : String(error) };
-      setRunError(detail.message);
+      const stale =
+        semanticRevisionRef.current !== submittedSemanticRevision ||
+        executionFingerprintRef.current !== submittedFingerprint;
+      setRunError(
+        stale
+          ? `Prior run stopped after the graph changed: ${detail.message}`
+          : detail.message,
+      );
+      setExecutionScope({
+        ...submittedScope,
+        status: stale ? "stale" : "failed",
+      });
       setNodes((current) =>
         current.map((node) => ({
           ...node,
           data: {
             ...node.data,
             runStatus:
-              node.id === detail.node_id
+              stale
+                ? "idle"
+                : node.id === detail.node_id
                 ? "failed"
                 : detail.nodes?.some((result) => result.node_id === node.id)
                   ? "completed"
@@ -1647,7 +1788,7 @@ function GlitchloomApp() {
           },
         })),
       );
-      if (detail.node_id) {
+      if (!stale && detail.node_id) {
         setSelectedId(detail.node_id);
         setInspectorOpen(true);
       }
@@ -1898,6 +2039,48 @@ function GlitchloomApp() {
     contextMenu?.scope === "node" || contextMenu?.scope === "selection"
       ? contextMenu.nodeIds
       : [];
+  const scopedNodeIdSet = new Set(executionScope?.nodeIds ?? []);
+  const targetNodeIdSet = new Set(executionScope?.targetNodeIds ?? []);
+  const scopedEdgeIdSet = new Set(executionScope?.edgeIds ?? []);
+  const flowNodes = nodes.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      executionScopeRole:
+        executionScope?.mode !== "targets"
+          ? undefined
+          : targetNodeIdSet.has(node.id)
+            ? ("target" as const)
+            : scopedNodeIdSet.has(node.id)
+              ? ("required" as const)
+              : ("unrelated" as const),
+    },
+  }));
+  const flowEdges = edges.map((edge) => {
+    const inScope = !executionScope || scopedEdgeIdSet.has(edge.id);
+    return {
+      ...edge,
+      className: executionScope
+        ? inScope
+          ? "execution-scope-edge"
+          : "execution-unrelated-edge"
+        : undefined,
+      animated: running && inScope,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
+    };
+  });
+  const fitExecutionScope = () => {
+    if (!executionScope) return;
+    const fitNodes = nodes.filter((node) => scopedNodeIdSet.has(node.id));
+    if (fitNodes.length === 0) return;
+    void fitView({
+      nodes: fitNodes,
+      padding: 0.12,
+      minZoom: 0.4,
+      maxZoom: 1.1,
+      duration: 300,
+    });
+  };
 
   return (
     <div className={`app-shell ${afterHours ? "is-after-hours" : ""}`}>
@@ -2266,12 +2449,8 @@ function GlitchloomApp() {
             </div>
           )}
           <ReactFlow
-            nodes={nodes}
-            edges={edges.map((edge) => ({
-              ...edge,
-              animated: running,
-              markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
-            }))}
+            nodes={flowNodes}
+            edges={flowEdges}
             nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -2417,6 +2596,51 @@ function GlitchloomApp() {
             />
             <Controls showInteractive={false} />
           </ReactFlow>
+          {executionScope && (
+            <div
+              className={`execution-scope-bar status-${executionScope.status}`}
+              role="status"
+            >
+              <span className="execution-scope-mark" aria-hidden="true" />
+              <div>
+                <strong>
+                  {executionScope.mode === "targets"
+                    ? executionScope.targetNodeIds.length === 1
+                      ? "Run to target"
+                      : `Run to ${executionScope.targetNodeIds.length} targets`
+                    : "Full loom run"}
+                </strong>
+                <small>
+                  {executionScope.nodeIds.length} node
+                  {executionScope.nodeIds.length === 1 ? "" : "s"} ·{" "}
+                  {executionScope.status === "running"
+                    ? "running"
+                    : executionScope.status === "completed"
+                      ? "completed"
+                      : executionScope.status === "failed"
+                        ? "stopped on error"
+                        : "prior result is stale"}
+                </small>
+              </div>
+              <button
+                type="button"
+                onClick={fitExecutionScope}
+                title="Fit execution scope"
+                aria-label="Fit execution scope"
+              >
+                <Focus size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setExecutionScope(undefined)}
+                disabled={running}
+                title="Clear execution focus"
+                aria-label="Clear execution focus"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
           {running && (
             <div className="run-overlay">
               <span className="shuttle" />
@@ -2455,7 +2679,12 @@ function GlitchloomApp() {
                   Math.min(
                     contextMenu.y,
                     window.innerHeight -
-                      (contextMenu.scope === "pane" ? 470 : 300),
+                      (contextMenu.scope === "pane"
+                        ? 470
+                        : contextMenu.scope === "node" ||
+                            contextMenu.scope === "selection"
+                          ? 460
+                          : 220),
                   ),
                 ),
               }}
@@ -2497,22 +2726,62 @@ function GlitchloomApp() {
                   <button
                     type="button"
                     role="menuitem"
+                    disabled={running}
+                    onClick={() =>
+                      void execute(
+                        contextMenu.scope === "node"
+                          ? [contextMenu.nodeId]
+                          : contextMenu.nodeIds,
+                      )
+                    }
+                  >
+                    <Play size={14} fill="currentColor" />
+                    {contextMenu.scope === "node"
+                      ? "Run to here"
+                      : "Run to selection"}
+                  </button>
+                  {contextMenu.scope === "node" &&
+                    contextMenu.nodeIds.length > 1 && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={running}
+                        onClick={() => void execute(contextMenu.nodeIds)}
+                      >
+                        <Play size={14} />
+                        Run to selection
+                      </button>
+                    )}
+                  <span className="context-menu-separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
                     onClick={() => duplicateSelected(contextSelectionIds)}
                   >
                     <Copy size={14} />
                     Duplicate
                     <kbd>Ctrl+D</kbd>
                   </button>
-                  {contextMenu.scope === "node" && (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => selectDownstream(contextMenu.nodeIds)}
-                    >
-                      <Columns3 size={14} />
-                      Select downstream
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() =>
+                      selectRelated(contextMenu.nodeIds, "upstream")
+                    }
+                  >
+                    <GitMerge size={14} />
+                    Select upstream
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() =>
+                      selectRelated(contextMenu.nodeIds, "downstream")
+                    }
+                  >
+                    <Columns3 size={14} />
+                    Select downstream
+                  </button>
                   <button type="button" role="menuitem" onClick={openSaveWorkflow}>
                     <Save size={14} />
                     Save as workflow
@@ -2609,7 +2878,7 @@ function GlitchloomApp() {
                     role="menuitem"
                     className="is-danger"
                     onClick={() => {
-                      markDirty();
+                      markSemanticDirty();
                       setEdges((current) =>
                         current.filter((edge) => edge.id !== contextMenu.edgeId),
                       );
@@ -2714,10 +2983,13 @@ function GlitchloomApp() {
             run={run}
             error={runError}
             onUpdateTitle={(title) =>
-              updateSelected((node) => ({
-                ...node,
-                data: { ...node.data, title },
-              }))
+              updateSelected(
+                (node) => ({
+                  ...node,
+                  data: { ...node.data, title },
+                }),
+                false,
+              )
             }
             onUpdateField={(field, value) =>
               updateSelected((node) => ({

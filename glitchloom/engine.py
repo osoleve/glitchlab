@@ -11,6 +11,7 @@ import re
 import time
 import uuid
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,9 @@ from .models import (
     GraphSpec,
     NodeRunResult,
     RunManifest,
+    RunManifestScope,
     RunResponse,
+    RunScope,
 )
 from .workflows import WORKFLOW_KIND_PREFIX, WorkflowStore
 
@@ -135,6 +138,72 @@ def _select_path(value: Any, path: str) -> Any:
     if isinstance(value, list):
         return [select_one(item) for item in value]
     return select_one(value)
+
+
+@dataclass(frozen=True)
+class ExecutionScope:
+    """One normalized graph slice ready for validation and execution."""
+
+    mode: str
+    graph: GraphSpec
+    target_node_ids: tuple[str, ...]
+
+
+def compute_execution_scope(
+    graph: GraphSpec,
+    scope: RunScope | None = None,
+) -> ExecutionScope:
+    """Return the full graph or the induced upstream closure for target IDs."""
+
+    requested = scope or RunScope()
+    if requested.mode == "full":
+        return ExecutionScope(
+            mode="full",
+            graph=graph,
+            target_node_ids=(),
+        )
+
+    normalized_targets = tuple(dict.fromkeys(requested.target_node_ids))
+    if not normalized_targets:
+        raise GraphRunFailure("A target run requires at least one target node.")
+
+    nodes = {node.id: node for node in graph.nodes}
+    if len(nodes) != len(graph.nodes):
+        raise GraphRunFailure("Node IDs must be unique.")
+    missing_targets = [node_id for node_id in normalized_targets if node_id not in nodes]
+    if missing_targets:
+        raise GraphRunFailure(
+            f"Target node(s) not found: {', '.join(missing_targets)}."
+        )
+
+    incoming: dict[str, list[GraphEdge]] = defaultdict(list)
+    for edge in graph.edges:
+        incoming[edge.target].append(edge)
+
+    node_ids = set(normalized_targets)
+    queue = deque(normalized_targets)
+    while queue:
+        node_id = queue.popleft()
+        for edge in incoming[node_id]:
+            if edge.source in node_ids:
+                continue
+            node_ids.add(edge.source)
+            queue.append(edge.source)
+
+    scoped_graph = GraphSpec(
+        name=graph.name,
+        nodes=[node for node in graph.nodes if node.id in node_ids],
+        edges=[
+            edge
+            for edge in graph.edges
+            if edge.source in node_ids and edge.target in node_ids
+        ],
+    )
+    return ExecutionScope(
+        mode="targets",
+        graph=scoped_graph,
+        target_node_ids=normalized_targets,
+    )
 
 
 class GraphEngine:
@@ -733,15 +802,25 @@ class GraphEngine:
         graph: GraphSpec,
         *,
         injected_inputs: dict[str, dict[str, Any]] | None = None,
+        scope: RunScope | None = None,
     ) -> RunResponse:
         """Execute a validated graph and return results plus a frozen manifest."""
 
         started_at = _utc_now()
         run_id = str(uuid.uuid4())
+        execution_scope = compute_execution_scope(graph, scope)
+        scoped_node_ids = {node.id for node in execution_scope.graph.nodes}
+        scoped_inputs = {
+            node_id: values
+            for node_id, values in (injected_inputs or {}).items()
+            if node_id in scoped_node_ids
+        }
         ordered, incoming, terminal_nodes = self._validate_and_order(
-            graph,
-            injected_inputs,
+            execution_scope.graph,
+            scoped_inputs,
         )
+        if execution_scope.mode == "targets":
+            terminal_nodes = set(execution_scope.target_node_ids)
         outputs: dict[str, dict[str, Any]] = {}
         results: list[NodeRunResult] = []
         for node in ordered:
@@ -751,7 +830,7 @@ class GraphEngine:
                     node,
                     incoming,
                     outputs,
-                    injected_inputs,
+                    scoped_inputs,
                 )
                 effective_node, native_inputs = self._apply_control_inputs(
                     node,
@@ -805,6 +884,11 @@ class GraphEngine:
             python_version=platform.python_version(),
             workspace=str(self.workspace),
             glitchlings_version=status.get("version") if status.get("available") else None,
+            scope=RunManifestScope(
+                mode=execution_scope.mode,
+                target_node_ids=list(execution_scope.target_node_ids),
+                executed_node_ids=[node.id for node in ordered],
+            ),
             graph=graph,
         )
         return RunResponse(
@@ -816,8 +900,10 @@ class GraphEngine:
 
 
 __all__ = [
+    "ExecutionScope",
     "GraphEngine",
     "HOLE_PATTERN",
+    "compute_execution_scope",
     "_render_template",
     "_stringify_template",
     "_template",

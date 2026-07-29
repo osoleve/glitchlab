@@ -31,6 +31,27 @@ disconnects it. `Ctrl+Enter` runs the loom. The node library and inspector use
 standard draggable dividers, support arrow-key resizing when focused, and reset
 to their responsive defaults on double-click.
 
+## Partial execution and run freshness
+
+The topbar and `Ctrl+Enter` still run the complete loom. Right-click a node and
+choose **Run to here**, or right-click a multi-node selection and choose **Run to
+selection**, to execute only the requested targets and their complete transitive
+upstream closure. Unrelated incomplete branches, cycles, and side effects do not
+participate in that target run. Requested targets remain the reported outputs
+even when they are not graph terminals.
+
+The canvas keeps the execution scope visible: targets are badged, required
+upstream nodes and wires are emphasized, unrelated branches are dimmed, and the
+scope can be fit into view. **Select upstream** and **Select downstream** use the
+same deterministic traversal without changing the run scope.
+
+Every request carries an explicit full-or-target scope. The manifest records the
+normalized targets and deterministic executed-node order while retaining the
+complete submitted graph. The client also fingerprints execution-affecting node
+configuration, promoted controls, and topology. Editing those semantics marks a
+completed response as a visibly stale prior run; moving, resizing, renaming, or
+rearranging nodes does not.
+
 ## Saved looms and templates
 
 Top-level looms are editable documents, deliberately separate from immutable
@@ -50,9 +71,9 @@ current loom and `Ctrl+Shift+S` opens Save as.
 ## Canvas context actions
 
 Right-click an empty part of the canvas to search the complete catalog and add a
-node at that graph position. Node and multi-node menus support duplication,
-downstream selection, alignment, distribution, workflow extraction, and
-deletion. A wire can be disconnected or split by inserting the one-input,
+node at that graph position. Node and multi-node menus support partial execution,
+upstream/downstream selection, duplication, alignment, distribution, workflow
+extraction, and deletion. A wire can be disconnected or split by inserting the one-input,
 one-output **Passthrough** node. That initial insertion action preserves the
 original endpoint handles and leaves room for a future type-aware compatible-node
 picker.

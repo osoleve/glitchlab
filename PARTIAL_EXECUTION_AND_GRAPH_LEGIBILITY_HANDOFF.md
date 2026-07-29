@@ -4,6 +4,27 @@
 **Baseline:** Glitchloom 0.6.0, after saved looms, document tabs, expanded
 context menus, and Passthrough wire insertion.
 
+## 2026-07-29 implementation update
+
+The partial-execution tranche described below is now implemented as Glitchloom
+0.7.0:
+
+- explicit `RunRequest` / `RunScope` envelopes and manifest scope provenance;
+- deterministic single- and multi-target upstream-closure execution;
+- unrelated invalid branches, cycles, and side effects excluded from target runs;
+- shared frontend upstream/downstream traversal utilities with Vitest coverage;
+- **Run to here**, **Run to selection**, **Select upstream**, scope fit, target
+  badges, and in-scope edge/node emphasis;
+- semantic execution fingerprints plus synchronous revision checks, with stale
+  prior-run treatment and layout-only freshness;
+- the Inspector output-tab dependency fix; and
+- automated backend/frontend gates plus live 1365x768 and 1920x1080 QA.
+
+The next recommended direction is the deterministic left-to-right
+**Tidy selection / Tidy graph** tranche under “Auto-layout and edge legibility
+follow-up.” General resume, cancellation, streaming status, and intermediate-node
+caching remain deliberately deferred.
+
 This is the starting context for the next implementation session. The two
 workstreams should be designed together: the graph traversal that determines a
 partial run is also the most useful primitive for explaining and focusing a

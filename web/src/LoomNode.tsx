@@ -119,7 +119,11 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
     <article
       className={`loom-node category-${categoryClass(data.definition.category)} ${
         selected ? "is-selected" : ""
-      } status-${data.runStatus}`}
+      } status-${data.runStatus} ${
+        data.executionScopeRole
+          ? `execution-scope-${data.executionScopeRole}`
+          : ""
+      }`}
       style={nodeStyle}
     >
       <NodeResizer
