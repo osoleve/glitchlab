@@ -10,6 +10,7 @@ import {
   FileInput,
   FileOutput,
   GitFork,
+  Hash,
   Layers3,
   List,
   PlugZap,
@@ -19,12 +20,14 @@ import {
   TextCursorInput,
   Users,
   WandSparkles,
+  Workflow,
 } from "lucide-react";
 import type { ComponentType, CSSProperties } from "react";
 import type { LoomNode, LoomNodeData } from "./types";
 
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
   text_input: TextCursorInput,
+  number_input: Hash,
   template_input: Braces,
   fill_hole: Binary,
   render_template: BookOpenText,
@@ -48,17 +51,40 @@ const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number 
 
 function summary(data: LoomNodeData): string {
   const config = data.config;
+  const suppliedByPort = (field: string) =>
+    data.controlPorts[field] === "input" ||
+    data.controlPorts[field] === "passthrough";
   switch (data.kind) {
     case "text_input":
-      return String(config.text ?? "").slice(0, 54);
+      return suppliedByPort("text")
+        ? "text supplied by input"
+        : String(config.text ?? "").slice(0, 54);
+    case "number_input":
+      return suppliedByPort("value")
+        ? `${String(config.value ?? 0)} default`
+        : String(config.value ?? 0);
     case "template_input":
-      return String(config.template ?? "").slice(0, 54);
+      return suppliedByPort("template")
+        ? "template supplied by input"
+        : String(config.template ?? "").slice(0, 54);
     case "model":
-      return String(config.model_id ?? "");
+      return suppliedByPort("model_id")
+        ? "model supplied by input"
+        : String(config.model_id ?? "");
     case "endpoint":
-      return String(config.base_url ?? "");
+      return suppliedByPort("base_url")
+        ? "endpoint supplied by input"
+        : String(config.base_url ?? "");
     case "completion":
-      return `${String(config.max_tokens ?? 96)} tokens · seed ${String(config.seed ?? "—")}`;
+      return `${
+        suppliedByPort("max_tokens")
+          ? "wired tokens"
+          : `${String(config.max_tokens ?? 96)} tokens`
+      } · ${
+        suppliedByPort("seed")
+          ? "wired seed"
+          : `seed ${String(config.seed ?? "—")}`
+      }`;
     case "glitchling":
       return `${String(config.name ?? "")} · seed ${String(config.seed ?? "")}`;
     case "read_file":
@@ -74,7 +100,7 @@ function categoryClass(category: string): string {
 }
 
 export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
-  const Icon = ICONS[data.kind] ?? Box;
+  const Icon = data.kind.startsWith("workflow:") ? Workflow : ICONS[data.kind] ?? Box;
   const summaryText = summary(data);
   const hasSummary = summaryText.length > 0;
   const portRows = Math.max(
@@ -123,7 +149,13 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
 
       <div className="node-inputs">
         {data.definition.inputs.map((port) => (
-          <div className="node-port node-port-input" key={port.name}>
+          <div
+            className={`node-port node-port-input ${
+              port.control ? "is-control-port" : ""
+            }`}
+            key={port.name}
+            title={port.control ? `${port.label} control input` : undefined}
+          >
             <Handle
               id={port.name}
               type="target"
@@ -136,7 +168,13 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
       </div>
       <div className="node-outputs">
         {data.definition.outputs.map((port) => (
-          <div className="node-port node-port-output" key={port.name}>
+          <div
+            className={`node-port node-port-output ${
+              port.control ? "is-control-port" : ""
+            }`}
+            key={port.name}
+            title={port.control ? `${port.label} control output` : undefined}
+          >
             <em>{port.type}</em>
             <span className="port-label">{port.label}</span>
             <Handle

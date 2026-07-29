@@ -5,6 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+CONTROL_PORT_PREFIX = "control:"
+CONTROL_PORT_MODES = {"input", "output", "passthrough"}
+
 
 def _port(
     name: str,
@@ -32,11 +35,20 @@ def _field(
     help_text: str = "",
     options: list[dict[str, Any]] | None = None,
     placeholder: str = "",
+    value_type: str | None = None,
 ) -> dict[str, Any]:
+    if value_type is None:
+        value_type = {
+            "checkbox": "boolean",
+            "json": "any",
+            "number": "number",
+            "number_optional": "number",
+        }.get(control, "text")
     return {
         "name": name,
         "label": label or name.replace("_", " ").title(),
         "control": control,
+        "type": value_type,
         "default": default,
         "help": help_text,
         "options": options or [],
@@ -53,6 +65,15 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "inputs": [],
         "outputs": [_port("text", "text")],
         "fields": [_field("text", "textarea", "The future arrives unevenly.")],
+    },
+    {
+        "kind": "number_input",
+        "label": "Number",
+        "category": "Values",
+        "description": "A numeric value for parameter and control sockets.",
+        "inputs": [],
+        "outputs": [_port("number", "number")],
+        "fields": [_field("value", "number", 0)],
     },
     {
         "kind": "template_input",
@@ -79,7 +100,10 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
             _port("template", "template"),
             _port("value", "any", required=False),
         ],
-        "outputs": [_port("template", "template")],
+        "outputs": [
+            _port("template", "template"),
+            _port("text", "text", label="Bound text"),
+        ],
         "fields": [
             _field("name", "text", "person", placeholder="person"),
             _field("value", "text", "Ada", help_text="Used when the value port is unconnected."),
@@ -326,3 +350,47 @@ def definitions_by_kind() -> dict[str, dict[str, Any]]:
     """Return canonical node definitions indexed by kind."""
 
     return {definition["kind"]: definition for definition in NODE_DEFINITIONS}
+
+
+def control_port_name(field_name: str) -> str:
+    """Return the stable graph-port name for a promoted node control."""
+
+    return f"{CONTROL_PORT_PREFIX}{field_name}"
+
+
+def with_control_ports(
+    definition: dict[str, Any],
+    control_ports: dict[str, str] | None,
+) -> dict[str, Any]:
+    """Return a node definition extended with its promoted control ports."""
+
+    expanded = deepcopy(definition)
+    expanded["inputs"] = [
+        port for port in expanded["inputs"] if "control" not in port
+    ]
+    expanded["outputs"] = [
+        port for port in expanded["outputs"] if "control" not in port
+    ]
+    fields = {field["name"]: field for field in expanded["fields"]}
+    for field_name, mode in (control_ports or {}).items():
+        field = fields.get(field_name)
+        if field is None:
+            raise ValueError(
+                f"{definition['label']} has no configurable control {field_name!r}."
+            )
+        if mode not in CONTROL_PORT_MODES:
+            raise ValueError(
+                f"Control {field_name!r} has invalid port mode {mode!r}."
+            )
+        port = _port(
+            control_port_name(field_name),
+            field["type"],
+            required=False,
+            label=field["label"],
+        )
+        port["control"] = field_name
+        if mode in {"input", "passthrough"}:
+            expanded["inputs"].append(deepcopy(port))
+        if mode in {"output", "passthrough"}:
+            expanded["outputs"].append(deepcopy(port))
+    return expanded

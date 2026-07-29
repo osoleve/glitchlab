@@ -15,7 +15,8 @@ from . import __version__
 from .catalog import get_catalog
 from .engine import GraphEngine
 from .glitchlings_adapter import discover_glitchlings, plugin_status
-from .models import GraphRunFailure, GraphSpec
+from .models import GraphRunFailure, GraphSpec, WorkflowDraft
+from .workflows import WorkflowInUseError, WorkflowStore, workflow_definition
 
 app = FastAPI(title="Glitchloom", version=__version__)
 app.add_middleware(
@@ -54,11 +55,120 @@ def catalog() -> dict[str, Any]:
         {"label": item["label"], "value": item["name"]}
         for item in discovered
     ]
+    engine = GraphEngine()
+    workflows = engine.workflow_store.list_latest()
     return {
-        "nodes": get_catalog(options),
+        "nodes": [
+            *get_catalog(options),
+            *(workflow_definition(workflow) for workflow in workflows),
+        ],
         "glitchlings": discovered,
         "plugin": status,
     }
+
+
+@app.get("/api/workflows")
+def list_workflows() -> dict[str, Any]:
+    """Return the latest immutable version of each named workflow."""
+
+    store = WorkflowStore(GraphEngine().workspace)
+    return {
+        "workflows": [
+            workflow.model_dump(mode="json") for workflow in store.list_latest()
+        ]
+    }
+
+
+@app.post("/api/workflows", status_code=201)
+def save_workflow(draft: WorkflowDraft) -> dict[str, Any]:
+    """Persist a selected graph as a new immutable workflow version."""
+
+    store = WorkflowStore(GraphEngine().workspace)
+    try:
+        _validate_workflow_draft(store, draft)
+        workflow = store.save(draft)
+    except (GraphRunFailure, ValueError) as exc:
+        raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
+    return {
+        "workflow": workflow.model_dump(mode="json"),
+        "definition": workflow_definition(workflow),
+    }
+
+
+def _validate_workflow_draft(
+    store: WorkflowStore,
+    draft: WorkflowDraft,
+) -> None:
+    """Validate a reusable graph with its public inputs treated as supplied."""
+
+    store.validate(draft)
+    provided_inputs: dict[str, dict[str, Any]] = {}
+    for binding in draft.inputs:
+        provided_inputs.setdefault(binding.node_id, {})[binding.node_port] = (
+            [] if binding.multiple else None
+        )
+    GraphEngine(workflow_store=store)._validate_and_order(
+        draft.graph,
+        provided_inputs,
+    )
+
+
+@app.get("/api/workflows/{workflow_id}/versions/{version}")
+def get_workflow(workflow_id: str, version: int) -> dict[str, Any]:
+    """Load one exact workflow version for tabbed editing."""
+
+    store = WorkflowStore(GraphEngine().workspace)
+    try:
+        workflow = store.get(workflow_id, version)
+        definitions = {
+            node.kind: store.node_definition(node.kind)
+            for node in workflow.graph.nodes
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+    return {
+        "workflow": workflow.model_dump(mode="json"),
+        "definitions": list(definitions.values()),
+    }
+
+
+@app.post("/api/workflows/{workflow_id}/versions", status_code=201)
+def update_workflow(
+    workflow_id: str,
+    draft: WorkflowDraft,
+) -> dict[str, Any]:
+    """Append an edited workflow as a new immutable version."""
+
+    store = WorkflowStore(GraphEngine().workspace)
+    try:
+        _validate_workflow_draft(store, draft)
+        workflow = store.save(draft, workflow_id=workflow_id)
+    except (GraphRunFailure, ValueError) as exc:
+        raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
+    return {
+        "workflow": workflow.model_dump(mode="json"),
+        "definition": workflow_definition(workflow),
+    }
+
+
+@app.delete("/api/workflows/{workflow_id}")
+def delete_workflow(workflow_id: str, force: bool = False) -> dict[str, Any]:
+    """Move a saved workflow and all versions to recoverable trash."""
+
+    store = WorkflowStore(GraphEngine().workspace)
+    try:
+        deleted = store.delete(workflow_id, force=force)
+    except WorkflowInUseError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "dependents": exc.dependents,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+    return {"deleted": deleted}
 
 
 @app.post("/api/runs")

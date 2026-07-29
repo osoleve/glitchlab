@@ -24,6 +24,7 @@ function makeNode(
       title,
       definition,
       config: { ...config, ...overrides },
+      controlPorts: {},
       runStatus: "idle",
     },
   };

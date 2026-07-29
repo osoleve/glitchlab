@@ -2,6 +2,7 @@ import { ChevronRight, Gauge, PanelRightClose, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PreviewValue } from "./PreviewValue";
 import type {
+  ControlPortMode,
   FieldDefinition,
   GlitchlingDescriptor,
   LoomEdge,
@@ -19,8 +20,67 @@ interface InspectorProps {
   error?: string;
   onUpdateTitle: (value: string) => void;
   onUpdateField: (field: string, value: unknown) => void;
+  onUpdateControlPort: (
+    field: string,
+    mode?: ControlPortMode,
+  ) => void;
   onDelete: () => void;
   onClose: () => void;
+}
+
+function ControlPortSelector({
+  field,
+  mode,
+  onChange,
+}: {
+  field: FieldDefinition;
+  mode?: ControlPortMode;
+  onChange: (mode?: ControlPortMode) => void;
+}) {
+  return (
+    <div
+      className="control-port-selector"
+      role="group"
+      aria-label={`${field.label} port mode`}
+    >
+      <button
+        type="button"
+        className={!mode ? "is-active" : ""}
+        aria-label={`Keep ${field.label} local`}
+        aria-pressed={!mode}
+        onClick={() => onChange(undefined)}
+      >
+        Local
+      </button>
+      <button
+        type="button"
+        className={mode === "input" ? "is-active" : ""}
+        aria-label={`Expose ${field.label} as input port`}
+        aria-pressed={mode === "input"}
+        onClick={() => onChange("input")}
+      >
+        In
+      </button>
+      <button
+        type="button"
+        className={mode === "output" ? "is-active" : ""}
+        aria-label={`Expose ${field.label} as output port`}
+        aria-pressed={mode === "output"}
+        onClick={() => onChange("output")}
+      >
+        Out
+      </button>
+      <button
+        type="button"
+        className={mode === "passthrough" ? "is-active" : ""}
+        aria-label={`Expose ${field.label} as input and output ports`}
+        aria-pressed={mode === "passthrough"}
+        onClick={() => onChange("passthrough")}
+      >
+        I/O
+      </button>
+    </div>
+  );
 }
 
 function displayValue(field: FieldDefinition, value: unknown): string | number {
@@ -98,6 +158,7 @@ export function Inspector({
   error,
   onUpdateTitle,
   onUpdateField,
+  onUpdateControlPort,
   onDelete,
   onClose,
 }: InspectorProps) {
@@ -194,30 +255,69 @@ export function Inspector({
               </section>
               <section className="inspector-section fields-section">
                 <h2>Configuration</h2>
+                {selectedNode.data.definition.fields.length > 0 && (
+                  <p className="control-port-help">
+                    Keep a control local, promote it to a typed input or output,
+                    or use I/O as a pass-through. Inputs fall back to the local
+                    value when unconnected and can become saved workflow
+                    boundaries.
+                  </p>
+                )}
                 {selectedNode.data.definition.fields.length === 0 && (
                   <p className="empty-copy">This node has no local controls.</p>
                 )}
                 {selectedNode.data.definition.fields.map((field) => {
                   const value = selectedNode.data.config[field.name] ?? field.default;
+                  const portMode = selectedNode.data.controlPorts[field.name];
+                  const acceptsInput =
+                    portMode === "input" || portMode === "passthrough";
+                  const inputHelp =
+                    portMode === "passthrough"
+                      ? "Unconnected uses this default; a connected value also passes to the output socket."
+                      : "Used as the default while the input socket is unconnected.";
                   if (field.control === "checkbox") {
                     return (
-                      <label className="check-field" key={field.name}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(value)}
-                          onChange={(event) =>
-                            onUpdateField(field.name, event.target.checked)
-                          }
-                        />
-                        <span>{field.label}</span>
-                      </label>
+                      <div className="config-control" key={field.name}>
+                        <div className="config-control-heading">
+                          <span>{field.label}</span>
+                          <ControlPortSelector
+                            field={field}
+                            mode={portMode}
+                            onChange={(mode) =>
+                              onUpdateControlPort(field.name, mode)
+                            }
+                          />
+                        </div>
+                        <label className="check-field">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(value)}
+                            onChange={(event) =>
+                              onUpdateField(field.name, event.target.checked)
+                            }
+                          />
+                          <span>Enabled</span>
+                        </label>
+                        {field.help && <small>{field.help}</small>}
+                        {acceptsInput && <small>{inputHelp}</small>}
+                      </div>
                     );
                   }
                   if (field.control === "select") {
                     return (
-                      <label className="field" key={field.name}>
-                        <span>{field.label}</span>
+                      <div className="config-control" key={field.name}>
+                        <div className="config-control-heading">
+                          <span>{field.label}</span>
+                          <ControlPortSelector
+                            field={field}
+                            mode={portMode}
+                            onChange={(mode) =>
+                              onUpdateControlPort(field.name, mode)
+                            }
+                          />
+                        </div>
                         <select
+                          aria-label={field.label}
                           value={String(value ?? "")}
                           onChange={(event) =>
                             onUpdateField(field.name, event.target.value)
@@ -230,16 +330,27 @@ export function Inspector({
                           ))}
                         </select>
                         {field.help && <small>{field.help}</small>}
-                      </label>
+                        {acceptsInput && <small>{inputHelp}</small>}
+                      </div>
                     );
                   }
                   const multiline =
                     field.control === "textarea" || field.control === "json";
                   return (
-                    <label className="field" key={field.name}>
-                      <span>{field.label}</span>
+                    <div className="config-control" key={field.name}>
+                      <div className="config-control-heading">
+                        <span>{field.label}</span>
+                        <ControlPortSelector
+                          field={field}
+                          mode={portMode}
+                          onChange={(mode) =>
+                            onUpdateControlPort(field.name, mode)
+                          }
+                        />
+                      </div>
                       {multiline ? (
                         <textarea
+                          aria-label={field.label}
                           rows={field.control === "json" ? 5 : 3}
                           value={displayValue(field, value)}
                           placeholder={field.placeholder}
@@ -250,6 +361,7 @@ export function Inspector({
                         />
                       ) : (
                         <input
+                          aria-label={field.label}
                           type={
                             field.control === "number" ||
                             field.control === "number_optional"
@@ -273,7 +385,8 @@ export function Inspector({
                         />
                       )}
                       {field.help && <small>{field.help}</small>}
-                    </label>
+                      {acceptsInput && <small>{inputHelp}</small>}
+                    </div>
                   );
                 })}
                 {selectedGlitchling &&

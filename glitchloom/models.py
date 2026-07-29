@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +19,11 @@ class GraphNode(BaseModel):
 
     id: str
     kind: str
+    title: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
+    control_ports: dict[str, Literal["input", "output", "passthrough"]] = Field(
+        default_factory=dict
+    )
     position: Position = Field(default_factory=Position)
 
 
@@ -39,6 +43,47 @@ class GraphSpec(BaseModel):
     name: str = "Untitled loom"
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+
+class WorkflowInput(BaseModel):
+    """One public workflow input bound to an internal node port."""
+
+    name: str
+    label: str
+    type: str
+    required: bool = True
+    multiple: bool = False
+    node_id: str
+    node_port: str
+
+
+class WorkflowOutput(BaseModel):
+    """One public workflow output sourced from an internal node port."""
+
+    name: str
+    label: str
+    type: str
+    node_id: str
+    node_port: str
+
+
+class WorkflowDraft(BaseModel):
+    """A named reusable graph before immutable identity and version assignment."""
+
+    name: str
+    description: str = ""
+    graph: GraphSpec
+    inputs: list[WorkflowInput] = Field(default_factory=list)
+    outputs: list[WorkflowOutput] = Field(default_factory=list)
+
+
+class WorkflowSpec(WorkflowDraft):
+    """An immutable, versioned reusable workflow stored on disk."""
+
+    id: str
+    version: int
+    digest: str
+    created_at: str
 
 
 class NodeRunResult(BaseModel):

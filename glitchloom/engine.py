@@ -18,7 +18,11 @@ from typing import Any
 import httpx
 
 from . import __version__
-from .catalog import definitions_by_kind
+from .catalog import (
+    control_port_name,
+    definitions_by_kind,
+    with_control_ports,
+)
 from .glitchlings_adapter import corrupt_text, plugin_status
 from .models import (
     GraphEdge,
@@ -29,6 +33,7 @@ from .models import (
     RunManifest,
     RunResponse,
 )
+from .workflows import WORKFLOW_KIND_PREFIX, WorkflowStore
 
 HOLE_PATTERN = re.compile(r"(?<!\?)\?([A-Za-z_][A-Za-z0-9_]*)")
 
@@ -76,7 +81,23 @@ def _render_template(value: dict[str, Any]) -> str:
     if missing:
         raise ValueError(f"Template has unbound holes: {', '.join(missing)}")
 
-    rendered = HOLE_PATTERN.sub(lambda match: str(bindings[match.group(1)]), value["source"])
+    return _stringify_template(value)
+
+
+def _stringify_template(value: dict[str, Any]) -> str:
+    """Render bound holes while preserving unbound holes for inspection."""
+
+    if value.get("kind") != "text_template":
+        raise ValueError("Expected a TextTemplate value.")
+    bindings = value.get("bindings") or {}
+    rendered = HOLE_PATTERN.sub(
+        lambda match: (
+            str(bindings[match.group(1)])
+            if match.group(1) in bindings
+            else match.group(0)
+        ),
+        value["source"],
+    )
     return rendered.replace("??", "?")
 
 
@@ -124,6 +145,8 @@ class GraphEngine:
         *,
         workspace: Path | None = None,
         http_client: httpx.AsyncClient | None = None,
+        workflow_store: WorkflowStore | None = None,
+        workflow_stack: tuple[str, ...] = (),
     ) -> None:
         configured_workspace = os.getenv("GLITCHLOOM_WORKSPACE", "").strip()
         self.workspace = (
@@ -139,6 +162,24 @@ class GraphEngine:
         ).resolve()
         self.http_client = http_client
         self.definitions = definitions_by_kind()
+        self.workflow_store = workflow_store or WorkflowStore(self.workspace)
+        self.workflow_stack = workflow_stack
+
+    def _definition(self, kind: str) -> dict[str, Any]:
+        definition = self.definitions.get(kind)
+        if definition is not None:
+            return definition
+        if kind.startswith(WORKFLOW_KIND_PREFIX):
+            return self.workflow_store.definition_for_kind(kind)
+        raise ValueError(f"Unknown node kind {kind!r}.")
+
+    def _node_definition(self, node: GraphNode) -> dict[str, Any]:
+        """Return the exact port contract for one configured graph node."""
+
+        return with_control_ports(
+            self._definition(node.kind),
+            node.control_ports,
+        )
 
     def _cached_result(
         self,
@@ -208,6 +249,7 @@ class GraphEngine:
     def _validate_and_order(
         self,
         graph: GraphSpec,
+        injected_inputs: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[list[GraphNode], dict[str, list[GraphEdge]], set[str]]:
         if not graph.nodes:
             raise GraphRunFailure("The graph has no nodes.")
@@ -216,18 +258,35 @@ class GraphEngine:
         if len(nodes) != len(graph.nodes):
             raise GraphRunFailure("Node IDs must be unique.")
         for node in graph.nodes:
-            if node.kind not in self.definitions:
-                raise GraphRunFailure(f"Unknown node kind {node.kind!r}.", node_id=node.id)
+            try:
+                self._node_definition(node)
+            except ValueError as exc:
+                raise GraphRunFailure(str(exc), node_id=node.id) from exc
 
         incoming: dict[str, list[GraphEdge]] = defaultdict(list)
         outgoing: dict[str, list[GraphEdge]] = defaultdict(list)
         indegree = {node.id: 0 for node in graph.nodes}
         connected_targets: set[tuple[str, str]] = set()
+        for node_id, supplied in (injected_inputs or {}).items():
+            node = nodes.get(node_id)
+            if node is None:
+                raise GraphRunFailure(
+                    f"Workflow input references missing node {node_id!r}."
+                )
+            target_ports = {
+                port["name"]: port for port in self._node_definition(node)["inputs"]
+            }
+            for port_name in supplied:
+                if port_name not in target_ports:
+                    raise GraphRunFailure(
+                        f"Node {node_id!r} has no input port {port_name!r}."
+                    )
+                connected_targets.add((node_id, port_name))
         for edge in graph.edges:
             if edge.source not in nodes or edge.target not in nodes:
                 raise GraphRunFailure(f"Edge {edge.id!r} references a missing node.")
-            source_definition = self.definitions[nodes[edge.source].kind]
-            target_definition = self.definitions[nodes[edge.target].kind]
+            source_definition = self._node_definition(nodes[edge.source])
+            target_definition = self._node_definition(nodes[edge.target])
             source_ports = {port["name"]: port for port in source_definition["outputs"]}
             target_ports = {port["name"]: port for port in target_definition["inputs"]}
             if edge.source_port not in source_ports:
@@ -258,8 +317,9 @@ class GraphEngine:
             indegree[edge.target] += 1
 
         for node in graph.nodes:
-            definition = self.definitions[node.kind]
+            definition = self._node_definition(node)
             connected = {edge.target_port for edge in incoming[node.id]}
+            connected.update((injected_inputs or {}).get(node.id, {}))
             missing = [
                 port["name"]
                 for port in definition["inputs"]
@@ -290,16 +350,71 @@ class GraphEngine:
         node: GraphNode,
         incoming: dict[str, list[GraphEdge]],
         outputs: dict[str, dict[str, Any]],
+        injected_inputs: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        definition = self.definitions[node.kind]
+        definition = self._node_definition(node)
         port_definitions = {port["name"]: port for port in definition["inputs"]}
-        gathered: dict[str, Any] = {}
+        gathered = dict((injected_inputs or {}).get(node.id, {}))
         grouped: dict[str, list[Any]] = defaultdict(list)
         for edge in incoming[node.id]:
             grouped[edge.target_port].append(outputs[edge.source][edge.source_port])
         for port_name, values in grouped.items():
-            gathered[port_name] = values if port_definitions[port_name]["multiple"] else values[0]
+            if port_definitions[port_name]["multiple"]:
+                injected = gathered.get(port_name, [])
+                injected_values = injected if isinstance(injected, list) else [injected]
+                gathered[port_name] = [*injected_values, *values]
+            else:
+                if port_name in gathered:
+                    raise ValueError(
+                        f"Input {node.id}.{port_name} received both a workflow value "
+                        "and an internal connection."
+                    )
+                gathered[port_name] = values[0]
         return gathered
+
+    def _apply_control_inputs(
+        self,
+        node: GraphNode,
+        inputs: dict[str, Any],
+    ) -> tuple[GraphNode, dict[str, Any]]:
+        """Move promoted input values into an isolated effective config."""
+
+        config = dict(node.config)
+        native_inputs = dict(inputs)
+        for field_name, mode in node.control_ports.items():
+            if mode not in {"input", "passthrough"}:
+                continue
+            port_name = control_port_name(field_name)
+            if port_name in native_inputs:
+                config[field_name] = native_inputs.pop(port_name)
+        return node.model_copy(update={"config": config}), native_inputs
+
+    def _append_control_outputs(
+        self,
+        node: GraphNode,
+        outputs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Add promoted local-control values to a node's runtime outputs."""
+
+        if not {"output", "passthrough"}.intersection(
+            node.control_ports.values()
+        ):
+            return outputs
+        definition = self._definition(node.kind)
+        fields = {field["name"]: field for field in definition["fields"]}
+        expanded = dict(outputs)
+        for field_name, mode in node.control_ports.items():
+            if mode not in {"output", "passthrough"}:
+                continue
+            field = fields[field_name]
+            value = node.config.get(
+                field_name,
+                field["default"],
+            )
+            if field["control"] == "json":
+                value = _json_config(value, field=field_name)
+            expanded[control_port_name(field_name)] = value
+        return expanded
 
     async def _generate_completion(
         self,
@@ -434,8 +549,51 @@ class GraphEngine:
     ) -> dict[str, Any]:
         config = node.config
         kind = node.kind
+        if kind.startswith(WORKFLOW_KIND_PREFIX):
+            if kind in self.workflow_stack:
+                chain = " → ".join((*self.workflow_stack, kind))
+                raise ValueError(f"Recursive workflow expansion is not allowed: {chain}.")
+            if len(self.workflow_stack) >= 32:
+                raise ValueError("Workflow nesting exceeds the maximum depth of 32.")
+            workflow = self.workflow_store.get_by_kind(kind)
+            expected_digest = str(config.get("workflow_digest", "")).strip()
+            if expected_digest and expected_digest != workflow.digest:
+                raise ValueError(
+                    f"Workflow digest mismatch: expected {expected_digest}, "
+                    f"loaded {workflow.digest}."
+                )
+            injected: dict[str, dict[str, Any]] = defaultdict(dict)
+            for binding in workflow.inputs:
+                if binding.name in inputs:
+                    injected[binding.node_id][binding.node_port] = inputs[binding.name]
+            child = GraphEngine(
+                workspace=self.workspace,
+                http_client=self.http_client,
+                workflow_store=self.workflow_store,
+                workflow_stack=(*self.workflow_stack, kind),
+            )
+            response = await child.run(
+                workflow.graph,
+                injected_inputs=dict(injected),
+            )
+            child_outputs = {
+                result.node_id: result.outputs
+                for result in response.nodes
+                if result.status == "completed"
+            }
+            return {
+                binding.name: child_outputs[binding.node_id][binding.node_port]
+                for binding in workflow.outputs
+            }
         if kind == "text_input":
             return {"text": str(config.get("text", ""))}
+        if kind == "number_input":
+            value = config.get("value", 0)
+            if isinstance(value, bool):
+                raise ValueError("Number requires a numeric value.")
+            if not isinstance(value, int | float):
+                value = float(value)
+            return {"number": value}
         if kind == "template_input":
             return {"template": _template(str(config.get("template", "")))}
         if kind == "fill_hole":
@@ -447,7 +605,11 @@ class GraphEngine:
                 raise ValueError(f"Template has no ?{name} hole.")
             bindings = dict(template_value.get("bindings") or {})
             bindings[name] = inputs.get("value", config.get("value", ""))
-            return {"template": _template(template_value["source"], bindings)}
+            bound_template = _template(template_value["source"], bindings)
+            return {
+                "template": bound_template,
+                "text": _stringify_template(bound_template),
+            }
         if kind == "render_template":
             return {"text": _render_template(inputs["template"])}
         if kind == "split":
@@ -564,19 +726,43 @@ class GraphEngine:
             return {"value": inputs["value"]}
         raise ValueError(f"No executor is registered for node kind {kind!r}.")
 
-    async def run(self, graph: GraphSpec) -> RunResponse:
+    async def run(
+        self,
+        graph: GraphSpec,
+        *,
+        injected_inputs: dict[str, dict[str, Any]] | None = None,
+    ) -> RunResponse:
         """Execute a validated graph and return results plus a frozen manifest."""
 
         started_at = _utc_now()
         run_id = str(uuid.uuid4())
-        ordered, incoming, terminal_nodes = self._validate_and_order(graph)
+        ordered, incoming, terminal_nodes = self._validate_and_order(
+            graph,
+            injected_inputs,
+        )
         outputs: dict[str, dict[str, Any]] = {}
         results: list[NodeRunResult] = []
         for node in ordered:
             started = time.perf_counter()
             try:
-                inputs = self._gather_inputs(node, incoming, outputs)
-                node_outputs = await self._execute_node(node, inputs)
+                inputs = self._gather_inputs(
+                    node,
+                    incoming,
+                    outputs,
+                    injected_inputs,
+                )
+                effective_node, native_inputs = self._apply_control_inputs(
+                    node,
+                    inputs,
+                )
+                node_outputs = await self._execute_node(
+                    effective_node,
+                    native_inputs,
+                )
+                node_outputs = self._append_control_outputs(
+                    effective_node,
+                    node_outputs,
+                )
             except Exception as exc:  # noqa: BLE001 - report node boundary failures
                 duration_ms = (time.perf_counter() - started) * 1000
                 results.append(
@@ -589,7 +775,7 @@ class GraphEngine:
                     )
                 )
                 raise GraphRunFailure(
-                    f"{self.definitions[node.kind]['label']} failed: {exc}",
+                    f"{self._definition(node.kind)['label']} failed: {exc}",
                     node_id=node.id,
                     results=results,
                 ) from exc
@@ -631,5 +817,6 @@ __all__ = [
     "GraphEngine",
     "HOLE_PATTERN",
     "_render_template",
+    "_stringify_template",
     "_template",
 ]

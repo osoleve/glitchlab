@@ -9,6 +9,7 @@ import {
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
+  reconnectEdge,
   type Connection,
   type EdgeChange,
   type NodeChange,
@@ -19,15 +20,23 @@ import {
 import {
   AlertTriangle,
   Bug,
+  Copy,
+  Focus,
+  LayoutDashboard,
   LoaderCircle,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightOpen,
+  Pencil,
   Play,
   Plus,
   RotateCcw,
   Search,
+  Save,
+  Trash2,
+  Unplug,
   Undo2,
+  Workflow,
   X,
 } from "lucide-react";
 import {
@@ -43,17 +52,30 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
-import { ApiError, fetchCatalog, runGraph } from "./api";
+import {
+  ApiError,
+  deleteWorkflow,
+  fetchCatalog,
+  fetchWorkflow,
+  runGraph,
+  saveWorkflow,
+  updateWorkflow,
+} from "./api";
+import { controlPortName, withControlPorts } from "./controlPorts";
 import { Inspector } from "./Inspector";
 import { LoomNodeCard } from "./LoomNode";
 import { talkieStarter } from "./starter";
 import type {
   CatalogResponse,
+  ControlPortMode,
   LoomEdge,
   LoomNode,
   NodeDefinition,
   RunResponse,
+  WorkflowDraft,
+  WorkflowSpec,
 } from "./types";
+import { inferWorkflowDraft, reviseWorkflowDraft } from "./workflow";
 
 const nodeTypes = { loomNode: LoomNodeCard };
 
@@ -64,6 +86,59 @@ interface GraphSnapshot {
   runError?: string;
   selectedId?: string;
   loomName: string;
+  isDirty: boolean;
+}
+
+interface GraphTab {
+  id: string;
+  type: "loom" | "workflow";
+  workflow?: WorkflowSpec;
+  snapshot: GraphSnapshot;
+}
+
+type ContextMenuState =
+  | { x: number; y: number; scope: "node"; nodeId: string }
+  | { x: number; y: number; scope: "selection" }
+  | { x: number; y: number; scope: "edge"; edgeId: string }
+  | { x: number; y: number; scope: "pane" };
+
+interface WorkflowMenuState {
+  x: number;
+  y: number;
+  definition: NodeDefinition;
+}
+
+const MAIN_TAB_ID = "main";
+
+function workflowBindingKey(
+  direction: "input" | "output",
+  nodeId: string,
+  nodePort: string,
+): string {
+  return `${direction}\u0000${nodeId}\u0000${nodePort}`;
+}
+
+function applyWorkflowBoundaryLabels(
+  draft: WorkflowDraft,
+  labels: Record<string, string>,
+): WorkflowDraft {
+  return {
+    ...draft,
+    inputs: draft.inputs.map((binding) => ({
+      ...binding,
+      label:
+        labels[
+          workflowBindingKey("input", binding.node_id, binding.node_port)
+        ] ?? binding.label,
+    })),
+    outputs: draft.outputs.map((binding) => ({
+      ...binding,
+      label:
+        labels[
+          workflowBindingKey("output", binding.node_id, binding.node_port)
+        ] ?? binding.label,
+    })),
+  };
 }
 
 function defaultConfig(definition: NodeDefinition): Record<string, unknown> {
@@ -192,19 +267,104 @@ function GlitchloomApp() {
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [tabs, setTabs] = useState<GraphTab[]>([
+    {
+      id: MAIN_TAB_ID,
+      type: "loom",
+      snapshot: {
+        nodes: [],
+        edges: [],
+        loomName: "Talkie perturbation pair",
+        isDirty: false,
+      },
+    },
+  ]);
+  const [activeTabId, setActiveTabId] = useState(MAIN_TAB_ID);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [undoSnapshot, setUndoSnapshot] = useState<GraphSnapshot>();
   const [runElapsed, setRunElapsed] = useState(0);
   const [paletteWidth, setPaletteWidth] = useState<number>();
   const [inspectorWidth, setInspectorWidth] = useState<number>();
   const [resizingPanel, setResizingPanel] = useState<ResizablePanel>();
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>();
+  const [workflowMenu, setWorkflowMenu] = useState<WorkflowMenuState>();
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveDialogPurpose, setSaveDialogPurpose] = useState<
+    "selection" | "edit"
+  >("selection");
+  const [workflowName, setWorkflowName] = useState("");
+  const [workflowDescription, setWorkflowDescription] = useState("");
+  const [workflowBoundaryLabels, setWorkflowBoundaryLabels] = useState<
+    Record<string, string>
+  >({});
+  const [workflowError, setWorkflowError] = useState<string>();
+  const [savingWorkflow, setSavingWorkflow] = useState(false);
+  const [workflowNotice, setWorkflowNotice] = useState<string>();
+  const [afterHours, setAfterHours] = useState(false);
+  const [loadingWorkflowId, setLoadingWorkflowId] = useState<string>();
+  const [deleteDefinition, setDeleteDefinition] = useState<NodeDefinition>();
+  const [deletingWorkflow, setDeletingWorkflow] = useState(false);
+  const [deleteWorkflowError, setDeleteWorkflowError] = useState<string>();
+  const [closeTabId, setCloseTabId] = useState<string>();
   const runStartedAt = useRef(0);
+  const reconnectSuccessful = useRef(false);
   const canvasRef = useRef<HTMLElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
   const inspectorRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView, getViewport, setViewport } =
     useReactFlow();
   const nodesInitialized = useNodesInitialized();
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const activeWorkflow = activeTab.type === "workflow"
+    ? activeTab.workflow
+    : undefined;
+
+  const captureSnapshot = useCallback(
+    (): GraphSnapshot => ({
+      nodes,
+      edges,
+      run,
+      runError,
+      selectedId,
+      loomName,
+      isDirty,
+    }),
+    [edges, isDirty, loomName, nodes, run, runError, selectedId],
+  );
+
+  const applySnapshot = useCallback((snapshot: GraphSnapshot) => {
+    setNodes(snapshot.nodes);
+    setEdges(snapshot.edges);
+    setRun(snapshot.run);
+    setRunError(snapshot.runError);
+    setSelectedId(snapshot.selectedId);
+    setLoomName(snapshot.loomName);
+    setIsDirty(snapshot.isDirty);
+    setInspectorOpen(Boolean(snapshot.selectedId));
+    setUndoSnapshot(undefined);
+    setContextMenu(undefined);
+    setWorkflowMenu(undefined);
+    setNeedsFit(true);
+  }, []);
+
+  const switchGraphTab = useCallback(
+    (tabId: string) => {
+      if (tabId === activeTabId || running) return;
+      const target = tabs.find((tab) => tab.id === tabId);
+      if (!target) return;
+      const currentSnapshot = captureSnapshot();
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.id === activeTabId
+            ? { ...tab, snapshot: currentSnapshot }
+            : tab,
+        ),
+      );
+      setActiveTabId(tabId);
+      applySnapshot(target.snapshot);
+    },
+    [activeTabId, applySnapshot, captureSnapshot, running, tabs],
+  );
 
   useEffect(() => {
     void fetchCatalog()
@@ -214,6 +374,21 @@ function GlitchloomApp() {
         setNodes(starter.nodes);
         setEdges(starter.edges);
         setIsDirty(false);
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.id === MAIN_TAB_ID
+              ? {
+                  ...tab,
+                  snapshot: {
+                    nodes: starter.nodes,
+                    edges: starter.edges,
+                    loomName: "Talkie perturbation pair",
+                    isDirty: false,
+                  },
+                }
+              : tab,
+          ),
+        );
         setNeedsFit(true);
       })
       .catch((error: unknown) => {
@@ -271,25 +446,56 @@ function GlitchloomApp() {
   }, []);
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
+  const selectedNodes = useMemo(
+    () => nodes.filter((node) => node.selected),
+    [nodes],
+  );
+  const contextualWorkflowDefinition =
+    selectedNodes.length <= 1
+      ? selectedNode?.data.definition.workflow
+        ? selectedNode.data.definition
+        : undefined
+      : undefined;
+  const workflowReferenceCount = useMemo(() => {
+    const workflowId = deleteDefinition?.workflow?.id;
+    if (!workflowId) return 0;
+    return tabs.reduce((total, tab) => {
+      const tabNodes = tab.id === activeTabId ? nodes : tab.snapshot.nodes;
+      return (
+        total +
+        tabNodes.filter(
+          (node) => node.data.definition.workflow?.id === workflowId,
+        ).length
+      );
+    }, 0);
+  }, [activeTabId, deleteDefinition, nodes, tabs]);
   useEffect(() => {
-    if (selectedId && !selectedNode) {
-      setSelectedId(undefined);
-      setInspectorOpen(false);
+    if (
+      selectedId &&
+      (!selectedNode ||
+        (!selectedNode.selected && selectedNodes.some((node) => node.selected)))
+    ) {
+      const fallback = selectedNodes.at(-1);
+      setSelectedId(fallback?.id);
+      if (!fallback) setInspectorOpen(false);
     }
-  }, [selectedId, selectedNode]);
+  }, [selectedId, selectedNode, selectedNodes]);
 
   useEffect(() => {
-    setNodes((current) => {
-      let changed = false;
-      const next = current.map((node) => {
-        const selected = node.id === selectedId;
-        if (Boolean(node.selected) === selected) return node;
-        changed = true;
-        return { ...node, selected };
-      });
-      return changed ? next : current;
-    });
-  }, [selectedId]);
+    if (!contextMenu && !workflowMenu) return;
+    const dismiss = (event: PointerEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".context-menu")
+      ) {
+        return;
+      }
+      setContextMenu(undefined);
+      setWorkflowMenu(undefined);
+    };
+    window.addEventListener("pointerdown", dismiss);
+    return () => window.removeEventListener("pointerdown", dismiss);
+  }, [contextMenu, workflowMenu]);
 
   const groupedCatalog = useMemo(() => {
     const groups = new Map<string, NodeDefinition[]>();
@@ -350,6 +556,31 @@ function GlitchloomApp() {
     },
     [markDirty],
   );
+  const onReconnect = useCallback(
+    (oldEdge: LoomEdge, connection: Connection) => {
+      reconnectSuccessful.current = true;
+      markDirty();
+      setEdges((current) =>
+        reconnectEdge(oldEdge, connection, current, { shouldReplaceId: false }),
+      );
+    },
+    [markDirty],
+  );
+  const onReconnectEnd = useCallback(
+    (
+      _event: MouseEvent | TouchEvent,
+      edge: LoomEdge,
+      _handleType: "source" | "target",
+      connectionState: { isValid: boolean | null },
+    ) => {
+      if (!reconnectSuccessful.current && connectionState.isValid !== true) {
+        markDirty();
+        setEdges((current) => current.filter((item) => item.id !== edge.id));
+      }
+      reconnectSuccessful.current = false;
+    },
+    [markDirty],
+  );
 
   const addNode = useCallback(
     (definition: NodeDefinition, position?: { x: number; y: number }) => {
@@ -372,7 +603,7 @@ function GlitchloomApp() {
           );
         }
         return [
-          ...current,
+          ...current.map((node) => ({ ...node, selected: false })),
           {
             id,
             type: "loomNode",
@@ -381,9 +612,16 @@ function GlitchloomApp() {
               kind: definition.kind,
               title: definition.label,
               definition,
-              config: defaultConfig(definition),
+              config: {
+                ...defaultConfig(definition),
+                ...(definition.workflow
+                  ? { workflow_digest: definition.workflow.digest }
+                  : {}),
+              },
+              controlPorts: {},
               runStatus: "idle",
             },
+            selected: true,
           },
         ];
       });
@@ -418,17 +656,447 @@ function GlitchloomApp() {
       current.map((node) => (node.id === selectedId ? updater(node) : node)),
     );
   };
-  const deleteSelected = () => {
-    if (!selectedId) return;
+  const updateControlPort = (
+    fieldName: string,
+    mode?: ControlPortMode,
+  ) => {
+    if (!selectedId || !selectedNode) return;
+    const previousMode = selectedNode.data.controlPorts[fieldName];
+    if (previousMode === mode) return;
     markDirty();
-    setNodes((current) => current.filter((node) => node.id !== selectedId));
+    const handle = controlPortName(fieldName);
+    const hadInput =
+      previousMode === "input" || previousMode === "passthrough";
+    const hadOutput =
+      previousMode === "output" || previousMode === "passthrough";
+    const keepsInput = mode === "input" || mode === "passthrough";
+    const keepsOutput = mode === "output" || mode === "passthrough";
     setEdges((current) =>
       current.filter(
-        (edge) => edge.source !== selectedId && edge.target !== selectedId,
+        (edge) =>
+          !(
+            (hadOutput &&
+              !keepsOutput &&
+              edge.source === selectedId &&
+              edge.sourceHandle === handle) ||
+            (hadInput &&
+              !keepsInput &&
+              edge.target === selectedId &&
+              edge.targetHandle === handle)
+          ),
+      ),
+    );
+    setNodes((current) =>
+      current.map((node) => {
+        if (node.id !== selectedId) return node;
+        const controlPorts = { ...node.data.controlPorts };
+        if (mode) controlPorts[fieldName] = mode;
+        else delete controlPorts[fieldName];
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            definition: withControlPorts(
+              node.data.definition,
+              controlPorts,
+            ),
+            controlPorts,
+            runStatus: "idle",
+          },
+        };
+      }),
+    );
+  };
+  const deleteSelected = () => {
+    const ids = new Set(
+      selectedNodes.length > 0
+        ? selectedNodes.map((node) => node.id)
+        : selectedId
+          ? [selectedId]
+          : [],
+    );
+    if (ids.size === 0) return;
+    markDirty();
+    setNodes((current) => current.filter((node) => !ids.has(node.id)));
+    setEdges((current) =>
+      current.filter(
+        (edge) => !ids.has(edge.source) && !ids.has(edge.target),
       ),
     );
     setSelectedId(undefined);
     setInspectorOpen(false);
+  };
+  const duplicateSelected = () => {
+    const sourceNodes =
+      selectedNodes.length > 0
+        ? selectedNodes
+        : selectedNode
+          ? [selectedNode]
+          : [];
+    if (sourceNodes.length === 0) return;
+    const sourceIds = new Set(sourceNodes.map((node) => node.id));
+    const replacements = new Map(
+      sourceNodes.map((node) => [
+        node.id,
+        `${node.data.kind}-${crypto.randomUUID().slice(0, 6)}`,
+      ]),
+    );
+    const copies = sourceNodes.map((node) => ({
+      ...node,
+      id: replacements.get(node.id)!,
+      position: { x: node.position.x + 36, y: node.position.y + 36 },
+      selected: true,
+      data: { ...node.data, runStatus: "idle" as const },
+    }));
+    const copiedEdges = edges
+      .filter(
+        (edge) => sourceIds.has(edge.source) && sourceIds.has(edge.target),
+      )
+      .map((edge) => ({
+        ...edge,
+        id: crypto.randomUUID(),
+        source: replacements.get(edge.source)!,
+        target: replacements.get(edge.target)!,
+        selected: false,
+      }));
+    markDirty();
+    setNodes((current) => [
+      ...current.map((node) => ({ ...node, selected: false })),
+      ...copies,
+    ]);
+    setEdges((current) => [...current, ...copiedEdges]);
+    setSelectedId(copies[0].id);
+    setInspectorOpen(true);
+    setContextMenu(undefined);
+  };
+
+  const openWorkflowEditor = async (definition: NodeDefinition) => {
+    const latestDefinition =
+      catalog?.nodes.find(
+        (item) =>
+          item.workflow?.id === definition.workflow?.id &&
+          (item.workflow?.version ?? 0) >=
+            (definition.workflow?.version ?? 0),
+      ) ?? definition;
+    const metadata = latestDefinition.workflow;
+    if (!metadata) return;
+    const tabId = `workflow:${metadata.id}`;
+    const existing = tabs.find((tab) => tab.id === tabId);
+    setWorkflowMenu(undefined);
+    setContextMenu(undefined);
+    if (existing) {
+      switchGraphTab(tabId);
+      return;
+    }
+
+    setLoadingWorkflowId(metadata.id);
+    try {
+      const response = await fetchWorkflow(metadata.id, metadata.version);
+      const definitions = new Map(
+        response.definitions.map((item) => [item.kind, item]),
+      );
+      for (const item of catalog?.nodes ?? []) {
+        definitions.set(item.kind, item);
+      }
+      const workflowNodes: LoomNode[] = response.workflow.graph.nodes.map(
+        (node) => {
+          const nodeDefinition = definitions.get(node.kind);
+          if (!nodeDefinition) {
+            throw new Error(`No definition is available for ${node.kind}.`);
+          }
+          const boundaryLabel = [
+            ...response.workflow.inputs,
+            ...response.workflow.outputs,
+          ].find((binding) => binding.node_id === node.id)?.label;
+          const controlPorts = node.control_ports ?? {};
+          return {
+            id: node.id,
+            type: "loomNode",
+            position: node.position,
+            data: {
+              kind: node.kind,
+              title:
+                node.title ||
+                boundaryLabel?.split(" · ")[0] ||
+                nodeDefinition.label,
+              definition: withControlPorts(nodeDefinition, controlPorts),
+              config: node.config,
+              controlPorts,
+              runStatus: "idle",
+            },
+          };
+        },
+      );
+      const workflowEdges: LoomEdge[] = response.workflow.graph.edges.map(
+        (edge) => ({
+          id: edge.id,
+          source: edge.source,
+          sourceHandle: edge.source_port,
+          target: edge.target,
+          targetHandle: edge.target_port,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 18,
+            height: 18,
+          },
+        }),
+      );
+      const snapshot: GraphSnapshot = {
+        nodes: workflowNodes,
+        edges: workflowEdges,
+        loomName: response.workflow.name,
+        isDirty: false,
+      };
+      const currentSnapshot = captureSnapshot();
+      setTabs((current) => [
+        ...current.map((tab) =>
+          tab.id === activeTabId
+            ? { ...tab, snapshot: currentSnapshot }
+            : tab,
+        ),
+        {
+          id: tabId,
+          type: "workflow",
+          workflow: response.workflow,
+          snapshot,
+        },
+      ]);
+      setActiveTabId(tabId);
+      applySnapshot(snapshot);
+    } catch (error) {
+      setWorkflowNotice(
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setLoadingWorkflowId(undefined);
+    }
+  };
+
+  const performCloseTab = (tabId: string) => {
+    const closingIndex = tabs.findIndex((tab) => tab.id === tabId);
+    if (closingIndex < 0 || tabId === MAIN_TAB_ID) return;
+    const remaining = tabs.filter((tab) => tab.id !== tabId);
+    if (activeTabId === tabId) {
+      const target =
+        remaining[Math.max(0, closingIndex - 1)] ??
+        remaining.find((tab) => tab.id === MAIN_TAB_ID);
+      if (target) {
+        setActiveTabId(target.id);
+        applySnapshot(target.snapshot);
+      }
+    }
+    setTabs(remaining);
+    setCloseTabId(undefined);
+  };
+
+  const requestCloseTab = (tab: GraphTab) => {
+    const dirty = tab.id === activeTabId ? isDirty : tab.snapshot.isDirty;
+    if (dirty) {
+      setCloseTabId(tab.id);
+      return;
+    }
+    performCloseTab(tab.id);
+  };
+
+  const requestDeleteWorkflow = (definition: NodeDefinition) => {
+    if (!definition.workflow) return;
+    const latestDefinition =
+      catalog?.nodes.find(
+        (item) =>
+          item.workflow?.id === definition.workflow?.id &&
+          (item.workflow?.version ?? 0) >= definition.workflow!.version,
+      ) ?? definition;
+    setDeleteDefinition(latestDefinition);
+    setDeleteWorkflowError(undefined);
+    setWorkflowMenu(undefined);
+    setContextMenu(undefined);
+  };
+
+  const confirmDeleteWorkflow = async () => {
+    const metadata = deleteDefinition?.workflow;
+    if (!metadata) return;
+    setDeletingWorkflow(true);
+    setDeleteWorkflowError(undefined);
+    try {
+      const response = await deleteWorkflow(metadata.id);
+      setCatalog((current) =>
+        current
+          ? {
+              ...current,
+              nodes: current.nodes.filter(
+                (definition) => definition.workflow?.id !== metadata.id,
+              ),
+            }
+          : current,
+      );
+      const deletedTab = tabs.find(
+        (tab) => tab.workflow?.id === metadata.id,
+      );
+      if (deletedTab) performCloseTab(deletedTab.id);
+      setTabs((current) =>
+        current.filter((tab) => tab.workflow?.id !== metadata.id),
+      );
+      setDeleteDefinition(undefined);
+      setWorkflowNotice(
+        `${response.deleted.name} moved to ${response.deleted.recoverable_path}.`,
+      );
+    } catch (error) {
+      setDeleteWorkflowError(
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setDeletingWorkflow(false);
+    }
+  };
+
+  const openSaveWorkflow = () => {
+    const count = selectedNodes.length;
+    if (count === 0) return;
+    setWorkflowName(
+      count === 1 ? `${selectedNodes[0].data.title} workflow` : "New workflow",
+    );
+    setWorkflowDescription("");
+    setWorkflowBoundaryLabels({});
+    setWorkflowError(undefined);
+    setSaveDialogPurpose("selection");
+    setSaveDialogOpen(true);
+    setContextMenu(undefined);
+  };
+
+  const openEditSaveDialog = () => {
+    if (!activeWorkflow) return;
+    setWorkflowName(loomName);
+    setWorkflowDescription(activeWorkflow.description);
+    setWorkflowBoundaryLabels({});
+    setWorkflowError(undefined);
+    setSaveDialogPurpose("edit");
+    setSaveDialogOpen(true);
+  };
+
+  const workflowDraft = useMemo<WorkflowDraft | undefined>(() => {
+    if (!saveDialogOpen) return undefined;
+    try {
+      let inferred: WorkflowDraft;
+      if (saveDialogPurpose === "edit" && activeWorkflow) {
+        inferred = reviseWorkflowDraft(
+          workflowName,
+          workflowDescription,
+          nodes,
+          edges,
+          activeWorkflow,
+        );
+      } else {
+        inferred = inferWorkflowDraft(
+          workflowName,
+          workflowDescription,
+          selectedNodes,
+          edges,
+        );
+      }
+      return applyWorkflowBoundaryLabels(
+        inferred,
+        workflowBoundaryLabels,
+      );
+    } catch {
+      return undefined;
+    }
+  }, [
+    edges,
+    activeWorkflow,
+    nodes,
+    saveDialogOpen,
+    saveDialogPurpose,
+    selectedNodes,
+    workflowBoundaryLabels,
+    workflowDescription,
+    workflowName,
+  ]);
+
+  const confirmSaveWorkflow = async () => {
+    if (!workflowName.trim()) {
+      setWorkflowError("Give this workflow a name.");
+      return;
+    }
+    if (!workflowDraft) {
+      setWorkflowError("The selected graph does not have a valid workflow boundary.");
+      return;
+    }
+    const unnamedBinding = [
+      ...workflowDraft.inputs,
+      ...workflowDraft.outputs,
+    ].find((binding) => !binding.label.trim());
+    if (unnamedBinding) {
+      setWorkflowError("Every public socket needs a name.");
+      return;
+    }
+    const draft: WorkflowDraft = {
+      ...workflowDraft,
+      inputs: workflowDraft.inputs.map((binding) => ({
+        ...binding,
+        label: binding.label.trim(),
+      })),
+      outputs: workflowDraft.outputs.map((binding) => ({
+        ...binding,
+        label: binding.label.trim(),
+      })),
+    };
+    setSavingWorkflow(true);
+    setWorkflowError(undefined);
+    try {
+      const response =
+        saveDialogPurpose === "edit" && activeWorkflow
+          ? await updateWorkflow(activeWorkflow.id, draft)
+          : await saveWorkflow(draft);
+      setCatalog((current) =>
+        current
+          ? {
+              ...current,
+              nodes: [
+                ...current.nodes.filter(
+                  (definition) =>
+                    definition.workflow?.id !== response.workflow.id,
+                ),
+                response.definition,
+              ],
+            }
+          : current,
+      );
+      if (saveDialogPurpose === "edit") {
+        const nextSnapshot: GraphSnapshot = {
+          ...captureSnapshot(),
+          loomName: response.workflow.name,
+          isDirty: false,
+        };
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.id === activeTabId
+              ? {
+                  ...tab,
+                  workflow: response.workflow,
+                  snapshot: nextSnapshot,
+                }
+              : tab,
+          ),
+        );
+        setLoomName(response.workflow.name);
+        setIsDirty(false);
+      }
+      setSaveDialogOpen(false);
+      setWorkflowNotice(
+        `${response.workflow.name} v${response.workflow.version} saved to the node library.`,
+      );
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingWorkflow(false);
+    }
+  };
+
+  const selectAllNodes = () => {
+    setNodes((current) => current.map((node) => ({ ...node, selected: true })));
+    setSelectedId(nodes.at(-1)?.id);
+    setInspectorOpen(nodes.length > 0);
+    setContextMenu(undefined);
   };
   const applyStarter = () => {
     if (!catalog) return;
@@ -459,6 +1127,7 @@ function GlitchloomApp() {
       runError,
       selectedId,
       loomName,
+      isDirty,
     });
     setResetDialogOpen(false);
     applyStarter();
@@ -655,13 +1324,32 @@ function GlitchloomApp() {
       const editable = isEditableTarget(event.target);
 
       if (event.key === "Escape") {
-        if (resetDialogOpen) {
+        if (contextMenu || workflowMenu) {
+          event.preventDefault();
+          setContextMenu(undefined);
+          setWorkflowMenu(undefined);
+        } else if (deleteDefinition && !deletingWorkflow) {
+          event.preventDefault();
+          setDeleteDefinition(undefined);
+          setDeleteWorkflowError(undefined);
+        } else if (closeTabId) {
+          event.preventDefault();
+          setCloseTabId(undefined);
+        } else if (saveDialogOpen) {
+          event.preventDefault();
+          setSaveDialogOpen(false);
+        } else if (resetDialogOpen) {
           event.preventDefault();
           setResetDialogOpen(false);
         } else if (editable) {
           event.target.blur();
         } else if (selectedId) {
           event.preventDefault();
+          setNodes((current) =>
+            current.map((node) =>
+              node.selected ? { ...node, selected: false } : node,
+            ),
+          );
           setSelectedId(undefined);
           setInspectorOpen(false);
         }
@@ -669,6 +1357,29 @@ function GlitchloomApp() {
       }
 
       const commandKey = event.ctrlKey || event.metaKey;
+      if (
+        commandKey &&
+        event.key.toLowerCase() === "a" &&
+        !editable &&
+        !resetDialogOpen &&
+        !saveDialogOpen
+      ) {
+        event.preventDefault();
+        selectAllNodes();
+        return;
+      }
+      if (
+        commandKey &&
+        event.key.toLowerCase() === "d" &&
+        !editable &&
+        !resetDialogOpen &&
+        !saveDialogOpen &&
+        selectedNodes.length > 0
+      ) {
+        event.preventDefault();
+        duplicateSelected();
+        return;
+      }
       if (commandKey && event.key === "Enter" && !running && nodes.length > 0) {
         event.preventDefault();
         void execute();
@@ -704,20 +1415,32 @@ function GlitchloomApp() {
   } as CSSProperties;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${afterHours ? "is-after-hours" : ""}`}>
       <header className="topbar">
-        <div className="brand">
+        <button
+          type="button"
+          className="brand"
+          aria-label="Toggle after-hours weave"
+          aria-pressed={afterHours}
+          title="Wake the loom"
+          onClick={() => setAfterHours((current) => !current)}
+        >
           <div className="brand-mark" aria-hidden="true">
             <span />
             <span />
             <span />
           </div>
-          <strong>Glitchloom</strong>
-        </div>
+          <span className="brand-copy">
+            <strong>Glitchloom</strong>
+            <small>{afterHours ? "the loom hums back" : "after hours"}</small>
+          </span>
+        </button>
         <div className="loom-title">
-          <span className="loom-title-label">loom</span>
+          <span className="loom-title-label">
+            {activeWorkflow ? "workflow" : "loom"}
+          </span>
           <input
-            aria-label="Loom name"
+            aria-label={activeWorkflow ? "Workflow name" : "Loom name"}
             value={loomName}
             onChange={(event) => {
               setLoomName(event.target.value);
@@ -746,15 +1469,28 @@ function GlitchloomApp() {
           >
             <Bug size={13} />
           </span>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={requestStarterReset}
-            title="Reset to the starter graph"
-          >
-            <RotateCcw size={15} />
-            Reset starter
-          </button>
+          {activeWorkflow ? (
+            <button
+              type="button"
+              className="secondary-button workflow-save-button"
+              onClick={openEditSaveDialog}
+              disabled={savingWorkflow}
+              title="Save edits as a new immutable workflow version"
+            >
+              <Save size={15} />
+              Save version
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={requestStarterReset}
+              title="Reset to the starter graph"
+            >
+              <RotateCcw size={15} />
+              Reset starter
+            </button>
+          )}
           <button
             type="button"
             className="run-button"
@@ -771,6 +1507,55 @@ function GlitchloomApp() {
           </button>
         </div>
       </header>
+
+      <nav className="graph-tabs" role="tablist" aria-label="Open graphs">
+        {tabs.map((tab) => {
+          const active = tab.id === activeTabId;
+          const dirty = active ? isDirty : tab.snapshot.isDirty;
+          const title = active ? loomName : tab.snapshot.loomName;
+          const version = active
+            ? activeWorkflow?.version
+            : tab.workflow?.version;
+          return (
+            <div
+              className={`graph-tab ${active ? "is-active" : ""}`}
+              key={tab.id}
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => switchGraphTab(tab.id)}
+                disabled={running}
+                title={title}
+              >
+                {tab.type === "workflow" ? (
+                  <Workflow size={13} />
+                ) : (
+                  <LayoutDashboard size={13} />
+                )}
+                <span>{title}</span>
+                {version && <em>v{version}</em>}
+                {dirty && (
+                  <i aria-label="Unsaved changes" title="Unsaved changes" />
+                )}
+              </button>
+              {tab.type === "workflow" && (
+                <button
+                  type="button"
+                  className="graph-tab-close"
+                  onClick={() => requestCloseTab(tab)}
+                  disabled={running}
+                  aria-label={`Close ${title}`}
+                  title="Close tab"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </nav>
 
       <main
         className={`workspace ${paletteOpen ? "" : "palette-closed"} ${
@@ -816,22 +1601,51 @@ function GlitchloomApp() {
               <summary>{category}</summary>
               <div>
                 {definitions.map((definition) => (
-                  <button
-                    type="button"
-                    draggable
-                    className={`palette-node category-${categorySlug(category)}`}
-                    key={definition.kind}
-                    onDragStart={(event) => onPaletteDrag(event, definition)}
-                    onClick={() => addNode(definition)}
-                    title={definition.description}
-                  >
-                    <span className="palette-thread" />
-                    <span>
-                      <strong>{definition.label}</strong>
-                      <small>{definition.description}</small>
-                    </span>
-                    <Plus size={14} />
-                  </button>
+                  <div className="palette-node-shell" key={definition.kind}>
+                    <button
+                      type="button"
+                      draggable
+                      className={`palette-node category-${categorySlug(category)}`}
+                      onDragStart={(event) => onPaletteDrag(event, definition)}
+                      onClick={() => addNode(definition)}
+                      onContextMenu={(event) => {
+                        if (!definition.workflow) return;
+                        event.preventDefault();
+                        setWorkflowMenu({
+                          x: event.clientX,
+                          y: event.clientY,
+                          definition,
+                        });
+                      }}
+                      title={definition.description}
+                    >
+                      <span className="palette-thread" />
+                      <span>
+                        <strong>{definition.label}</strong>
+                        <small>{definition.description}</small>
+                      </span>
+                      {!definition.workflow && <Plus size={14} />}
+                    </button>
+                    {definition.workflow && (
+                      <button
+                        type="button"
+                        className="palette-node-manage"
+                        onClick={(event) => {
+                          const bounds =
+                            event.currentTarget.getBoundingClientRect();
+                          setWorkflowMenu({
+                            x: bounds.right,
+                            y: bounds.bottom,
+                            definition,
+                          });
+                        }}
+                        aria-label={`Manage ${definition.label}`}
+                        title="Edit or delete workflow"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </details>
@@ -870,6 +1684,17 @@ function GlitchloomApp() {
             event.dataTransfer.dropEffect = "move";
           }}
         >
+          <div className="after-hours-weave" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="after-hours-note" role="status">
+            after hours · weave alive
+          </div>
           {(!paletteOpen || !inspectorOpen) && (
             <div className="canvas-panel-controls">
               {!paletteOpen && (
@@ -905,13 +1730,100 @@ function GlitchloomApp() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            onNodeClick={(_, node) => {
-              setSelectedId(node.id);
-              setInspectorOpen(true);
+            onReconnect={onReconnect}
+            onReconnectStart={() => {
+              reconnectSuccessful.current = false;
+            }}
+            onReconnectEnd={onReconnectEnd}
+            edgesReconnectable
+            reconnectRadius={18}
+            multiSelectionKeyCode={["Control", "Meta"]}
+            onNodeClick={(event, node) => {
+              const additive = event.ctrlKey || event.metaKey;
+              if (additive) {
+                const previouslySelected = new Set(
+                  selectedNodes.map((item) => item.id),
+                );
+                const willSelect = !previouslySelected.has(node.id);
+                setNodes((current) =>
+                  current.map((item) => ({
+                    ...item,
+                    selected:
+                      item.id === node.id
+                        ? willSelect
+                        : previouslySelected.has(item.id),
+                  })),
+                );
+                if (willSelect) {
+                  setSelectedId(node.id);
+                  setInspectorOpen(true);
+                } else if (selectedId === node.id) {
+                  const fallback = selectedNodes
+                    .filter((item) => item.id !== node.id)
+                    .at(-1);
+                  setSelectedId(fallback?.id);
+                  setInspectorOpen(Boolean(fallback));
+                }
+              } else {
+                setSelectedId(node.id);
+                setInspectorOpen(true);
+                setNodes((current) =>
+                  current.map((item) => ({
+                    ...item,
+                    selected: item.id === node.id,
+                  })),
+                );
+              }
+              setContextMenu(undefined);
             }}
             onPaneClick={() => {
               setSelectedId(undefined);
               setInspectorOpen(false);
+              setContextMenu(undefined);
+            }}
+            onNodeContextMenu={(event, node) => {
+              event.preventDefault();
+              if (!node.selected) {
+                setNodes((current) =>
+                  current.map((item) => ({
+                    ...item,
+                    selected: item.id === node.id,
+                  })),
+                );
+              }
+              setSelectedId(node.id);
+              setInspectorOpen(true);
+              setContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                scope: "node",
+                nodeId: node.id,
+              });
+            }}
+            onSelectionContextMenu={(event) => {
+              event.preventDefault();
+              setContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                scope: "selection",
+              });
+            }}
+            onEdgeContextMenu={(event, edge) => {
+              event.preventDefault();
+              setContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                scope: "edge",
+                edgeId: edge.id,
+              });
+            }}
+            onPaneContextMenu={(event) => {
+              event.preventDefault();
+              setContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                scope: "pane",
+              });
             }}
             fitView
             fitViewOptions={{ padding: 0.03, minZoom: 0.52, maxZoom: 0.95 }}
@@ -961,6 +1873,118 @@ function GlitchloomApp() {
               </button>
             </div>
           )}
+          {contextMenu && (
+            <div
+              className="context-menu"
+              role="menu"
+              style={{
+                left: Math.min(contextMenu.x, window.innerWidth - 226),
+                top: Math.min(contextMenu.y, window.innerHeight - 220),
+              }}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              {(contextMenu.scope === "node" ||
+                contextMenu.scope === "selection") && (
+                <>
+                  {contextualWorkflowDefinition && (
+                    <>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() =>
+                          void openWorkflowEditor(
+                            contextualWorkflowDefinition,
+                          )
+                        }
+                      >
+                        <Pencil size={14} />
+                        Edit saved workflow
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="is-danger"
+                        onClick={() =>
+                          requestDeleteWorkflow(
+                            contextualWorkflowDefinition,
+                          )
+                        }
+                      >
+                        <Trash2 size={14} />
+                        Delete saved workflow
+                      </button>
+                      <span className="context-menu-separator" />
+                    </>
+                  )}
+                  <button type="button" role="menuitem" onClick={duplicateSelected}>
+                    <Copy size={14} />
+                    Duplicate
+                    <kbd>Ctrl+D</kbd>
+                  </button>
+                  <button type="button" role="menuitem" onClick={openSaveWorkflow}>
+                    <Save size={14} />
+                    Save as workflow
+                  </button>
+                  <span className="context-menu-separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    onClick={() => {
+                      deleteSelected();
+                      setContextMenu(undefined);
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    Delete {selectedNodes.length > 1 ? "selection" : "node"}
+                    <kbd>Del</kbd>
+                  </button>
+                </>
+              )}
+              {contextMenu.scope === "edge" && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="is-danger"
+                  onClick={() => {
+                    markDirty();
+                    setEdges((current) =>
+                      current.filter((edge) => edge.id !== contextMenu.edgeId),
+                    );
+                    setContextMenu(undefined);
+                  }}
+                >
+                  <Unplug size={14} />
+                  Disconnect wire
+                </button>
+              )}
+              {contextMenu.scope === "pane" && (
+                <>
+                  <button type="button" role="menuitem" onClick={selectAllNodes}>
+                    <Focus size={14} />
+                    Select all nodes
+                    <kbd>Ctrl+A</kbd>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      void fitView({
+                        padding: 0.08,
+                        minZoom: 0.4,
+                        maxZoom: 1,
+                        duration: 300,
+                      });
+                      setContextMenu(undefined);
+                    }}
+                  >
+                    <Focus size={14} />
+                    Fit graph in view
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </section>
 
         <div ref={inspectorRef} className="inspector-shell">
@@ -987,6 +2011,7 @@ function GlitchloomApp() {
                 },
               }))
             }
+            onUpdateControlPort={updateControlPort}
             onDelete={deleteSelected}
             onClose={() => setInspectorOpen(false)}
           />
@@ -1010,6 +2035,42 @@ function GlitchloomApp() {
           />
         )}
       </main>
+      {workflowMenu && (
+        <div
+          className="context-menu workflow-library-menu"
+          role="menu"
+          style={{
+            left: Math.min(workflowMenu.x, window.innerWidth - 226),
+            top: Math.min(workflowMenu.y, window.innerHeight - 150),
+          }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => void openWorkflowEditor(workflowMenu.definition)}
+            disabled={
+              loadingWorkflowId === workflowMenu.definition.workflow?.id
+            }
+          >
+            {loadingWorkflowId === workflowMenu.definition.workflow?.id ? (
+              <LoaderCircle className="spin-icon" size={14} />
+            ) : (
+              <Pencil size={14} />
+            )}
+            Edit in new tab
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="is-danger"
+            onClick={() => requestDeleteWorkflow(workflowMenu.definition)}
+          >
+            <Trash2 size={14} />
+            Delete saved workflow
+          </button>
+        </div>
+      )}
       {resetDialogOpen && (
         <div
           className="dialog-backdrop"
@@ -1052,6 +2113,262 @@ function GlitchloomApp() {
           </section>
         </div>
       )}
+      {saveDialogOpen && (
+        <div
+          className="dialog-backdrop"
+          onClick={() => !savingWorkflow && setSaveDialogOpen(false)}
+        >
+          <section
+            className="workflow-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workflow-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="workflow-dialog-heading">
+              <span aria-hidden="true">
+                <Save size={18} />
+              </span>
+              <div>
+                <h2 id="workflow-dialog-title">
+                  {saveDialogPurpose === "edit"
+                    ? "Save workflow version"
+                    : "Save reusable workflow"}
+                </h2>
+                <p>
+                  {saveDialogPurpose === "edit"
+                    ? `Your edits will become v${
+                        (activeWorkflow?.version ?? 0) + 1
+                      }; existing nodes keep their exact older version.`
+                    : "The selected nodes become one versioned node with an inferred typed boundary."}
+                </p>
+              </div>
+            </div>
+            <label>
+              <span>Name</span>
+              <input
+                value={workflowName}
+                onChange={(event) => setWorkflowName(event.target.value)}
+                autoFocus
+                disabled={savingWorkflow}
+              />
+            </label>
+            <label>
+              <span>Description</span>
+              <textarea
+                value={workflowDescription}
+                onChange={(event) => setWorkflowDescription(event.target.value)}
+                placeholder="What this workflow does"
+                rows={2}
+                disabled={savingWorkflow}
+              />
+            </label>
+            <div className="workflow-boundary">
+              <div>
+                <strong>Inputs</strong>
+                {workflowDraft?.inputs.length ? (
+                  workflowDraft.inputs.map((input) => (
+                    <label
+                      className="workflow-boundary-port"
+                      key={input.name}
+                    >
+                      <input
+                        aria-label={`Public input name for ${input.name}`}
+                        value={input.label}
+                        onChange={(event) =>
+                          setWorkflowBoundaryLabels((current) => ({
+                            ...current,
+                            [workflowBindingKey(
+                              "input",
+                              input.node_id,
+                              input.node_port,
+                            )]: event.target.value,
+                          }))
+                        }
+                        disabled={savingWorkflow}
+                      />
+                      <em>
+                        {input.type}
+                        {!input.required && " · default"}
+                      </em>
+                    </label>
+                  ))
+                ) : (
+                  <small>No external inputs</small>
+                )}
+              </div>
+              <div>
+                <strong>Outputs</strong>
+                {workflowDraft?.outputs.length ? (
+                  workflowDraft.outputs.map((output) => (
+                    <label
+                      className="workflow-boundary-port"
+                      key={output.name}
+                    >
+                      <input
+                        aria-label={`Public output name for ${output.name}`}
+                        value={output.label}
+                        onChange={(event) =>
+                          setWorkflowBoundaryLabels((current) => ({
+                            ...current,
+                            [workflowBindingKey(
+                              "output",
+                              output.node_id,
+                              output.node_port,
+                            )]: event.target.value,
+                          }))
+                        }
+                        disabled={savingWorkflow}
+                      />
+                      <em>{output.type}</em>
+                    </label>
+                  ))
+                ) : (
+                  <small>No exposed outputs</small>
+                )}
+              </div>
+            </div>
+            {workflowError && <p className="workflow-error">{workflowError}</p>}
+            <div className="workflow-dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setSaveDialogOpen(false)}
+                disabled={savingWorkflow}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="run-button"
+                onClick={() => void confirmSaveWorkflow()}
+                disabled={savingWorkflow || !workflowName.trim()}
+              >
+                {savingWorkflow ? (
+                  <LoaderCircle className="spin-icon" size={15} />
+                ) : (
+                  <Save size={15} />
+                )}
+                {savingWorkflow
+                  ? "Saving…"
+                  : saveDialogPurpose === "edit"
+                    ? "Save new version"
+                    : "Save workflow"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {deleteDefinition?.workflow && (
+        <div
+          className="dialog-backdrop"
+          onClick={() => {
+            if (!deletingWorkflow) {
+              setDeleteDefinition(undefined);
+              setDeleteWorkflowError(undefined);
+            }
+          }}
+        >
+          <section
+            className="reset-dialog workflow-delete-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workflow-delete-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="reset-dialog-icon" aria-hidden="true">
+              <Trash2 size={18} />
+            </span>
+            <div>
+              <h2 id="workflow-delete-title">
+                Delete “{deleteDefinition.label}”?
+              </h2>
+              <p>
+                All {deleteDefinition.workflow.version} saved version
+                {deleteDefinition.workflow.version === 1 ? "" : "s"} will move
+                to local workflow trash.
+                {workflowReferenceCount > 0 &&
+                  ` ${workflowReferenceCount} node${
+                    workflowReferenceCount === 1 ? "" : "s"
+                  } in open tabs will retain an unavailable reference.`}
+              </p>
+              {deleteWorkflowError && (
+                <p className="workflow-delete-error">{deleteWorkflowError}</p>
+              )}
+            </div>
+            <div className="reset-dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setDeleteDefinition(undefined);
+                  setDeleteWorkflowError(undefined);
+                }}
+                disabled={deletingWorkflow}
+                autoFocus
+              >
+                Keep workflow
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => void confirmDeleteWorkflow()}
+                disabled={deletingWorkflow}
+              >
+                {deletingWorkflow ? (
+                  <LoaderCircle className="spin-icon" size={14} />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                {deletingWorkflow ? "Moving…" : "Move to trash"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {closeTabId && (
+        <div
+          className="dialog-backdrop"
+          onClick={() => setCloseTabId(undefined)}
+        >
+          <section
+            className="reset-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="close-tab-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="reset-dialog-icon" aria-hidden="true">
+              <AlertTriangle size={18} />
+            </span>
+            <div>
+              <h2 id="close-tab-title">Discard unsaved workflow edits?</h2>
+              <p>
+                Closing “
+                {tabs.find((tab) => tab.id === closeTabId)?.snapshot.loomName}
+                ” will discard changes made since its last saved version.
+              </p>
+            </div>
+            <div className="reset-dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setCloseTabId(undefined)}
+                autoFocus
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => performCloseTab(closeTabId)}
+              >
+                Discard and close
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {undoSnapshot && !resetDialogOpen && (
         <div className="undo-toast" role="status">
           <div>
@@ -1067,6 +2384,22 @@ function GlitchloomApp() {
             className="undo-dismiss"
             onClick={() => setUndoSnapshot(undefined)}
             aria-label="Dismiss undo"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+      {workflowNotice && !saveDialogOpen && (
+        <div className="workflow-toast" role="status">
+          <div>
+            <strong>Workflow ready</strong>
+            <span>{workflowNotice}</span>
+          </div>
+          <button
+            type="button"
+            className="undo-dismiss"
+            onClick={() => setWorkflowNotice(undefined)}
+            aria-label="Dismiss workflow notice"
           >
             <X size={13} />
           </button>

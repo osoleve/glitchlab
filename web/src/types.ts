@@ -2,6 +2,8 @@ import type { Edge, Node } from "@xyflow/react";
 
 export type ValueType =
   | "any"
+  | "boolean"
+  | "number"
   | "text"
   | "template"
   | "collection"
@@ -19,6 +21,7 @@ export interface PortDefinition {
   type: ValueType;
   required: boolean;
   multiple: boolean;
+  control?: string;
 }
 
 export interface FieldOption {
@@ -29,6 +32,7 @@ export interface FieldOption {
 export interface FieldDefinition {
   name: string;
   label: string;
+  type: ValueType;
   control:
     | "text"
     | "textarea"
@@ -43,6 +47,8 @@ export interface FieldDefinition {
   placeholder: string;
 }
 
+export type ControlPortMode = "input" | "output" | "passthrough";
+
 export interface NodeDefinition {
   kind: string;
   label: string;
@@ -51,6 +57,11 @@ export interface NodeDefinition {
   inputs: PortDefinition[];
   outputs: PortDefinition[];
   fields: FieldDefinition[];
+  workflow?: {
+    id: string;
+    version: number;
+    digest: string;
+  };
 }
 
 export interface GlitchlingParameter {
@@ -88,6 +99,7 @@ export interface LoomNodeData extends Record<string, unknown> {
   title: string;
   definition: NodeDefinition;
   config: Record<string, unknown>;
+  controlPorts: Record<string, ControlPortMode>;
   runStatus: NodeRunStatus;
 }
 
@@ -122,4 +134,69 @@ export interface RunErrorDetail {
   message: string;
   node_id?: string;
   nodes?: NodeRunResult[];
+}
+
+export interface WorkflowInput extends PortDefinition {
+  node_id: string;
+  node_port: string;
+}
+
+export interface WorkflowOutput {
+  name: string;
+  label: string;
+  type: ValueType;
+  node_id: string;
+  node_port: string;
+}
+
+export interface WorkflowDraft {
+  name: string;
+  description: string;
+  graph: {
+    name: string;
+    nodes: Array<{
+      id: string;
+      kind: string;
+      title?: string | null;
+      config: Record<string, unknown>;
+      control_ports: Record<string, ControlPortMode>;
+      position: { x: number; y: number };
+    }>;
+    edges: Array<{
+      id: string;
+      source: string;
+      source_port: string;
+      target: string;
+      target_port: string;
+    }>;
+  };
+  inputs: WorkflowInput[];
+  outputs: WorkflowOutput[];
+}
+
+export interface WorkflowSpec extends WorkflowDraft {
+  id: string;
+  version: number;
+  digest: string;
+  created_at: string;
+}
+
+export interface SaveWorkflowResponse {
+  workflow: WorkflowSpec;
+  definition: NodeDefinition;
+}
+
+export interface LoadWorkflowResponse {
+  workflow: WorkflowSpec;
+  definitions: NodeDefinition[];
+}
+
+export interface DeleteWorkflowResponse {
+  deleted: {
+    id: string;
+    name: string;
+    versions: number;
+    dependents: string[];
+    recoverable_path: string;
+  };
 }

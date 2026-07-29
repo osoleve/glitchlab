@@ -23,10 +23,61 @@ and leaves request details plus the complete JSON available on demand.
 The workbench also tracks unsaved graph changes, confirms and can undo a starter
 reset, preserves the current selection while a run completes, and labels
 collected completion cards with their source node titles. Selected canvas nodes
-have working resize handles, `Delete` / `Backspace` removes the current canvas
-selection, and `Ctrl+Enter` runs the loom. The node library and inspector use
+have working resize handles, `Ctrl`/`Cmd`+click builds a multi-node selection,
+and `Delete` / `Backspace` removes the current canvas selection. Right-clicking
+nodes, selections, wires, or the canvas opens Glitchloom's context menu. Selected
+wires expose draggable endpoints; dropping one away from a compatible port
+disconnects it. `Ctrl+Enter` runs the loom. The node library and inspector use
 standard draggable dividers, support arrow-key resizing when focused, and reset
 to their responsive defaults on double-click.
+
+## Promoted control ports
+
+Every catalog-driven node control can stay **Local**, become a typed **In** port,
+become a typed **Out** port, or use **I/O** pass-through from the inspector:
+
+- an input promotion keeps the local value as its unconnected default;
+- an output promotion keeps the local editor active and emits its current value;
+- I/O emits the connected input when present and the local default otherwise;
+- compatible wires survive mode changes when their side remains available; and
+- the graph manifest records every promotion alongside the node configuration.
+
+Promoted inputs and outputs use the same type checking and execution path as
+native ports. This makes request parameters such as temperature, seed, file
+format, or a transformation pattern wireable without adding operation-specific
+node kinds. The dedicated **Number** node supplies numeric sockets directly.
+
+## Reusable workflows
+
+Select one or more nodes, right-click, and choose **Save as workflow**. Glitchloom
+infers a typed public boundary from:
+
+- required inputs not supplied inside the selection;
+- wires entering or leaving the selection; and
+- terminal outputs when no wire leaves the selection, including controls
+  intentionally promoted to ports.
+
+The save dialog previews that boundary before writing. Saved workflows appear in
+the **Workflows** section of the node library and behave like ordinary typed
+nodes in a larger graph. Saving the same case-insensitive name appends a new
+immutable version; existing nodes continue to reference their exact older
+version. Public sockets default to concise parameter names rather than exposing
+their internal node targets. Their display names can be edited in the save
+dialog without changing the stable typed binding underneath.
+
+Use the pencil beside a workflow in the library, or its right-click menu, to
+open the latest version in a dedicated editor tab. Changes stay isolated from
+the main graph until they are saved as the next immutable version. Tabs retain
+their own canvas state, warn before discarding unsaved edits, and can be switched
+or closed independently.
+
+Delete is available from the same management menu. Glitchloom refuses to delete
+a workflow referenced by another saved workflow; otherwise it moves all of the
+workflow's versions to `.glitchloom/workflows/.trash` so the operation remains
+recoverable. Definitions are stored under
+`GLITCHLOOM_WORKSPACE/.glitchloom/workflows`, and their versioned kind plus digest
+keeps run manifests reproducible. Nested workflows execute through the same DAG
+validator and node engine, with recursive expansion rejected.
 
 ## Run on Windows
 
@@ -92,7 +143,10 @@ secret itself.
 - `CorruptionResult` retains input, output, complete corruptor spec, seed, and
   the resolved application order.
 - Templates remain structured until a `Render template` node verifies that all
-  `?name` holes are bound. `??` escapes a literal question mark.
+  `?name` holes are bound. Each `Fill hole` also emits **Bound text**, a partial
+  string preview that substitutes current bindings while leaving unbound holes
+  visible. It is an ordinary text port and can drive controls such as Model Id.
+  `??` escapes a literal question mark.
 - Gaggles use their real Glitchlings `AttackWave` / `AttackOrder` plan and
   deterministic derived seeds.
 - Read/write nodes reject paths outside the configured workspace unless
@@ -122,8 +176,8 @@ Vite proxies `/api` to the backend on port 8788.
 ## Spike boundaries
 
 This version intentionally does not yet implement arbitrary Python `Apply func`,
-model-server lifecycle management, persistent graph or reusable subgraph files,
-streaming tokens, or bounded iteration. Reusable subgraphs are the intended
-abstraction for named bundles such as “run both Talkies”; they should not become
-model-specific native nodes. The plugin boundary should become a versioned, typed
-operation manifest rather than executing arbitrary callables from saved graphs.
+model-server lifecycle management, persistent whole-loom files, streaming
+tokens, or bounded iteration. Reusable workflows are the abstraction for named
+bundles such as “run both Talkies”; they do not become model-specific native
+nodes. The plugin boundary should become a versioned, typed operation manifest
+rather than executing arbitrary callables from saved graphs.
