@@ -104,10 +104,7 @@ describe("normalizePreviewValue", () => {
     expect(model).toMatchObject({
       kind: "completion",
       readableText: "normalized\n\nraw",
-      entries: [
-        { text: "normalized" },
-        { text: "raw", choiceIndex: 3 },
-      ],
+      entries: [{ text: "normalized" }, { text: "raw", choiceIndex: 3 }],
     });
   });
 

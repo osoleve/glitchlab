@@ -7,9 +7,7 @@ export type ValueType = ApiSchemas["PortDefinition"]["type"];
 export type PortDefinition = ApiSchemas["PortDefinition"];
 export type FieldOption = ApiSchemas["FieldOption"];
 export type FieldDefinition = ApiSchemas["FieldDefinition"];
-export type ControlPortMode = NonNullable<
-  ApiSchemas["GraphNode"]["control_ports"]
->[string];
+export type ControlPortMode = NonNullable<ApiSchemas["GraphNode"]["control_ports"]>[string];
 export type NodeDefinition = ApiSchemas["NodeDefinition"];
 export type GlitchlingParameter = ApiSchemas["GlitchlingParameter"];
 export type GlitchlingDescriptor = ApiSchemas["GlitchlingDescriptor"];
@@ -42,23 +40,14 @@ export type NodeRunResult = Omit<ApiSchemas["NodeRunResult"], "outputs"> & {
 
 type BackendRunManifest = ApiSchemas["RunManifest"];
 type BackendRunScope = ApiSchemas["RunManifestScope"];
-type RunManifest = Omit<
-  BackendRunManifest,
-  "scope" | "graph" | "python_version" | "workspace"
-> & {
-  scope: Omit<
-    BackendRunScope,
-    "target_node_ids" | "executed_node_ids"
-  > & {
+type RunManifest = Omit<BackendRunManifest, "scope" | "graph" | "python_version" | "workspace"> & {
+  scope: Omit<BackendRunScope, "target_node_ids" | "executed_node_ids"> & {
     target_node_ids: string[];
     executed_node_ids: string[];
   };
 };
 
-export type RunResponse = Omit<
-  ApiSchemas["RunResponse"],
-  "manifest" | "nodes"
-> & {
+export type RunResponse = Omit<ApiSchemas["RunResponse"], "manifest" | "nodes"> & {
   manifest: RunManifest;
   nodes: NodeRunResult[];
   client?: {
@@ -67,26 +56,17 @@ export type RunResponse = Omit<
   };
 };
 
-export type RunScope = Omit<
-  ApiSchemas["RunScope"],
-  "target_node_ids"
-> & {
+export type RunScope = Omit<ApiSchemas["RunScope"], "target_node_ids"> & {
   target_node_ids: string[];
 };
 
-export type RunErrorDetail = Omit<
-  ApiSchemas["RunErrorDetail"],
-  "node_id" | "nodes"
-> & {
+export type RunErrorDetail = Omit<ApiSchemas["RunErrorDetail"], "node_id" | "nodes"> & {
   node_id?: string;
   nodes?: NodeRunResult[];
 };
 
 type GeneratedGraphNode = ApiSchemas["GraphNode"];
-export type GraphNodeSpec = Omit<
-  GeneratedGraphNode,
-  "config" | "control_ports" | "position"
-> & {
+export type GraphNodeSpec = Omit<GeneratedGraphNode, "config" | "control_ports" | "position"> & {
   config: NonNullable<GeneratedGraphNode["config"]>;
   control_ports: NonNullable<GeneratedGraphNode["control_ports"]>;
   position: NonNullable<GeneratedGraphNode["position"]>;
@@ -103,16 +83,10 @@ export type LoomSpec = Omit<ApiSchemas["LoomSpec"], "graph"> & {
 };
 export type LoomSummary = ApiSchemas["LoomSummary"];
 export type LoomTemplateSummary = ApiSchemas["LoomTemplateSummary"];
-export type LoadLoomResponse = Omit<
-  ApiSchemas["LoadLoomResponse"],
-  "loom"
-> & {
+export type LoadLoomResponse = Omit<ApiSchemas["LoadLoomResponse"], "loom"> & {
   loom: LoomSpec;
 };
-export type LoadLoomTemplateResponse = Omit<
-  ApiSchemas["LoadLoomTemplateResponse"],
-  "template"
-> & {
+export type LoadLoomTemplateResponse = Omit<ApiSchemas["LoadLoomTemplateResponse"], "template"> & {
   template: Omit<ApiSchemas["LoomTemplate"], "graph"> & {
     graph: GraphSpec;
   };
@@ -121,29 +95,17 @@ export type DeleteLoomResponse = ApiSchemas["DeleteLoomResponse"];
 export type WorkflowInput = ApiSchemas["WorkflowInput"];
 export type WorkflowOutput = ApiSchemas["WorkflowOutput"];
 type GeneratedWorkflowDraft = ApiSchemas["WorkflowDraft"];
-export type WorkflowDraft = Omit<
-  GeneratedWorkflowDraft,
-  "graph" | "inputs" | "outputs"
-> & {
+export type WorkflowDraft = Omit<GeneratedWorkflowDraft, "graph" | "inputs" | "outputs"> & {
   graph: GraphSpec;
   inputs: WorkflowInput[];
   outputs: WorkflowOutput[];
 };
-export type WorkflowSpec = Omit<
-  ApiSchemas["WorkflowSpec"],
-  "graph" | "inputs" | "outputs"
-> &
+export type WorkflowSpec = Omit<ApiSchemas["WorkflowSpec"], "graph" | "inputs" | "outputs"> &
   WorkflowDraft;
-export type SaveWorkflowResponse = Omit<
-  ApiSchemas["SaveWorkflowResponse"],
-  "workflow"
-> & {
+export type SaveWorkflowResponse = Omit<ApiSchemas["SaveWorkflowResponse"], "workflow"> & {
   workflow: WorkflowSpec;
 };
-export type LoadWorkflowResponse = Omit<
-  ApiSchemas["LoadWorkflowResponse"],
-  "workflow"
-> & {
+export type LoadWorkflowResponse = Omit<ApiSchemas["LoadWorkflowResponse"], "workflow"> & {
   workflow: WorkflowSpec;
 };
 export type DeleteWorkflowResponse = ApiSchemas["DeleteWorkflowResponse"];

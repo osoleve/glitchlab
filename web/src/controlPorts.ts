@@ -1,8 +1,4 @@
-import type {
-  ControlPortMode,
-  NodeDefinition,
-  PortDefinition,
-} from "./types";
+import type { ControlPortMode, NodeDefinition, PortDefinition } from "./types";
 
 export const CONTROL_PORT_PREFIX = "control:";
 
@@ -14,9 +10,7 @@ export function withControlPorts(
   definition: NodeDefinition,
   controlPorts: Record<string, ControlPortMode>,
 ): NodeDefinition {
-  const fields = new Map(
-    definition.fields.map((field) => [field.name, field]),
-  );
+  const fields = new Map(definition.fields.map((field) => [field.name, field]));
   const inputs = definition.inputs.filter((port) => !port.control);
   const outputs = definition.outputs.filter((port) => !port.control);
 

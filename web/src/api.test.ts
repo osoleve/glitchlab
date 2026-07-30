@@ -43,10 +43,7 @@ describe("API response boundaries", () => {
     );
 
     await expect(
-      runGraph(
-        { name: "Broken", nodes: [], edges: [] },
-        { mode: "full", target_node_ids: [] },
-      ),
+      runGraph({ name: "Broken", nodes: [], edges: [] }, { mode: "full", target_node_ids: [] }),
     ).rejects.toMatchObject({
       detail: {
         message: "Invalid graph contract",

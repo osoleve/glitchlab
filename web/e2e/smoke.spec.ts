@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, type Page, type Route, test } from "@playwright/test";
 
 const STARTER_NODE_IDS = [
   "prompt",
@@ -97,20 +97,12 @@ async function connect(
   const target = page.locator(
     `.react-flow__node[data-id="${targetNodeId}"] .react-flow__handle.target[data-handleid="${targetPort}"]`,
   );
-  await expect(
-    source,
-    `source handle ${sourceNodeId}.${sourcePort}`,
-  ).toBeVisible();
-  await expect(
-    target,
-    `target handle ${targetNodeId}.${targetPort}`,
-  ).toBeVisible();
+  await expect(source, `source handle ${sourceNodeId}.${sourcePort}`).toBeVisible();
+  await expect(target, `target handle ${targetNodeId}.${targetPort}`).toBeVisible();
   await source.dragTo(target, { force: true });
 }
 
-test("starter loads, fits, edits, connects, and preserves panel controls", async ({
-  page,
-}) => {
+test("starter loads, fits, edits, connects, and preserves panel controls", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.goto("/");
 
@@ -121,25 +113,16 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
 
   const canvasBox = await page.locator(".react-flow").boundingBox();
   expect(canvasBox).not.toBeNull();
-  const nodeBoxes = new Map<
-    string,
-    { x: number; y: number; width: number; height: number }
-  >();
+  const nodeBoxes = new Map<string, { x: number; y: number; width: number; height: number }>();
   for (const nodeId of STARTER_NODE_IDS) {
-    const nodeBox = await page
-      .locator(`.react-flow__node[data-id="${nodeId}"]`)
-      .boundingBox();
+    const nodeBox = await page.locator(`.react-flow__node[data-id="${nodeId}"]`).boundingBox();
     expect(nodeBox, `starter node ${nodeId}`).not.toBeNull();
     if (!canvasBox || !nodeBox) continue;
     nodeBoxes.set(nodeId, nodeBox);
     expect(nodeBox.x).toBeGreaterThanOrEqual(canvasBox.x - 2);
     expect(nodeBox.y).toBeGreaterThanOrEqual(canvasBox.y - 2);
-    expect(nodeBox.x + nodeBox.width).toBeLessThanOrEqual(
-      canvasBox.x + canvasBox.width + 2,
-    );
-    expect(nodeBox.y + nodeBox.height).toBeLessThanOrEqual(
-      canvasBox.y + canvasBox.height + 2,
-    );
+    expect(nodeBox.x + nodeBox.width).toBeLessThanOrEqual(canvasBox.x + canvasBox.width + 2);
+    expect(nodeBox.y + nodeBox.height).toBeLessThanOrEqual(canvasBox.y + canvasBox.height + 2);
   }
   for (let left = 0; left < STARTER_NODE_IDS.length; left += 1) {
     for (let right = left + 1; right < STARTER_NODE_IDS.length; right += 1) {
@@ -151,10 +134,7 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
         leftBox.x + leftBox.width > rightBox.x + 1 &&
         leftBox.y < rightBox.y + rightBox.height - 1 &&
         leftBox.y + leftBox.height > rightBox.y + 1;
-      expect(
-        overlap,
-        `${STARTER_NODE_IDS[left]} overlaps ${STARTER_NODE_IDS[right]}`,
-      ).toBe(false);
+      expect(overlap, `${STARTER_NODE_IDS[left]} overlaps ${STARTER_NODE_IDS[right]}`).toBe(false);
     }
   }
 
@@ -168,9 +148,7 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
   const promptNode = page.locator('.react-flow__node[data-id="prompt"]');
   await promptNode.locator(".node-header").click();
   await expect(page.getByText("Inspector", { exact: true })).toBeVisible();
-  await page
-    .getByLabel("Text for Seed prompt")
-    .fill("A browser-tested prompt");
+  await page.getByLabel("Text for Seed prompt").fill("A browser-tested prompt");
   await expect(page.getByLabel("Unsaved graph changes")).toBeVisible();
 
   await page.getByRole("button", { name: "Close inspector" }).click();
@@ -180,9 +158,7 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
   expect(errors).toEqual([]);
 });
 
-test("a successful run selects and renders deterministic output", async ({
-  page,
-}) => {
+test("a successful run selects and renders deterministic output", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.route("**/api/runs", (route) => successfulRunResponse(route));
   await page.goto("/");
@@ -193,40 +169,30 @@ test("a successful run selects and renders deterministic output", async ({
   await expect(page.getByText("1 completion", { exact: true })).toBeVisible();
   await expect(page.getByText("Full loom run")).toBeVisible();
   await expect(page.getByText(/12 nodes · completed/)).toBeVisible();
-  await expect(
-    page.locator('.react-flow__node[data-id="preview"] .loom-node'),
-  ).toHaveClass(/status-completed/);
+  await expect(page.locator('.react-flow__node[data-id="preview"] .loom-node')).toHaveClass(
+    /status-completed/,
+  );
   expect(errors).toEqual([]);
 });
 
-test("an edit during a delayed run marks the returned result stale", async ({
-  page,
-}) => {
+test("an edit during a delayed run marks the returned result stale", async ({ page }) => {
   const errors = watchPageErrors(page);
-  await page.route("**/api/runs", (route) =>
-    successfulRunResponse(route, 500),
-  );
+  await page.route("**/api/runs", (route) => successfulRunResponse(route, 500));
   await page.goto("/");
 
-  await page
-    .locator('.react-flow__node[data-id="prompt"] .node-header')
-    .click();
+  await page.locator('.react-flow__node[data-id="prompt"] .node-header').click();
   await page.getByRole("button", { name: "Run loom" }).click();
   await expect(page.getByText("Throwing the shuttle")).toBeVisible();
   await page.getByLabel("Text", { exact: true }).fill("Changed while running");
 
   await expect(
-    page.getByText(
-      "Prior output — the graph changed after this run was submitted.",
-    ),
+    page.getByText("Prior output — the graph changed after this run was submitted."),
   ).toBeVisible();
   await expect(page.getByText(/12 nodes · prior result is stale/)).toBeVisible();
   expect(errors).toEqual([]);
 });
 
-test("a failed run exposes the backend error and failed node", async ({
-  page,
-}) => {
+test("a failed run exposes the backend error and failed node", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.route("**/api/runs", async (route) => {
     await route.fulfill({
@@ -248,15 +214,12 @@ test("a failed run exposes the backend error and failed node", async ({
   await expect(page.getByText("Run stopped")).toBeVisible();
   await expect(page.getByText("Synthetic completion failure")).toBeVisible();
   await expect(
-    page.locator(
-      '.react-flow__node[data-id="original_vintage"] .loom-node',
-    ),
+    page.locator('.react-flow__node[data-id="original_vintage"] .loom-node'),
   ).toHaveClass(/status-failed/);
   await expect(page.locator(".inspector")).toBeVisible();
   expect(
     errors.filter(
-      (message) =>
-        !/Failed to load resource:.*422 \(Unprocessable Entity\)/.test(message),
+      (message) => !/Failed to load resource:.*422 \(Unprocessable Entity\)/.test(message),
     ),
   ).toEqual([]);
 });

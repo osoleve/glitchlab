@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  tidyNodeLayout,
-  type LayoutEdge,
-  type LayoutNode,
-} from "./graphLayout";
+import { type LayoutEdge, type LayoutNode, tidyNodeLayout } from "./graphLayout";
 
 const nodes: LayoutNode[] = [
   {
@@ -45,12 +41,8 @@ function boundsCenter(
 ) {
   const left = Math.min(...inputs.map((node) => positions.get(node.id)!.x));
   const top = Math.min(...inputs.map((node) => positions.get(node.id)!.y));
-  const right = Math.max(
-    ...inputs.map((node) => positions.get(node.id)!.x + node.width),
-  );
-  const bottom = Math.max(
-    ...inputs.map((node) => positions.get(node.id)!.y + node.height),
-  );
+  const right = Math.max(...inputs.map((node) => positions.get(node.id)!.x + node.width));
+  const bottom = Math.max(...inputs.map((node) => positions.get(node.id)!.y + node.height));
   return { x: (left + right) / 2, y: (top + bottom) / 2 };
 }
 
@@ -73,15 +65,9 @@ describe("tidy node layout", () => {
   it("lays out a branching graph left-to-right without overlap", () => {
     const positions = tidyNodeLayout(nodes, edges);
 
-    expect(positions.get("source")!.x).toBeLessThan(
-      positions.get("left")!.x,
-    );
-    expect(positions.get("left")!.x).toBeLessThan(
-      positions.get("merge")!.x,
-    );
-    expect(positions.get("right")!.x).toBeLessThan(
-      positions.get("merge")!.x,
-    );
+    expect(positions.get("source")!.x).toBeLessThan(positions.get("left")!.x);
+    expect(positions.get("left")!.x).toBeLessThan(positions.get("merge")!.x);
+    expect(positions.get("right")!.x).toBeLessThan(positions.get("merge")!.x);
     for (let left = 0; left < nodes.length; left += 1) {
       for (let right = left + 1; right < nodes.length; right += 1) {
         expect(overlaps(nodes[left], nodes[right], positions)).toBe(false);
@@ -90,22 +76,14 @@ describe("tidy node layout", () => {
   });
 
   it("is deterministic and ignores edges outside the supplied nodes", () => {
-    const first = tidyNodeLayout(nodes, [
-      ...edges,
-      { source: "outside", target: "merge" },
-    ]);
-    const reordered = tidyNodeLayout(
-      [...nodes].reverse(),
-      [...edges].reverse(),
-    );
+    const first = tidyNodeLayout(nodes, [...edges, { source: "outside", target: "merge" }]);
+    const reordered = tidyNodeLayout([...nodes].reverse(), [...edges].reverse());
 
     expect(Object.fromEntries(first)).toEqual(Object.fromEntries(reordered));
   });
 
   it("preserves the visual center of the arranged nodes", () => {
-    const originalPositions = new Map(
-      nodes.map((node) => [node.id, node.position]),
-    );
+    const originalPositions = new Map(nodes.map((node) => [node.id, node.position]));
     const positions = tidyNodeLayout(nodes, edges);
     const before = boundsCenter(nodes, originalPositions);
     const after = boundsCenter(nodes, positions);
@@ -121,12 +99,8 @@ describe("tidy node layout", () => {
     ];
 
     expect(() => tidyNodeLayout(nodes.slice(1, 3), cycleEdges)).not.toThrow();
-    expect(
-      Object.fromEntries(tidyNodeLayout(nodes.slice(1, 3), cycleEdges)),
-    ).toEqual(
-      Object.fromEntries(
-        tidyNodeLayout(nodes.slice(1, 3).reverse(), cycleEdges.reverse()),
-      ),
+    expect(Object.fromEntries(tidyNodeLayout(nodes.slice(1, 3), cycleEdges))).toEqual(
+      Object.fromEntries(tidyNodeLayout(nodes.slice(1, 3).reverse(), cycleEdges.reverse())),
     );
   });
 });

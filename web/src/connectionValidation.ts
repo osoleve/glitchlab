@@ -34,19 +34,8 @@ export function isGraphConnectionValid(
   nodes: readonly LoomNode[],
   edges: readonly LoomEdge[],
 ): boolean {
-  const {
-    source,
-    target,
-    sourceHandle: sourcePortName,
-    targetHandle: targetPortName,
-  } = connection;
-  if (
-    !source ||
-    !target ||
-    !sourcePortName ||
-    !targetPortName ||
-    source === target
-  ) {
+  const { source, target, sourceHandle: sourcePortName, targetHandle: targetPortName } = connection;
+  if (!source || !target || !sourcePortName || !targetPortName || source === target) {
     return false;
   }
 
@@ -73,9 +62,7 @@ export function isGraphConnectionValid(
     !targetPort.multiple &&
     edges.some(
       (edge) =>
-        edge.id !== ignoredEdgeId &&
-        edge.target === target &&
-        edge.targetHandle === targetPortName,
+        edge.id !== ignoredEdgeId && edge.target === target && edge.targetHandle === targetPortName,
     )
   ) {
     return false;

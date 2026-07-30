@@ -1,21 +1,21 @@
 import {
-  Background,
-  BackgroundVariant,
-  Controls,
-  MarkerType,
-  MiniMap,
-  ReactFlow,
-  ReactFlowProvider,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
-  reconnectEdge,
+  Background,
+  BackgroundVariant,
   type Connection,
+  Controls,
   type EdgeChange,
+  MarkerType,
+  MiniMap,
   type NodeChange,
-  type Viewport,
+  ReactFlow,
+  ReactFlowProvider,
+  reconnectEdge,
   useNodesInitialized,
   useReactFlow,
+  type Viewport,
 } from "@xyflow/react";
 import {
   AlertTriangle,
@@ -35,38 +35,31 @@ import {
   Pencil,
   Play,
   Plus,
-  Rows3,
   RotateCcw,
-  Search,
+  Rows3,
   Save,
+  Search,
   Trash2,
-  Unplug,
   Undo2,
+  Unplug,
   Workflow,
   X,
 } from "lucide-react";
-import {
-  DragEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   createLoom,
+  deleteWorkflow,
+  fetchCatalog,
   fetchLoom,
   fetchLooms,
   fetchLoomTemplate,
   fetchLoomTemplates,
-  deleteWorkflow,
-  fetchCatalog,
   fetchWorkflow,
   runGraph,
   saveWorkflow,
@@ -91,11 +84,11 @@ import type {
   CatalogResponse,
   ControlPortMode,
   GraphSpec,
+  LoomEdge,
+  LoomNode,
   LoomSpec,
   LoomSummary,
   LoomTemplateSummary,
-  LoomEdge,
-  LoomNode,
   NodeDefinition,
   PortDefinition,
   RunResponse,
@@ -194,24 +187,18 @@ function applyWorkflowBoundaryLabels(
     inputs: draft.inputs.map((binding) => ({
       ...binding,
       label:
-        labels[
-          workflowBindingKey("input", binding.node_id, binding.node_port)
-        ] ?? binding.label,
+        labels[workflowBindingKey("input", binding.node_id, binding.node_port)] ?? binding.label,
     })),
     outputs: draft.outputs.map((binding) => ({
       ...binding,
       label:
-        labels[
-          workflowBindingKey("output", binding.node_id, binding.node_port)
-        ] ?? binding.label,
+        labels[workflowBindingKey("output", binding.node_id, binding.node_port)] ?? binding.label,
     })),
   };
 }
 
 function defaultConfig(definition: NodeDefinition): Record<string, unknown> {
-  return Object.fromEntries(
-    definition.fields.map((field) => [field.name, field.default]),
-  );
+  return Object.fromEntries(definition.fields.map((field) => [field.name, field.default]));
 }
 
 function categorySlug(value: string): string {
@@ -224,12 +211,7 @@ function nodeSize(node: LoomNode): { width: number; height: number } {
     height:
       node.measured?.height ??
       102 +
-        Math.max(
-          node.data.definition.inputs.length,
-          node.data.definition.outputs.length,
-          1,
-        ) *
-          28,
+        Math.max(node.data.definition.inputs.length, node.data.definition.outputs.length, 1) * 28,
   };
 }
 
@@ -280,8 +262,7 @@ function formatElapsed(seconds: number): string {
 function isEditableTarget(target: EventTarget | null): target is HTMLElement {
   return (
     target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      target.matches("input, textarea, select, [role='textbox']"))
+    (target.isContentEditable || target.matches("input, textarea, select, [role='textbox']"))
   );
 }
 
@@ -303,11 +284,7 @@ const PANEL_LIMITS = {
 } as const;
 const MINIMUM_CANVAS_WIDTH = 420;
 
-function clampPanelWidth(
-  panel: ResizablePanel,
-  width: number,
-  otherPanelWidth: number,
-): number {
+function clampPanelWidth(panel: ResizablePanel, width: number, otherPanelWidth: number): number {
   const limits = PANEL_LIMITS[panel];
   const maximum = Math.max(
     limits.minimum,
@@ -317,10 +294,7 @@ function clampPanelWidth(
       window.innerWidth - otherPanelWidth - MINIMUM_CANVAS_WIDTH,
     ),
   );
-  return Math.min(
-    maximum,
-    Math.max(limits.minimum, width),
-  );
+  return Math.min(maximum, Math.max(limits.minimum, width));
 }
 
 function responsivePanelDefault(panel: ResizablePanel): number {
@@ -369,14 +343,10 @@ function GlitchloomApp() {
   const [quickAddIndex, setQuickAddIndex] = useState(0);
   const [workflowMenu, setWorkflowMenu] = useState<WorkflowMenuState>();
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [saveDialogPurpose, setSaveDialogPurpose] = useState<
-    "selection" | "edit"
-  >("selection");
+  const [saveDialogPurpose, setSaveDialogPurpose] = useState<"selection" | "edit">("selection");
   const [workflowName, setWorkflowName] = useState("");
   const [workflowDescription, setWorkflowDescription] = useState("");
-  const [workflowBoundaryLabels, setWorkflowBoundaryLabels] = useState<
-    Record<string, string>
-  >({});
+  const [workflowBoundaryLabels, setWorkflowBoundaryLabels] = useState<Record<string, string>>({});
   const [workflowError, setWorkflowError] = useState<string>();
   const [savingWorkflow, setSavingWorkflow] = useState(false);
   const [workflowNotice, setWorkflowNotice] = useState<string>();
@@ -405,27 +375,20 @@ function GlitchloomApp() {
   const canvasRef = useRef<HTMLElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
   const inspectorRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, fitView, getViewport, setViewport } =
-    useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
   const executionFingerprint = useMemo(
-    () =>
-      semanticExecutionFingerprint(
-        serializeGraph("Execution fingerprint", nodes, edges),
-      ),
+    () => semanticExecutionFingerprint(serializeGraph("Execution fingerprint", nodes, edges)),
     [edges, nodes],
   );
   executionFingerprintRef.current = executionFingerprint;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
-  const activeWorkflow = activeTab.type === "workflow"
-    ? activeTab.workflow
-    : undefined;
+  const activeWorkflow = activeTab.type === "workflow" ? activeTab.workflow : undefined;
   const activeLoom = activeTab.type === "loom" ? activeTab.loom : undefined;
   const loadingGraph = Boolean(loadingWorkflowId || loadingDocumentId);
   const graphBusy = loadingGraph || savingLoom;
   const hasUnsavedTabs =
-    isDirty ||
-    tabs.some((tab) => tab.id !== activeTabId && tab.snapshot.isDirty);
+    isDirty || tabs.some((tab) => tab.id !== activeTabId && tab.snapshot.isDirty);
 
   const captureSnapshot = useCallback(
     (): GraphSnapshot => ({
@@ -438,16 +401,7 @@ function GlitchloomApp() {
       isDirty,
       executionScope,
     }),
-    [
-      edges,
-      executionScope,
-      isDirty,
-      loomName,
-      nodes,
-      run,
-      runError,
-      selectedId,
-    ],
+    [edges, executionScope, isDirty, loomName, nodes, run, runError, selectedId],
   );
 
   const applySnapshot = useCallback((snapshot: GraphSnapshot) => {
@@ -474,9 +428,7 @@ function GlitchloomApp() {
       const currentSnapshot = captureSnapshot();
       setTabs((current) =>
         current.map((tab) =>
-          tab.id === activeTabId
-            ? { ...tab, snapshot: currentSnapshot }
-            : tab,
+          tab.id === activeTabId ? { ...tab, snapshot: currentSnapshot } : tab,
         ),
       );
       setActiveTabId(tabId);
@@ -514,7 +466,7 @@ function GlitchloomApp() {
       .catch((error: unknown) => {
         setCatalogError(error instanceof Error ? error.message : String(error));
       });
-  }, [fitView]);
+  }, []);
 
   useEffect(() => {
     void Promise.all([fetchLooms(), fetchLoomTemplates()])
@@ -523,9 +475,7 @@ function GlitchloomApp() {
         setLoomTemplates(templates);
       })
       .catch((error: unknown) => {
-        setLoomLibraryError(
-          error instanceof Error ? error.message : String(error),
-        );
+        setLoomLibraryError(error instanceof Error ? error.message : String(error));
       });
   }, []);
 
@@ -553,6 +503,9 @@ function GlitchloomApp() {
     return () => window.cancelAnimationFrame(frame);
   }, [fitView, needsFit, nodes.length, nodesInitialized]);
 
+  // Panel visibility changes intentionally retrigger the fit after CSS transitions.
+  // biome-ignore lint/correctness/useExhaustiveDependencies(inspectorOpen): trigger-only dependency
+  // biome-ignore lint/correctness/useExhaustiveDependencies(paletteOpen): trigger-only dependency
   useEffect(() => {
     if (!nodesInitialized || nodes.length === 0 || needsFit) return;
     const timer = window.setTimeout(() => {
@@ -564,14 +517,7 @@ function GlitchloomApp() {
       });
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [
-    fitView,
-    inspectorOpen,
-    needsFit,
-    nodes.length,
-    nodesInitialized,
-    paletteOpen,
-  ]);
+  }, [fitView, inspectorOpen, needsFit, nodes.length, nodesInitialized, paletteOpen]);
 
   useEffect(() => {
     if (!running) return;
@@ -597,8 +543,7 @@ function GlitchloomApp() {
         ? {
             ...current,
             client: {
-              execution_fingerprint:
-                current.client?.execution_fingerprint ?? "",
+              execution_fingerprint: current.client?.execution_fingerprint ?? "",
               stale: true,
             },
           }
@@ -613,10 +558,7 @@ function GlitchloomApp() {
   }, []);
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
-  const selectedNodes = useMemo(
-    () => nodes.filter((node) => node.selected),
-    [nodes],
-  );
+  const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
   const contextualWorkflowDefinition =
     selectedNodes.length <= 1
       ? selectedNode?.data.definition.workflow
@@ -629,18 +571,14 @@ function GlitchloomApp() {
     return tabs.reduce((total, tab) => {
       const tabNodes = tab.id === activeTabId ? nodes : tab.snapshot.nodes;
       return (
-        total +
-        tabNodes.filter(
-          (node) => node.data.definition.workflow?.id === workflowId,
-        ).length
+        total + tabNodes.filter((node) => node.data.definition.workflow?.id === workflowId).length
       );
     }, 0);
   }, [activeTabId, deleteDefinition, nodes, tabs]);
   useEffect(() => {
     if (
       selectedId &&
-      (!selectedNode ||
-        (!selectedNode.selected && selectedNodes.some((node) => node.selected)))
+      (!selectedNode || (!selectedNode.selected && selectedNodes.some((node) => node.selected)))
     ) {
       const fallback = selectedNodes.at(-1);
       setSelectedId(fallback?.id);
@@ -651,10 +589,7 @@ function GlitchloomApp() {
   useEffect(() => {
     if (!contextMenu && !workflowMenu) return;
     const dismiss = (event: PointerEvent) => {
-      if (
-        event.target instanceof Element &&
-        event.target.closest(".context-menu")
-      ) {
+      if (event.target instanceof Element && event.target.closest(".context-menu")) {
         return;
       }
       setContextMenu(undefined);
@@ -683,16 +618,11 @@ function GlitchloomApp() {
     return groups;
   }, [catalog, paletteQuery]);
   const pendingConnection =
-    contextMenu?.scope === "pane"
-      ? contextMenu.pendingConnection
-      : undefined;
+    contextMenu?.scope === "pane" ? contextMenu.pendingConnection : undefined;
   const quickAddEntries = useMemo(() => {
     const query = quickAddQuery.trim().toLowerCase();
     const entries: QuickAddEntry[] = pendingConnection
-      ? compatibleNodeInputs(
-          catalog?.nodes ?? [],
-          pendingConnection.sourceType,
-        )
+      ? compatibleNodeInputs(catalog?.nodes ?? [], pendingConnection.sourceType)
       : (catalog?.nodes ?? []).map((definition) => ({ definition }));
     return entries
       .filter(({ definition, input }) => {
@@ -702,20 +632,14 @@ function GlitchloomApp() {
         return !query || searchable.toLowerCase().includes(query);
       })
       .sort((left, right) => {
-        const leftStarts = left.definition.label
-          .toLowerCase()
-          .startsWith(query);
-        const rightStarts = right.definition.label
-          .toLowerCase()
-          .startsWith(query);
+        const leftStarts = left.definition.label.toLowerCase().startsWith(query);
+        const rightStarts = right.definition.label.toLowerCase().startsWith(query);
         if (leftStarts !== rightStarts) return leftStarts ? -1 : 1;
         if (pendingConnection) {
           const leftExact =
-            left.input?.type === pendingConnection.sourceType &&
-            left.input.type !== "any";
+            left.input?.type === pendingConnection.sourceType && left.input.type !== "any";
           const rightExact =
-            right.input?.type === pendingConnection.sourceType &&
-            right.input.type !== "any";
+            right.input?.type === pendingConnection.sourceType && right.input.type !== "any";
           if (leftExact !== rightExact) return leftExact ? -1 : 1;
         }
         return (
@@ -727,20 +651,15 @@ function GlitchloomApp() {
   }, [catalog, pendingConnection, quickAddQuery]);
 
   useEffect(() => {
-    setQuickAddIndex((current) =>
-      Math.min(current, Math.max(0, quickAddEntries.length - 1)),
-    );
+    setQuickAddIndex((current) => Math.min(current, Math.max(0, quickAddEntries.length - 1)));
   }, [quickAddEntries.length]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<LoomNode>[]) => {
-      const semantic = changes.some(
-        (change) => change.type === "add" || change.type === "remove",
-      );
+      const semantic = changes.some((change) => change.type === "add" || change.type === "remove");
       const layout = changes.some(
         (change) =>
-          change.type === "position" ||
-          (change.type === "dimensions" && Boolean(change.resizing)),
+          change.type === "position" || (change.type === "dimensions" && Boolean(change.resizing)),
       );
       if (semantic) markSemanticDirty();
       else if (layout) markDirty();
@@ -774,8 +693,7 @@ function GlitchloomApp() {
     [markSemanticDirty],
   );
   const isValidConnection = useCallback(
-    (connection: Connection | LoomEdge) =>
-      isGraphConnectionValid(connection, nodes, edges),
+    (connection: Connection | LoomEdge) => isGraphConnectionValid(connection, nodes, edges),
     [edges, nodes],
   );
   const onReconnect = useCallback(
@@ -836,9 +754,7 @@ function GlitchloomApp() {
               definition,
               config: {
                 ...defaultConfig(definition),
-                ...(definition.workflow
-                  ? { workflow_digest: definition.workflow.digest }
-                  : {}),
+                ...(definition.workflow ? { workflow_digest: definition.workflow.digest } : {}),
               },
               controlPorts: {},
               runStatus: "idle",
@@ -854,10 +770,7 @@ function GlitchloomApp() {
     [markSemanticDirty, screenToFlowPosition],
   );
 
-  const onPaletteDrag = (
-    event: DragEvent<HTMLButtonElement>,
-    definition: NodeDefinition,
-  ) => {
+  const onPaletteDrag = (event: DragEvent<HTMLButtonElement>, definition: NodeDefinition) => {
     event.dataTransfer.setData("application/glitchloom-node", definition.kind);
     event.dataTransfer.effectAllowed = "move";
   };
@@ -866,22 +779,14 @@ function GlitchloomApp() {
     const kind = event.dataTransfer.getData("application/glitchloom-node");
     const definition = catalog?.nodes.find((item) => item.kind === kind);
     if (!definition) return;
-    addNode(
-      definition,
-      screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-    );
+    addNode(definition, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
   };
 
-  const updateSelected = (
-    updater: (node: LoomNode) => LoomNode,
-    semantic = true,
-  ) => {
+  const updateSelected = (updater: (node: LoomNode) => LoomNode, semantic = true) => {
     if (!selectedId) return;
     if (semantic) markSemanticDirty();
     else markDirty();
-    setNodes((current) =>
-      current.map((node) => (node.id === selectedId ? updater(node) : node)),
-    );
+    setNodes((current) => current.map((node) => (node.id === selectedId ? updater(node) : node)));
   };
   const updateNodeField = useCallback(
     (nodeId: string, field: string, value: unknown) => {
@@ -903,19 +808,14 @@ function GlitchloomApp() {
     },
     [markSemanticDirty],
   );
-  const updateControlPort = (
-    fieldName: string,
-    mode?: ControlPortMode,
-  ) => {
+  const updateControlPort = (fieldName: string, mode?: ControlPortMode) => {
     if (!selectedId || !selectedNode) return;
     const previousMode = selectedNode.data.controlPorts[fieldName];
     if (previousMode === mode) return;
     markSemanticDirty();
     const handle = controlPortName(fieldName);
-    const hadInput =
-      previousMode === "input" || previousMode === "passthrough";
-    const hadOutput =
-      previousMode === "output" || previousMode === "passthrough";
+    const hadInput = previousMode === "input" || previousMode === "passthrough";
+    const hadOutput = previousMode === "output" || previousMode === "passthrough";
     const keepsInput = mode === "input" || mode === "passthrough";
     const keepsOutput = mode === "output" || mode === "passthrough";
     setEdges((current) =>
@@ -926,10 +826,7 @@ function GlitchloomApp() {
               !keepsOutput &&
               edge.source === selectedId &&
               edge.sourceHandle === handle) ||
-            (hadInput &&
-              !keepsInput &&
-              edge.target === selectedId &&
-              edge.targetHandle === handle)
+            (hadInput && !keepsInput && edge.target === selectedId && edge.targetHandle === handle)
           ),
       ),
     );
@@ -943,10 +840,7 @@ function GlitchloomApp() {
           ...node,
           data: {
             ...node.data,
-            definition: withControlPorts(
-              node.data.definition,
-              controlPorts,
-            ),
+            definition: withControlPorts(node.data.definition, controlPorts),
             controlPorts,
             runStatus: "idle",
           },
@@ -957,20 +851,16 @@ function GlitchloomApp() {
   const deleteSelected = (explicitIds?: string[]) => {
     const ids = new Set(
       explicitIds ??
-      (selectedNodes.length > 0
-        ? selectedNodes.map((node) => node.id)
-        : selectedId
-          ? [selectedId]
-          : []),
+        (selectedNodes.length > 0
+          ? selectedNodes.map((node) => node.id)
+          : selectedId
+            ? [selectedId]
+            : []),
     );
     if (ids.size === 0) return;
     markSemanticDirty();
     setNodes((current) => current.filter((node) => !ids.has(node.id)));
-    setEdges((current) =>
-      current.filter(
-        (edge) => !ids.has(edge.source) && !ids.has(edge.target),
-      ),
-    );
+    setEdges((current) => current.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target)));
     setSelectedId(undefined);
     setInspectorOpen(false);
   };
@@ -986,10 +876,7 @@ function GlitchloomApp() {
     if (sourceNodes.length === 0) return;
     const sourceIds = new Set(sourceNodes.map((node) => node.id));
     const replacements = new Map(
-      sourceNodes.map((node) => [
-        node.id,
-        `${node.data.kind}-${crypto.randomUUID().slice(0, 6)}`,
-      ]),
+      sourceNodes.map((node) => [node.id, `${node.data.kind}-${crypto.randomUUID().slice(0, 6)}`]),
     );
     const copies = sourceNodes.map((node) => ({
       ...node,
@@ -1004,9 +891,7 @@ function GlitchloomApp() {
       },
     }));
     const copiedEdges = edges
-      .filter(
-        (edge) => sourceIds.has(edge.source) && sourceIds.has(edge.target),
-      )
+      .filter((edge) => sourceIds.has(edge.source) && sourceIds.has(edge.target))
       .map((edge) => ({
         ...edge,
         id: crypto.randomUUID(),
@@ -1015,20 +900,14 @@ function GlitchloomApp() {
         selected: false,
       }));
     markSemanticDirty();
-    setNodes((current) => [
-      ...current.map((node) => ({ ...node, selected: false })),
-      ...copies,
-    ]);
+    setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...copies]);
     setEdges((current) => [...current, ...copiedEdges]);
     setSelectedId(copies[0].id);
     setInspectorOpen(true);
     setContextMenu(undefined);
   };
 
-  const selectRelated = (
-    startIds: string[],
-    direction: "upstream" | "downstream",
-  ) => {
+  const selectRelated = (startIds: string[], direction: "upstream" | "downstream") => {
     const nodeIds = nodes.map((node) => node.id);
     const reachable = new Set(
       direction === "upstream"
@@ -1107,9 +986,7 @@ function GlitchloomApp() {
 
   const tidyNodes = (nodeIds?: string[]) => {
     const included = nodeIds ? new Set(nodeIds) : undefined;
-    const targets = included
-      ? nodes.filter((node) => included.has(node.id))
-      : nodes;
+    const targets = included ? nodes.filter((node) => included.has(node.id)) : nodes;
     if (targets.length < 2) {
       setContextMenu(undefined);
       return;
@@ -1152,14 +1029,9 @@ function GlitchloomApp() {
     setContextMenu(undefined);
   };
 
-  const insertPassthrough = (
-    edgeId: string,
-    flowPosition: { x: number; y: number },
-  ) => {
+  const insertPassthrough = (edgeId: string, flowPosition: { x: number; y: number }) => {
     const edge = edges.find((candidate) => candidate.id === edgeId);
-    const definition = catalog?.nodes.find(
-      (candidate) => candidate.kind === "passthrough",
-    );
+    const definition = catalog?.nodes.find((candidate) => candidate.kind === "passthrough");
     if (!edge || !definition || !edge.sourceHandle || !edge.targetHandle) return;
     const nodeId = `passthrough-${crypto.randomUUID().slice(0, 6)}`;
     const position = {
@@ -1223,8 +1095,7 @@ function GlitchloomApp() {
       catalog?.nodes.find(
         (item) =>
           item.workflow?.id === definition.workflow?.id &&
-          (item.workflow?.version ?? 0) >=
-            (definition.workflow?.version ?? 0),
+          (item.workflow?.version ?? 0) >= (definition.workflow?.version ?? 0),
       ) ?? definition;
     const metadata = latestDefinition.workflow;
     if (!metadata) return;
@@ -1254,9 +1125,7 @@ function GlitchloomApp() {
       const currentSnapshot = captureSnapshot();
       setTabs((current) => [
         ...current.map((tab) =>
-          tab.id === activeTabId
-            ? { ...tab, snapshot: currentSnapshot }
-            : tab,
+          tab.id === activeTabId ? { ...tab, snapshot: currentSnapshot } : tab,
         ),
         {
           id: tabId,
@@ -1268,9 +1137,7 @@ function GlitchloomApp() {
       setActiveTabId(tabId);
       applySnapshot(snapshot);
     } catch (error) {
-      setWorkflowNotice(
-        error instanceof Error ? error.message : String(error),
-      );
+      setWorkflowNotice(error instanceof Error ? error.message : String(error));
     } finally {
       setLoadingWorkflowId(undefined);
     }
@@ -1287,10 +1154,9 @@ function GlitchloomApp() {
       node_count: loom.graph.nodes.length,
     };
     setLooms((current) =>
-      [
-        ...current.filter((item) => item.id !== loom.id),
-        summary,
-      ].sort((left, right) => left.name.localeCompare(right.name)),
+      [...current.filter((item) => item.id !== loom.id), summary].sort((left, right) =>
+        left.name.localeCompare(right.name),
+      ),
     );
   };
 
@@ -1300,11 +1166,7 @@ function GlitchloomApp() {
     sourceTemplateId?: string,
   ) => {
     hasOpenedGraph.current = true;
-    const hydrated = hydrateGraph(
-      graph,
-      catalog?.nodes ?? [],
-      exactDefinitions,
-    );
+    const hydrated = hydrateGraph(graph, catalog?.nodes ?? [], exactDefinitions);
     const snapshot: GraphSnapshot = {
       nodes: hydrated.nodes,
       edges: hydrated.edges,
@@ -1330,9 +1192,7 @@ function GlitchloomApp() {
   };
 
   const openSavedLoom = async (loomId: string, asCopy = false) => {
-    const existing = !asCopy
-      ? tabs.find((tab) => tab.loom?.id === loomId)
-      : undefined;
+    const existing = !asCopy ? tabs.find((tab) => tab.loom?.id === loomId) : undefined;
     if (existing) {
       setLoomLibraryOpen(false);
       switchGraphTab(existing.id);
@@ -1392,11 +1252,7 @@ function GlitchloomApp() {
     setLoomLibraryError(undefined);
     try {
       const response = await fetchLoomTemplate(templateId);
-      openHydratedDraft(
-        response.template.graph,
-        response.definitions,
-        response.template.id,
-      );
+      openHydratedDraft(response.template.graph, response.definitions, response.template.id);
     } catch (error) {
       setLoomLibraryError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1414,10 +1270,7 @@ function GlitchloomApp() {
     );
   };
 
-  const persistCurrentLoom = async (
-    name: string,
-    options: { createNew: boolean },
-  ) => {
+  const persistCurrentLoom = async (name: string, options: { createNew: boolean }) => {
     if (activeWorkflow) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -1441,8 +1294,7 @@ function GlitchloomApp() {
         loomName: saved.graph.name,
         isDirty: false,
       };
-      const nextTabId =
-        activeTabId === MAIN_TAB_ID ? MAIN_TAB_ID : `loom:${saved.id}`;
+      const nextTabId = activeTabId === MAIN_TAB_ID ? MAIN_TAB_ID : `loom:${saved.id}`;
       setTabs((current) =>
         current.map((tab) =>
           tab.id === activeTabId
@@ -1461,9 +1313,7 @@ function GlitchloomApp() {
       setIsDirty(false);
       rememberLoom(saved);
       setLoomSaveDialogOpen(false);
-      setLoomNotice(
-        `${saved.graph.name} saved at revision ${saved.revision}.`,
-      );
+      setLoomNotice(`${saved.graph.name} saved at revision ${saved.revision}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (loomSaveDialogOpen) setLoomSaveError(message);
@@ -1491,8 +1341,7 @@ function GlitchloomApp() {
     const remaining = tabs.filter((tab) => tab.id !== tabId);
     if (activeTabId === tabId) {
       const target =
-        remaining[Math.max(0, closingIndex - 1)] ??
-        remaining.find((tab) => tab.id === MAIN_TAB_ID);
+        remaining[Math.max(0, closingIndex - 1)] ?? remaining.find((tab) => tab.id === MAIN_TAB_ID);
       if (target) {
         setActiveTabId(target.id);
         applySnapshot(target.snapshot);
@@ -1536,27 +1385,17 @@ function GlitchloomApp() {
         current
           ? {
               ...current,
-              nodes: current.nodes.filter(
-                (definition) => definition.workflow?.id !== metadata.id,
-              ),
+              nodes: current.nodes.filter((definition) => definition.workflow?.id !== metadata.id),
             }
           : current,
       );
-      const deletedTab = tabs.find(
-        (tab) => tab.workflow?.id === metadata.id,
-      );
+      const deletedTab = tabs.find((tab) => tab.workflow?.id === metadata.id);
       if (deletedTab) performCloseTab(deletedTab.id);
-      setTabs((current) =>
-        current.filter((tab) => tab.workflow?.id !== metadata.id),
-      );
+      setTabs((current) => current.filter((tab) => tab.workflow?.id !== metadata.id));
       setDeleteDefinition(undefined);
-      setWorkflowNotice(
-        `${response.deleted.name} moved to ${response.deleted.recoverable_path}.`,
-      );
+      setWorkflowNotice(`${response.deleted.name} moved to ${response.deleted.recoverable_path}.`);
     } catch (error) {
-      setDeleteWorkflowError(
-        error instanceof Error ? error.message : String(error),
-      );
+      setDeleteWorkflowError(error instanceof Error ? error.message : String(error));
     } finally {
       setDeletingWorkflow(false);
     }
@@ -1565,9 +1404,7 @@ function GlitchloomApp() {
   const openSaveWorkflow = () => {
     const count = selectedNodes.length;
     if (count === 0) return;
-    setWorkflowName(
-      count === 1 ? `${selectedNodes[0].data.title} workflow` : "New workflow",
-    );
+    setWorkflowName(count === 1 ? `${selectedNodes[0].data.title} workflow` : "New workflow");
     setWorkflowDescription("");
     setWorkflowBoundaryLabels({});
     setWorkflowError(undefined);
@@ -1599,17 +1436,9 @@ function GlitchloomApp() {
           activeWorkflow,
         );
       } else {
-        inferred = inferWorkflowDraft(
-          workflowName,
-          workflowDescription,
-          selectedNodes,
-          edges,
-        );
+        inferred = inferWorkflowDraft(workflowName, workflowDescription, selectedNodes, edges);
       }
-      return applyWorkflowBoundaryLabels(
-        inferred,
-        workflowBoundaryLabels,
-      );
+      return applyWorkflowBoundaryLabels(inferred, workflowBoundaryLabels);
     } catch {
       return undefined;
     }
@@ -1634,10 +1463,9 @@ function GlitchloomApp() {
       setWorkflowError("The selected graph does not have a valid workflow boundary.");
       return;
     }
-    const unnamedBinding = [
-      ...workflowDraft.inputs,
-      ...workflowDraft.outputs,
-    ].find((binding) => !binding.label.trim());
+    const unnamedBinding = [...workflowDraft.inputs, ...workflowDraft.outputs].find(
+      (binding) => !binding.label.trim(),
+    );
     if (unnamedBinding) {
       setWorkflowError("Every public socket needs a name.");
       return;
@@ -1666,8 +1494,7 @@ function GlitchloomApp() {
               ...current,
               nodes: [
                 ...current.nodes.filter(
-                  (definition) =>
-                    definition.workflow?.id !== response.workflow.id,
+                  (definition) => definition.workflow?.id !== response.workflow.id,
                 ),
                 response.definition,
               ],
@@ -1711,10 +1538,7 @@ function GlitchloomApp() {
     setInspectorOpen(nodes.length > 0);
     setContextMenu(undefined);
   };
-  const addQuickNode = (
-    definition: NodeDefinition,
-    targetInput?: PortDefinition,
-  ) => {
+  const addQuickNode = (definition: NodeDefinition, targetInput?: PortDefinition) => {
     if (contextMenu?.scope !== "pane") return;
     const nodeId = addNode(definition, {
       x: contextMenu.flowPosition.x - 118,
@@ -1820,11 +1644,7 @@ function GlitchloomApp() {
     const submittedFingerprint = semanticExecutionFingerprint(graph);
     const submittedSemanticRevision = semanticRevisionRef.current;
     const targetNodeIds = [
-      ...new Set(
-        requestedTargetIds.filter((nodeId) =>
-          nodes.some((node) => node.id === nodeId),
-        ),
-      ),
+      ...new Set(requestedTargetIds.filter((nodeId) => nodes.some((node) => node.id === nodeId))),
     ];
     const scope: RunScope =
       targetNodeIds.length > 0
@@ -1888,8 +1708,7 @@ function GlitchloomApp() {
           ...node,
           data: {
             ...node.data,
-            runStatus:
-              !stale && completed.has(node.id) ? "completed" : "idle",
+            runStatus: !stale && completed.has(node.id) ? "completed" : "idle",
           },
         })),
       );
@@ -1911,9 +1730,7 @@ function GlitchloomApp() {
         semanticRevisionRef.current !== submittedSemanticRevision ||
         executionFingerprintRef.current !== submittedFingerprint;
       setRunError(
-        stale
-          ? `Prior run stopped after the graph changed: ${detail.message}`
-          : detail.message,
+        stale ? `Prior run stopped after the graph changed: ${detail.message}` : detail.message,
       );
       setExecutionScope({
         ...submittedScope,
@@ -1924,10 +1741,9 @@ function GlitchloomApp() {
           ...node,
           data: {
             ...node.data,
-            runStatus:
-              stale
-                ? "idle"
-                : node.id === detail.node_id
+            runStatus: stale
+              ? "idle"
+              : node.id === detail.node_id
                 ? "failed"
                 : detail.nodes?.some((result) => result.node_id === node.id)
                   ? "completed"
@@ -1944,22 +1760,15 @@ function GlitchloomApp() {
     }
   };
 
-  const preserveVisibleCanvas = (
-    previousBounds: DOMRect,
-    previousViewport: Viewport,
-  ) => {
+  const preserveVisibleCanvas = (previousBounds: DOMRect, previousViewport: Viewport) => {
     window.requestAnimationFrame(() => {
       const nextBounds = canvasRef.current?.getBoundingClientRect();
       if (!nextBounds || nextBounds.width >= previousBounds.width - 0.5) return;
 
       const widthRatio = nextBounds.width / previousBounds.width;
       const nextZoom = Math.max(0.32, previousViewport.zoom * widthRatio);
-      const worldCenterX =
-        (previousBounds.width / 2 - previousViewport.x) /
-        previousViewport.zoom;
-      const worldCenterY =
-        (previousBounds.height / 2 - previousViewport.y) /
-        previousViewport.zoom;
+      const worldCenterX = (previousBounds.width / 2 - previousViewport.x) / previousViewport.zoom;
+      const worldCenterY = (previousBounds.height / 2 - previousViewport.y) / previousViewport.zoom;
       void setViewport(
         {
           x: nextBounds.width / 2 - worldCenterX * nextZoom,
@@ -1971,23 +1780,17 @@ function GlitchloomApp() {
     });
   };
 
-  const beginPanelResize = (
-    panel: ResizablePanel,
-    event: ReactPointerEvent<HTMLDivElement>,
-  ) => {
+  const beginPanelResize = (panel: ResizablePanel, event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const panelElement =
-      panel === "palette" ? paletteRef.current : inspectorRef.current;
+    const panelElement = panel === "palette" ? paletteRef.current : inspectorRef.current;
     if (!panelElement) return;
-    const otherPanelElement =
-      panel === "palette" ? inspectorRef.current : paletteRef.current;
+    const otherPanelElement = panel === "palette" ? inspectorRef.current : paletteRef.current;
 
     const startX = event.clientX;
     const startWidth = panelElement.getBoundingClientRect().width;
     const previousCanvasBounds = canvasRef.current?.getBoundingClientRect();
     const previousViewport = getViewport();
-    const otherPanelWidth =
-      otherPanelElement?.getBoundingClientRect().width ?? 0;
+    const otherPanelWidth = otherPanelElement?.getBoundingClientRect().width ?? 0;
     const previousCursor = document.body.style.cursor;
     const previousUserSelect = document.body.style.userSelect;
     document.body.style.cursor = "col-resize";
@@ -2027,18 +1830,15 @@ function GlitchloomApp() {
   ) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    const panelElement =
-      panel === "palette" ? paletteRef.current : inspectorRef.current;
+    const panelElement = panel === "palette" ? paletteRef.current : inspectorRef.current;
     if (!panelElement) return;
     const previousCanvasBounds = canvasRef.current?.getBoundingClientRect();
     const previousViewport = getViewport();
-    const otherPanelElement =
-      panel === "palette" ? inspectorRef.current : paletteRef.current;
+    const otherPanelElement = panel === "palette" ? inspectorRef.current : paletteRef.current;
     const direction = event.key === "ArrowRight" ? 1 : -1;
     const width = clampPanelWidth(
       panel,
-      panelElement.getBoundingClientRect().width +
-        direction * (panel === "palette" ? 12 : -12),
+      panelElement.getBoundingClientRect().width + direction * (panel === "palette" ? 12 : -12),
       otherPanelElement?.getBoundingClientRect().width ?? 0,
     );
     if (panel === "palette") setPaletteWidth(width);
@@ -2091,9 +1891,7 @@ function GlitchloomApp() {
         } else if (selectedId) {
           event.preventDefault();
           setNodes((current) =>
-            current.map((node) =>
-              node.selected ? { ...node, selected: false } : node,
-            ),
+            current.map((node) => (node.selected ? { ...node, selected: false } : node)),
           );
           setSelectedId(undefined);
           setInspectorOpen(false);
@@ -2142,13 +1940,7 @@ function GlitchloomApp() {
         duplicateSelected();
         return;
       }
-      if (
-        commandKey &&
-        event.key === "Enter" &&
-        !running &&
-        !savingLoom &&
-        nodes.length > 0
-      ) {
+      if (commandKey && event.key === "Enter" && !running && !savingLoom && nodes.length > 0) {
         event.preventDefault();
         void execute();
         return;
@@ -2183,15 +1975,11 @@ function GlitchloomApp() {
       : "0px",
   } as CSSProperties;
   const contextSelectionIds =
-    contextMenu?.scope === "node" || contextMenu?.scope === "selection"
-      ? contextMenu.nodeIds
-      : [];
+    contextMenu?.scope === "node" || contextMenu?.scope === "selection" ? contextMenu.nodeIds : [];
   const scopedNodeIdSet = new Set(executionScope?.nodeIds ?? []);
   const targetNodeIdSet = new Set(executionScope?.targetNodeIds ?? []);
   const scopedEdgeIdSet = new Set(executionScope?.edgeIds ?? []);
-  const selectedNodeIds = nodes
-    .filter((node) => node.selected)
-    .map((node) => node.id);
+  const selectedNodeIds = nodes.filter((node) => node.selected).map((node) => node.id);
   const selectedUpstreamIds = upstreamClosure(
     nodes.map((node) => node.id),
     edges,
@@ -2206,14 +1994,12 @@ function GlitchloomApp() {
     ...inducedEdgeIds(edges, selectedUpstreamIds),
     ...inducedEdgeIds(edges, selectedDownstreamIds),
   ]);
-  const showSelectedPaths =
-    executionScope === undefined && selectedNodeIds.length > 0;
+  const showSelectedPaths = executionScope === undefined && selectedNodeIds.length > 0;
   const flowNodes = nodes.map((node) => ({
     ...node,
     data: {
       ...node.data,
-      onUpdateField: (field: string, value: unknown) =>
-        updateNodeField(node.id, field, value),
+      onUpdateField: (field: string, value: unknown) => updateNodeField(node.id, field, value),
       executionScopeRole:
         executionScope?.mode !== "targets"
           ? undefined
@@ -2296,6 +2082,7 @@ function GlitchloomApp() {
           />
           {isDirty && (
             <span
+              role="img"
               className="dirty-indicator"
               aria-label="Unsaved graph changes"
               title="Unsaved graph changes"
@@ -2304,14 +2091,11 @@ function GlitchloomApp() {
         </div>
         <div className="topbar-actions">
           <span
-            className={`plugin-chip ${
-              catalog?.plugin.available ? "is-ready" : "is-offline"
-            }`}
+            role="img"
+            className={`plugin-chip ${catalog?.plugin.available ? "is-ready" : "is-offline"}`}
             title={catalog?.plugin.error ?? catalog?.plugin.path}
             aria-label={
-              catalog?.plugin.available
-                ? "Glitchlings available"
-                : "Glitchlings unavailable"
+              catalog?.plugin.available ? "Glitchlings available" : "Glitchlings unavailable"
             }
           >
             <Bug size={13} />
@@ -2349,11 +2133,7 @@ function GlitchloomApp() {
                 disabled={savingLoom || running || !catalog}
                 title="Save loom (Ctrl+S)"
               >
-                {savingLoom ? (
-                  <LoaderCircle className="spin-icon" size={15} />
-                ) : (
-                  <Save size={15} />
-                )}
+                {savingLoom ? <LoaderCircle className="spin-icon" size={15} /> : <Save size={15} />}
                 Save
               </button>
               <button
@@ -2397,22 +2177,15 @@ function GlitchloomApp() {
         </div>
       </header>
 
-      <nav className="graph-tabs" role="tablist" aria-label="Open graphs">
+      <div className="graph-tabs" role="tablist" aria-label="Open graphs">
         {tabs.map((tab) => {
           const active = tab.id === activeTabId;
           const dirty = active ? isDirty : tab.snapshot.isDirty;
           const title = active ? loomName : tab.snapshot.loomName;
-          const version = active
-            ? activeWorkflow?.version
-            : tab.workflow?.version;
-          const revision = active
-            ? activeLoom?.revision
-            : tab.loom?.revision;
+          const version = active ? activeWorkflow?.version : tab.workflow?.version;
+          const revision = active ? activeLoom?.revision : tab.loom?.revision;
           return (
-            <div
-              className={`graph-tab ${active ? "is-active" : ""}`}
-              key={tab.id}
-            >
+            <div className={`graph-tab ${active ? "is-active" : ""}`} key={tab.id}>
               <button
                 type="button"
                 role="tab"
@@ -2421,17 +2194,11 @@ function GlitchloomApp() {
                 disabled={running || graphBusy}
                 title={title}
               >
-                {tab.type === "workflow" ? (
-                  <Workflow size={13} />
-                ) : (
-                  <LayoutDashboard size={13} />
-                )}
+                {tab.type === "workflow" ? <Workflow size={13} /> : <LayoutDashboard size={13} />}
                 <span>{title}</span>
                 {version && <em>v{version}</em>}
                 {revision && <em>r{revision}</em>}
-                {dirty && (
-                  <i aria-label="Unsaved changes" title="Unsaved changes" />
-                )}
+                {dirty && <i role="img" aria-label="Unsaved changes" title="Unsaved changes" />}
               </button>
               {tab.id !== MAIN_TAB_ID && (
                 <button
@@ -2458,7 +2225,7 @@ function GlitchloomApp() {
         >
           <Plus size={14} />
         </button>
-      </nav>
+      </div>
 
       <main
         className={`workspace ${paletteOpen ? "" : "palette-closed"} ${
@@ -2534,8 +2301,7 @@ function GlitchloomApp() {
                         type="button"
                         className="palette-node-manage"
                         onClick={(event) => {
-                          const bounds =
-                            event.currentTarget.getBoundingClientRect();
+                          const bounds = event.currentTarget.getBoundingClientRect();
                           setWorkflowMenu({
                             x: bounds.right,
                             y: bounds.bottom,
@@ -2554,12 +2320,12 @@ function GlitchloomApp() {
             </details>
           ))}
           {catalog && groupedCatalog.size === 0 && (
-            <p className="empty-copy palette-empty">
-              No instruments match “{paletteQuery}”.
-            </p>
+            <p className="empty-copy palette-empty">No instruments match “{paletteQuery}”.</p>
           )}
         </aside>
         {paletteOpen && (
+          // This is an interactive drag handle; div preserves pointer sizing and keyboard support.
+          // biome-ignore lint/a11y/useSemanticElements: native hr cannot implement this resizer
           <div
             className="panel-resizer palette-resizer"
             role="separator"
@@ -2567,9 +2333,7 @@ function GlitchloomApp() {
             aria-orientation="vertical"
             aria-valuemin={PANEL_LIMITS.palette.minimum}
             aria-valuemax={PANEL_LIMITS.palette.maximum}
-            aria-valuenow={Math.round(
-              paletteWidth ?? responsivePanelDefault("palette"),
-            )}
+            aria-valuenow={Math.round(paletteWidth ?? responsivePanelDefault("palette"))}
             tabIndex={0}
             title="Drag to resize · double-click to reset"
             onPointerDown={(event) => beginPanelResize("palette", event)}
@@ -2577,7 +2341,7 @@ function GlitchloomApp() {
             onDoubleClick={() => resetPanelWidth("palette")}
           />
         )}
-
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: React Flow canvas is a native drop target */}
         <section
           ref={canvasRef}
           className="canvas"
@@ -2653,9 +2417,7 @@ function GlitchloomApp() {
               ) {
                 return;
               }
-              const sourceNode = nodes.find(
-                (node) => node.id === connectionState.fromNode?.id,
-              );
+              const sourceNode = nodes.find((node) => node.id === connectionState.fromNode?.id);
               const sourceHandle = connectionState.fromHandle.id;
               const sourcePort = sourceNode?.data.definition.outputs.find(
                 (port) => port.name === sourceHandle,
@@ -2686,26 +2448,19 @@ function GlitchloomApp() {
             onNodeClick={(event, node) => {
               const additive = event.ctrlKey || event.metaKey;
               if (additive) {
-                const previouslySelected = new Set(
-                  selectedNodes.map((item) => item.id),
-                );
+                const previouslySelected = new Set(selectedNodes.map((item) => item.id));
                 const willSelect = !previouslySelected.has(node.id);
                 setNodes((current) =>
                   current.map((item) => ({
                     ...item,
-                    selected:
-                      item.id === node.id
-                        ? willSelect
-                        : previouslySelected.has(item.id),
+                    selected: item.id === node.id ? willSelect : previouslySelected.has(item.id),
                   })),
                 );
                 if (willSelect) {
                   setSelectedId(node.id);
                   setInspectorOpen(true);
                 } else if (selectedId === node.id) {
-                  const fallback = selectedNodes
-                    .filter((item) => item.id !== node.id)
-                    .at(-1);
+                  const fallback = selectedNodes.filter((item) => item.id !== node.id).at(-1);
                   setSelectedId(fallback?.id);
                   setInspectorOpen(Boolean(fallback));
                 }
@@ -2795,12 +2550,7 @@ function GlitchloomApp() {
             connectionLineStyle={{ stroke: "#b8a4e6", strokeWidth: 2 }}
             proOptions={{ hideAttribution: true }}
           >
-            <Background
-              variant={BackgroundVariant.Lines}
-              gap={32}
-              size={0.7}
-              color="#292633"
-            />
+            <Background variant={BackgroundVariant.Lines} gap={32} size={0.7} color="#292633" />
             <MiniMap
               nodeColor={(node) => {
                 const category = (node.data as LoomNode["data"]).definition.category;
@@ -2817,10 +2567,7 @@ function GlitchloomApp() {
             <Controls showInteractive={false} />
           </ReactFlow>
           {executionScope && (
-            <div
-              className={`execution-scope-bar status-${executionScope.status}`}
-              role="status"
-            >
+            <div className={`execution-scope-bar status-${executionScope.status}`} role="status">
               <span className="execution-scope-mark" aria-hidden="true" />
               <div>
                 <strong>
@@ -2865,9 +2612,7 @@ function GlitchloomApp() {
             <div className="run-overlay">
               <span className="shuttle" />
               <strong>Throwing the shuttle</strong>
-              <small>
-                {formatElapsed(runElapsed)} · model endpoints may lazily load weights
-              </small>
+              <small>{formatElapsed(runElapsed)} · model endpoints may lazily load weights</small>
             </div>
           )}
           {runError && !running && (
@@ -2881,11 +2626,8 @@ function GlitchloomApp() {
           )}
           {contextMenu && (
             <div
-              className={`context-menu ${
-                contextMenu.scope === "pane" ? "quick-add-menu" : ""
-              } ${
-                contextMenu.scope === "pane" &&
-                contextMenu.pendingConnection
+              className={`context-menu ${contextMenu.scope === "pane" ? "quick-add-menu" : ""} ${
+                contextMenu.scope === "pane" && contextMenu.pendingConnection
                   ? "is-connection-picker"
                   : ""
               }`}
@@ -2895,8 +2637,7 @@ function GlitchloomApp() {
                   8,
                   Math.min(
                     contextMenu.x,
-                    window.innerWidth -
-                      (contextMenu.scope === "pane" ? 294 : 226),
+                    window.innerWidth - (contextMenu.scope === "pane" ? 294 : 226),
                   ),
                 ),
                 top: Math.max(
@@ -2906,8 +2647,7 @@ function GlitchloomApp() {
                     window.innerHeight -
                       (contextMenu.scope === "pane"
                         ? 470
-                        : contextMenu.scope === "node" ||
-                            contextMenu.scope === "selection"
+                        : contextMenu.scope === "node" || contextMenu.scope === "selection"
                           ? 520
                           : 220),
                   ),
@@ -2915,19 +2655,14 @@ function GlitchloomApp() {
               }}
               onContextMenu={(event) => event.preventDefault()}
             >
-              {(contextMenu.scope === "node" ||
-                contextMenu.scope === "selection") && (
+              {(contextMenu.scope === "node" || contextMenu.scope === "selection") && (
                 <>
                   {contextualWorkflowDefinition && (
                     <>
                       <button
                         type="button"
                         role="menuitem"
-                        onClick={() =>
-                          void openWorkflowEditor(
-                            contextualWorkflowDefinition,
-                          )
-                        }
+                        onClick={() => void openWorkflowEditor(contextualWorkflowDefinition)}
                       >
                         <Pencil size={14} />
                         Edit saved workflow
@@ -2936,11 +2671,7 @@ function GlitchloomApp() {
                         type="button"
                         role="menuitem"
                         className="is-danger"
-                        onClick={() =>
-                          requestDeleteWorkflow(
-                            contextualWorkflowDefinition,
-                          )
-                        }
+                        onClick={() => requestDeleteWorkflow(contextualWorkflowDefinition)}
                       >
                         <Trash2 size={14} />
                         Delete saved workflow
@@ -2954,29 +2685,24 @@ function GlitchloomApp() {
                     disabled={running}
                     onClick={() =>
                       void execute(
-                        contextMenu.scope === "node"
-                          ? [contextMenu.nodeId]
-                          : contextMenu.nodeIds,
+                        contextMenu.scope === "node" ? [contextMenu.nodeId] : contextMenu.nodeIds,
                       )
                     }
                   >
                     <Play size={14} fill="currentColor" />
-                    {contextMenu.scope === "node"
-                      ? "Run to here"
-                      : "Run to selection"}
+                    {contextMenu.scope === "node" ? "Run to here" : "Run to selection"}
                   </button>
-                  {contextMenu.scope === "node" &&
-                    contextMenu.nodeIds.length > 1 && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={running}
-                        onClick={() => void execute(contextMenu.nodeIds)}
-                      >
-                        <Play size={14} />
-                        Run to selection
-                      </button>
-                    )}
+                  {contextMenu.scope === "node" && contextMenu.nodeIds.length > 1 && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={running}
+                      onClick={() => void execute(contextMenu.nodeIds)}
+                    >
+                      <Play size={14} />
+                      Run to selection
+                    </button>
+                  )}
                   <span className="context-menu-separator" />
                   <button
                     type="button"
@@ -2990,9 +2716,7 @@ function GlitchloomApp() {
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() =>
-                      selectRelated(contextMenu.nodeIds, "upstream")
-                    }
+                    onClick={() => selectRelated(contextMenu.nodeIds, "upstream")}
                   >
                     <GitMerge size={14} />
                     Select upstream
@@ -3000,9 +2724,7 @@ function GlitchloomApp() {
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() =>
-                      selectRelated(contextMenu.nodeIds, "downstream")
-                    }
+                    onClick={() => selectRelated(contextMenu.nodeIds, "downstream")}
                   >
                     <Columns3 size={14} />
                     Select downstream
@@ -3025,9 +2747,7 @@ function GlitchloomApp() {
                       <button
                         type="button"
                         role="menuitem"
-                        onClick={() =>
-                          arrangeSelection(contextSelectionIds, "align-left")
-                        }
+                        onClick={() => arrangeSelection(contextSelectionIds, "align-left")}
                       >
                         <Columns3 size={14} />
                         Align left
@@ -3035,9 +2755,7 @@ function GlitchloomApp() {
                       <button
                         type="button"
                         role="menuitem"
-                        onClick={() =>
-                          arrangeSelection(contextSelectionIds, "align-top")
-                        }
+                        onClick={() => arrangeSelection(contextSelectionIds, "align-top")}
                       >
                         <Rows3 size={14} />
                         Align top
@@ -3047,12 +2765,7 @@ function GlitchloomApp() {
                           <button
                             type="button"
                             role="menuitem"
-                            onClick={() =>
-                              arrangeSelection(
-                                contextSelectionIds,
-                                "distribute-x",
-                              )
-                            }
+                            onClick={() => arrangeSelection(contextSelectionIds, "distribute-x")}
                           >
                             <Columns3 size={14} />
                             Distribute horizontally
@@ -3060,12 +2773,7 @@ function GlitchloomApp() {
                           <button
                             type="button"
                             role="menuitem"
-                            onClick={() =>
-                              arrangeSelection(
-                                contextSelectionIds,
-                                "distribute-y",
-                              )
-                            }
+                            onClick={() => arrangeSelection(contextSelectionIds, "distribute-y")}
                           >
                             <Rows3 size={14} />
                             Distribute vertically
@@ -3095,12 +2803,7 @@ function GlitchloomApp() {
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() =>
-                      insertPassthrough(
-                        contextMenu.edgeId,
-                        contextMenu.flowPosition,
-                      )
-                    }
+                    onClick={() => insertPassthrough(contextMenu.edgeId, contextMenu.flowPosition)}
                   >
                     <Plus size={14} />
                     Insert passthrough
@@ -3148,10 +2851,7 @@ function GlitchloomApp() {
                         if (event.key === "ArrowDown") {
                           event.preventDefault();
                           setQuickAddIndex((current) =>
-                            Math.min(
-                              current + 1,
-                              Math.max(0, quickAddEntries.length - 1),
-                            ),
+                            Math.min(current + 1, Math.max(0, quickAddEntries.length - 1)),
                           );
                         } else if (event.key === "ArrowUp") {
                           event.preventDefault();
@@ -3214,11 +2914,7 @@ function GlitchloomApp() {
                   {!contextMenu.pendingConnection && (
                     <>
                       <span className="context-menu-separator" />
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={selectAllNodes}
-                      >
+                      <button type="button" role="menuitem" onClick={selectAllNodes}>
                         <Focus size={14} />
                         Select all nodes
                         <kbd>Ctrl+A</kbd>
@@ -3255,7 +2951,6 @@ function GlitchloomApp() {
             </div>
           )}
         </section>
-
         <div ref={inspectorRef} className="inspector-shell">
           <Inspector
             selectedNode={selectedNode}
@@ -3289,6 +2984,8 @@ function GlitchloomApp() {
           />
         </div>
         {inspectorOpen && (
+          // This is an interactive drag handle; div preserves pointer sizing and keyboard support.
+          // biome-ignore lint/a11y/useSemanticElements: native hr cannot implement this resizer
           <div
             className="panel-resizer inspector-resizer"
             role="separator"
@@ -3296,9 +2993,7 @@ function GlitchloomApp() {
             aria-orientation="vertical"
             aria-valuemin={PANEL_LIMITS.inspector.minimum}
             aria-valuemax={PANEL_LIMITS.inspector.maximum}
-            aria-valuenow={Math.round(
-              inspectorWidth ?? responsivePanelDefault("inspector"),
-            )}
+            aria-valuenow={Math.round(inspectorWidth ?? responsivePanelDefault("inspector"))}
             tabIndex={0}
             title="Drag to resize · double-click to reset"
             onPointerDown={(event) => beginPanelResize("inspector", event)}
@@ -3306,9 +3001,7 @@ function GlitchloomApp() {
             onDoubleClick={() => resetPanelWidth("inspector")}
           />
         )}
-        {savingLoom && (
-          <div className="edit-lock-overlay" aria-hidden="true" />
-        )}
+        {savingLoom && <div className="edit-lock-overlay" aria-hidden="true" />}
       </main>
       {workflowMenu && (
         <div
@@ -3324,9 +3017,7 @@ function GlitchloomApp() {
             type="button"
             role="menuitem"
             onClick={() => void openWorkflowEditor(workflowMenu.definition)}
-            disabled={
-              loadingWorkflowId === workflowMenu.definition.workflow?.id
-            }
+            disabled={loadingWorkflowId === workflowMenu.definition.workflow?.id}
           >
             {loadingWorkflowId === workflowMenu.definition.workflow?.id ? (
               <LoaderCircle className="spin-icon" size={14} />
@@ -3347,10 +3038,13 @@ function GlitchloomApp() {
         </div>
       )}
       {loomLibraryOpen && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Close control
         <div
           className="dialog-backdrop"
           onClick={() => !loadingDocumentId && setLoomLibraryOpen(false)}
         >
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
             className="loom-library-dialog"
             role="dialog"
@@ -3365,8 +3059,8 @@ function GlitchloomApp() {
               <div>
                 <h2 id="loom-library-title">Open a loom</h2>
                 <p>
-                  Saved looms reopen as editable documents. Templates and copies
-                  always start in a new unsaved tab.
+                  Saved looms reopen as editable documents. Templates and copies always start in a
+                  new unsaved tab.
                 </p>
               </div>
             </div>
@@ -3416,7 +3110,9 @@ function GlitchloomApp() {
               <section className="loom-library-section">
                 <div className="loom-library-section-heading">
                   <strong>Saved looms</strong>
-                  <span>{looms.length} local document{looms.length === 1 ? "" : "s"}</span>
+                  <span>
+                    {looms.length} local document{looms.length === 1 ? "" : "s"}
+                  </span>
                 </div>
                 <div className="loom-library-list">
                   {looms.map((loom) => (
@@ -3460,9 +3156,7 @@ function GlitchloomApp() {
                 </div>
               </section>
             </div>
-            {loomLibraryError && (
-              <p className="workflow-error">{loomLibraryError}</p>
-            )}
+            {loomLibraryError && <p className="workflow-error">{loomLibraryError}</p>}
             <div className="workflow-dialog-actions">
               <button
                 type="button"
@@ -3477,10 +3171,13 @@ function GlitchloomApp() {
         </div>
       )}
       {loomSaveDialogOpen && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Cancel control
         <div
           className="dialog-backdrop"
           onClick={() => !savingLoom && setLoomSaveDialogOpen(false)}
         >
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
             className="workflow-dialog loom-save-dialog"
             role="dialog"
@@ -3531,16 +3228,10 @@ function GlitchloomApp() {
               <button
                 type="button"
                 className="run-button"
-                onClick={() =>
-                  void persistCurrentLoom(loomSaveName, { createNew: true })
-                }
+                onClick={() => void persistCurrentLoom(loomSaveName, { createNew: true })}
                 disabled={savingLoom || !loomSaveName.trim()}
               >
-                {savingLoom ? (
-                  <LoaderCircle className="spin-icon" size={15} />
-                ) : (
-                  <Save size={15} />
-                )}
+                {savingLoom ? <LoaderCircle className="spin-icon" size={15} /> : <Save size={15} />}
                 {savingLoom ? "Saving…" : "Save loom"}
               </button>
             </div>
@@ -3548,10 +3239,10 @@ function GlitchloomApp() {
         </div>
       )}
       {resetDialogOpen && (
-        <div
-          className="dialog-backdrop"
-          onClick={() => setResetDialogOpen(false)}
-        >
+        // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Keep working control
+        <div className="dialog-backdrop" onClick={() => setResetDialogOpen(false)}>
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
             className="reset-dialog"
             role="dialog"
@@ -3565,8 +3256,8 @@ function GlitchloomApp() {
             <div>
               <h2 id="reset-dialog-title">Reset to the starter graph?</h2>
               <p>
-                Your current nodes, connections, configuration, and run output will be
-                replaced. You can undo immediately after resetting.
+                Your current nodes, connections, configuration, and run output will be replaced. You
+                can undo immediately after resetting.
               </p>
             </div>
             <div className="reset-dialog-actions">
@@ -3578,11 +3269,7 @@ function GlitchloomApp() {
               >
                 Keep working
               </button>
-              <button
-                type="button"
-                className="danger-button"
-                onClick={confirmStarterReset}
-              >
+              <button type="button" className="danger-button" onClick={confirmStarterReset}>
                 Reset graph
               </button>
             </div>
@@ -3590,10 +3277,13 @@ function GlitchloomApp() {
         </div>
       )}
       {saveDialogOpen && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Cancel control
         <div
           className="dialog-backdrop"
           onClick={() => !savingWorkflow && setSaveDialogOpen(false)}
         >
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
             className="workflow-dialog"
             role="dialog"
@@ -3644,21 +3334,15 @@ function GlitchloomApp() {
                 <strong>Inputs</strong>
                 {workflowDraft?.inputs.length ? (
                   workflowDraft.inputs.map((input) => (
-                    <label
-                      className="workflow-boundary-port"
-                      key={input.name}
-                    >
+                    <label className="workflow-boundary-port" key={input.name}>
                       <input
                         aria-label={`Public input name for ${input.name}`}
                         value={input.label}
                         onChange={(event) =>
                           setWorkflowBoundaryLabels((current) => ({
                             ...current,
-                            [workflowBindingKey(
-                              "input",
-                              input.node_id,
-                              input.node_port,
-                            )]: event.target.value,
+                            [workflowBindingKey("input", input.node_id, input.node_port)]:
+                              event.target.value,
                           }))
                         }
                         disabled={savingWorkflow}
@@ -3677,21 +3361,15 @@ function GlitchloomApp() {
                 <strong>Outputs</strong>
                 {workflowDraft?.outputs.length ? (
                   workflowDraft.outputs.map((output) => (
-                    <label
-                      className="workflow-boundary-port"
-                      key={output.name}
-                    >
+                    <label className="workflow-boundary-port" key={output.name}>
                       <input
                         aria-label={`Public output name for ${output.name}`}
                         value={output.label}
                         onChange={(event) =>
                           setWorkflowBoundaryLabels((current) => ({
                             ...current,
-                            [workflowBindingKey(
-                              "output",
-                              output.node_id,
-                              output.node_port,
-                            )]: event.target.value,
+                            [workflowBindingKey("output", output.node_id, output.node_port)]:
+                              event.target.value,
                           }))
                         }
                         disabled={savingWorkflow}
@@ -3736,6 +3414,8 @@ function GlitchloomApp() {
         </div>
       )}
       {deleteDefinition?.workflow && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Keep workflow control
         <div
           className="dialog-backdrop"
           onClick={() => {
@@ -3745,6 +3425,7 @@ function GlitchloomApp() {
             }
           }}
         >
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
             className="reset-dialog workflow-delete-dialog"
             role="dialog"
@@ -3756,13 +3437,11 @@ function GlitchloomApp() {
               <Trash2 size={18} />
             </span>
             <div>
-              <h2 id="workflow-delete-title">
-                Delete “{deleteDefinition.label}”?
-              </h2>
+              <h2 id="workflow-delete-title">Delete “{deleteDefinition.label}”?</h2>
               <p>
                 All {deleteDefinition.workflow.version} saved version
-                {deleteDefinition.workflow.version === 1 ? "" : "s"} will move
-                to local workflow trash.
+                {deleteDefinition.workflow.version === 1 ? "" : "s"} will move to local workflow
+                trash.
                 {workflowReferenceCount > 0 &&
                   ` ${workflowReferenceCount} node${
                     workflowReferenceCount === 1 ? "" : "s"
@@ -3803,10 +3482,10 @@ function GlitchloomApp() {
         </div>
       )}
       {closeTabId && (
-        <div
-          className="dialog-backdrop"
-          onClick={() => setCloseTabId(undefined)}
-        >
+        // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Keep editing control
+        <div className="dialog-backdrop" onClick={() => setCloseTabId(undefined)}>
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
             className="reset-dialog"
             role="dialog"

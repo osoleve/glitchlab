@@ -1,10 +1,10 @@
 import { Check, Copy, FileJson2, Text } from "lucide-react";
 import { useState } from "react";
 import {
-  jsonText,
-  normalizePreviewValue,
   type CompletionEntry,
   type JsonRecord,
+  jsonText,
+  normalizePreviewValue,
   type TextEntry,
 } from "./previewModel";
 
@@ -53,19 +53,13 @@ function CompletionCard({
     <article className="completion-card">
       <header className="completion-card-heading">
         <div>
-          <span>
-            {label ?? (total > 1 ? `Completion ${index + 1}` : "Completion")}
-          </span>
+          <span>{label ?? (total > 1 ? `Completion ${index + 1}` : "Completion")}</span>
           <strong>{entry.model ?? "Model response"}</strong>
         </div>
-        {entry.choiceIndex !== undefined && (
-          <code>choice {entry.choiceIndex}</code>
-        )}
+        {entry.choiceIndex !== undefined && <code>choice {entry.choiceIndex}</code>}
       </header>
       <div className="preview-tags">
-        {entry.finishReason && (
-          <span title="Finish reason">{entry.finishReason}</span>
-        )}
+        {entry.finishReason && <span title="Finish reason">{entry.finishReason}</span>}
         {tokens && <span title="Token usage">{tokens}</span>}
         {latency && <span title="Request latency">{latency}</span>}
         {entry.cacheHit !== undefined && (
@@ -75,9 +69,7 @@ function CompletionCard({
         )}
         {entry.seed && <span title="Sampling seed">seed {entry.seed}</span>}
         {entry.modelRevision && (
-          <span title={entry.modelRevision}>
-            rev {entry.modelRevision.slice(0, 9)}
-          </span>
+          <span title={entry.modelRevision}>rev {entry.modelRevision.slice(0, 9)}</span>
         )}
       </div>
       <pre className="preview-text">{entry.text}</pre>
@@ -132,23 +124,14 @@ function TextCard({
   );
 }
 
-export function PreviewValue({
-  value,
-  itemLabels,
-}: {
-  value: unknown;
-  itemLabels?: string[];
-}) {
+export function PreviewValue({ value, itemLabels }: { value: unknown; itemLabels?: string[] }) {
   const [copied, setCopied] = useState<"text" | "json">();
   const model = normalizePreviewValue(value);
   const completions = model.kind === "completion" ? model.entries : undefined;
   const texts = model.kind === "text" ? model.entries : undefined;
-  const readableText =
-    model.kind === "structured" ? undefined : model.readableText;
-  const itemCount =
-    model.kind === "structured" ? undefined : model.entries.length;
-  const labels =
-    itemLabels && itemLabels.length === itemCount ? itemLabels : undefined;
+  const readableText = model.kind === "structured" ? undefined : model.readableText;
+  const itemCount = model.kind === "structured" ? undefined : model.entries.length;
+  const labels = itemLabels && itemLabels.length === itemCount ? itemLabels : undefined;
 
   const copy = (kind: "text" | "json", content: string) => {
     void navigator.clipboard.writeText(content);
@@ -215,9 +198,7 @@ export function PreviewValue({
           ))}
         </div>
       )}
-      {!completions && !texts && (
-        <pre className="json-preview">{model.raw}</pre>
-      )}
+      {!completions && !texts && <pre className="json-preview">{model.raw}</pre>}
 
       {(completions || texts) && (
         <details className="raw-data-details">

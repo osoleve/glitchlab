@@ -36,15 +36,11 @@ describe("PreviewValue", () => {
     expect(screen.getByText("Newer branch")).toBeInTheDocument();
     expect(screen.getByText("older response")).toBeInTheDocument();
     expect(screen.getByText("newer response")).toBeInTheDocument();
-    expect(screen.getByTitle("Token usage")).toHaveTextContent(
-      "2 generated · 8 total",
-    );
+    expect(screen.getByTitle("Token usage")).toHaveTextContent("2 generated · 8 total");
     expect(screen.getAllByTitle("Sampling seed")).toHaveLength(2);
     expect(screen.getAllByTitle("Sampling seed")[0]).toHaveTextContent("seed 7");
     expect(screen.getAllByTitle("Sampling seed")[1]).toHaveTextContent("seed 19");
-    expect(
-      screen.getByRole("button", { name: "Copy readable text" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Copy readable text" })).toBeEnabled();
   });
 
   it("renders corruption records as readable text", () => {

@@ -12,9 +12,7 @@ function makeNode(
   if (!definition) {
     throw new Error(`Starter graph refers to missing node kind ${kind}.`);
   }
-  const config = Object.fromEntries(
-    definition.fields.map((field) => [field.name, field.default]),
-  );
+  const config = Object.fromEntries(definition.fields.map((field) => [field.name, field.default]));
   return {
     id,
     type: "loomNode",
@@ -43,56 +41,25 @@ export function talkieStarter(definitions: NodeDefinition[]): {
     extra_body: { top_k: 40, presence_penalty: 0 },
   };
   const nodes = [
-    makeNode(
-      "prompt",
-      "text_input",
-      "Seed prompt",
-      { x: 0, y: 120 },
-      byKind,
-      { text: "The atomic age will bring" },
-    ),
-    makeNode(
-      "typogre",
-      "glitchling",
-      "Surface noise",
-      { x: 0, y: 620 },
-      byKind,
-      { name: "typogre", seed: 151, params: {} },
-    ),
-    makeNode(
-      "corrupt",
-      "corrupt",
-      "Corrupt prompt",
-      { x: 360, y: 620 },
-      byKind,
-    ),
-    makeNode(
-      "endpoint",
-      "endpoint",
-      "Elsie completion API",
-      { x: 360, y: 0 },
-      byKind,
-      {
-        base_url: "http://elsie-1:8790/v1",
-        timeout_seconds: 180,
-      },
-    ),
-    makeNode(
-      "vintage_model",
-      "model",
-      "Vintage Talkie",
-      { x: 360, y: 210 },
-      byKind,
-      { model_id: "talkie-1930-13b-base" },
-    ),
-    makeNode(
-      "web_model",
-      "model",
-      "Web Talkie",
-      { x: 360, y: 410 },
-      byKind,
-      { model_id: "talkie-web-13b-base" },
-    ),
+    makeNode("prompt", "text_input", "Seed prompt", { x: 0, y: 120 }, byKind, {
+      text: "The atomic age will bring",
+    }),
+    makeNode("typogre", "glitchling", "Surface noise", { x: 0, y: 620 }, byKind, {
+      name: "typogre",
+      seed: 151,
+      params: {},
+    }),
+    makeNode("corrupt", "corrupt", "Corrupt prompt", { x: 360, y: 620 }, byKind),
+    makeNode("endpoint", "endpoint", "Elsie completion API", { x: 360, y: 0 }, byKind, {
+      base_url: "http://elsie-1:8790/v1",
+      timeout_seconds: 180,
+    }),
+    makeNode("vintage_model", "model", "Vintage Talkie", { x: 360, y: 210 }, byKind, {
+      model_id: "talkie-1930-13b-base",
+    }),
+    makeNode("web_model", "model", "Web Talkie", { x: 360, y: 410 }, byKind, {
+      model_id: "talkie-web-13b-base",
+    }),
     makeNode(
       "original_vintage",
       "completion",
@@ -125,21 +92,10 @@ export function talkieStarter(definitions: NodeDefinition[]): {
       byKind,
       completionConfig,
     ),
-    makeNode(
-      "collect",
-      "collect",
-      "Four completions",
-      { x: 1160, y: 390 },
-      byKind,
-      { flatten: false },
-    ),
-    makeNode(
-      "preview",
-      "preview",
-      "Run inspector",
-      { x: 1520, y: 390 },
-      byKind,
-    ),
+    makeNode("collect", "collect", "Four completions", { x: 1160, y: 390 }, byKind, {
+      flatten: false,
+    }),
+    makeNode("preview", "preview", "Run inspector", { x: 1520, y: 390 }, byKind),
   ];
   const edges: LoomEdge[] = [
     {

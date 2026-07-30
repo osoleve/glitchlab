@@ -1,8 +1,7 @@
 :root {
   color: #f0edf3;
   background: #0d0b10;
-  font-family: "Segoe UI Variable", "Aptos", Inter, ui-sans-serif, system-ui,
-    sans-serif;
+  font-family: "Segoe UI Variable", "Aptos", Inter, ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
@@ -27,8 +26,7 @@
   --thread-file: #c7a060;
   --thread-inspect: #82b779;
   --thread-workflow: #cf80bd;
-  --mono: "Cascadia Mono", "Cascadia Code", "SFMono-Regular", Consolas,
-    monospace;
+  --mono: "Cascadia Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 }
 
 * {
@@ -132,9 +130,7 @@ summary:focus-visible {
 
 .graph-tab.is-active {
   color: #e4dce7;
-  background:
-    linear-gradient(180deg, rgba(207, 128, 189, 0.045), transparent),
-    #211b25;
+  background: linear-gradient(180deg, rgba(207, 128, 189, 0.045), transparent), #211b25;
   border-color: #5a475e;
   box-shadow: inset 0 2px 0 var(--thread-workflow);
 }
@@ -229,8 +225,7 @@ summary:focus-visible {
   gap: 18px;
   padding: 0 15px 0 17px;
   background:
-    linear-gradient(90deg, rgba(211, 173, 114, 0.025), transparent 28%),
-    rgba(17, 14, 19, 0.98);
+    linear-gradient(90deg, rgba(211, 173, 114, 0.025), transparent 28%), rgba(17, 14, 19, 0.98);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.24);
 }
@@ -373,7 +368,9 @@ summary:focus-visible {
   background: rgba(9, 8, 11, 0.45);
   border: 1px solid #2c2731;
   border-radius: 4px;
-  transition: border-color 140ms ease, background 140ms ease;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
 }
 
 .loom-title:hover,
@@ -522,7 +519,8 @@ summary:focus-visible {
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-columns: var(--palette-width) minmax(0, 1fr)
+  grid-template-columns:
+    var(--palette-width) minmax(0, 1fr)
     var(--inspector-width);
   transition: grid-template-columns 160ms ease;
 }
@@ -913,8 +911,7 @@ summary:focus-visible {
   overflow: hidden;
   background:
     radial-gradient(circle at 48% 32%, rgba(112, 87, 143, 0.09), transparent 42%),
-    linear-gradient(135deg, rgba(211, 173, 114, 0.018) 25%, transparent 25%) 0 0 /
-      9px 9px,
+    linear-gradient(135deg, rgba(211, 173, 114, 0.018) 25%, transparent 25%) 0 0 / 9px 9px,
     #0e0c11;
 }
 
@@ -922,14 +919,13 @@ summary:focus-visible {
   position: absolute;
   z-index: 1;
   inset: 0;
-  background:
-    repeating-linear-gradient(
-      113deg,
-      transparent 0,
-      transparent 17px,
-      rgba(255, 255, 255, 0.008) 18px,
-      transparent 19px
-    );
+  background: repeating-linear-gradient(
+    113deg,
+    transparent 0,
+    transparent 17px,
+    rgba(255, 255, 255, 0.008) 18px,
+    transparent 19px
+  );
   content: "";
   pointer-events: none;
 }
@@ -1019,8 +1015,7 @@ summary:focus-visible {
   background:
     radial-gradient(circle at 48% 32%, rgba(119, 82, 145, 0.16), transparent 44%),
     radial-gradient(circle at 68% 78%, rgba(207, 128, 189, 0.07), transparent 36%),
-    linear-gradient(135deg, rgba(211, 173, 114, 0.018) 25%, transparent 25%) 0 0 /
-      9px 9px,
+    linear-gradient(135deg, rgba(211, 173, 114, 0.018) 25%, transparent 25%) 0 0 / 9px 9px,
     #0d0a10;
 }
 
@@ -1188,8 +1183,7 @@ summary:focus-visible {
   overflow: visible;
   color: #e3dde6;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 46%),
-    rgba(26, 22, 30, 0.985);
+    linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 46%), rgba(26, 22, 30, 0.985);
   border: 1px solid #3c3541;
   border-radius: 5px 5px 13px 5px;
   box-shadow:
@@ -1357,14 +1351,13 @@ summary:focus-visible {
   bottom: 10px;
   left: 0;
   width: 3px;
-  background:
-    repeating-linear-gradient(
-      180deg,
-      var(--accent) 0,
-      var(--accent) 6px,
-      transparent 6px,
-      transparent 9px
-    );
+  background: repeating-linear-gradient(
+    180deg,
+    var(--accent) 0,
+    var(--accent) 6px,
+    transparent 6px,
+    transparent 9px
+  );
   border-radius: 0 3px 3px 0;
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 36%, transparent));
 }
@@ -2097,9 +2090,7 @@ summary:focus-visible {
 .completion-card,
 .text-preview-card {
   overflow: hidden;
-  background:
-    linear-gradient(135deg, rgba(170, 138, 224, 0.035), transparent 45%),
-    #100d12;
+  background: linear-gradient(135deg, rgba(170, 138, 224, 0.035), transparent 45%), #100d12;
   border: 1px solid #38313d;
   border-radius: 4px 4px 10px 4px;
 }
@@ -2183,8 +2174,7 @@ summary:focus-visible {
   color: #ece6ee;
   background: transparent;
   border: 0;
-  font-family: "Segoe UI Variable", "Aptos", Inter, ui-sans-serif, system-ui,
-    sans-serif;
+  font-family: "Segoe UI Variable", "Aptos", Inter, ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
   line-height: 1.65;
   white-space: pre-wrap;
@@ -2515,8 +2505,7 @@ summary:focus-visible {
   overflow: auto;
   padding: 5px;
   background:
-    linear-gradient(145deg, rgba(207, 128, 189, 0.035), transparent 48%),
-    rgba(24, 20, 28, 0.985);
+    linear-gradient(145deg, rgba(207, 128, 189, 0.035), transparent 48%), rgba(24, 20, 28, 0.985);
   border: 1px solid #514657;
   border-radius: 5px 5px 11px 5px;
   box-shadow: 0 20px 52px rgba(0, 0, 0, 0.5);
@@ -2708,9 +2697,7 @@ summary:focus-visible {
   width: min(580px, 100%);
   gap: 15px;
   padding: 20px;
-  background:
-    linear-gradient(135deg, rgba(207, 128, 189, 0.055), transparent 48%),
-    #18141b;
+  background: linear-gradient(135deg, rgba(207, 128, 189, 0.055), transparent 48%), #18141b;
   border: 1px solid #59435d;
   border-radius: 6px 6px 14px 6px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
@@ -2722,9 +2709,7 @@ summary:focus-visible {
   max-height: min(720px, calc(100vh - 40px));
   gap: 15px;
   padding: 20px;
-  background:
-    linear-gradient(135deg, rgba(90, 169, 162, 0.055), transparent 48%),
-    #18141b;
+  background: linear-gradient(135deg, rgba(90, 169, 162, 0.055), transparent 48%), #18141b;
   border: 1px solid #405e5c;
   border-radius: 6px 6px 14px 6px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
@@ -3002,9 +2987,7 @@ button.loom-library-item:hover,
   grid-template-columns: 40px minmax(0, 1fr);
   gap: 14px;
   padding: 20px;
-  background:
-    linear-gradient(135deg, rgba(223, 116, 125, 0.045), transparent 48%),
-    #18141b;
+  background: linear-gradient(135deg, rgba(223, 116, 125, 0.045), transparent 48%), #18141b;
   border: 1px solid #594049;
   border-radius: 6px 6px 14px 6px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);

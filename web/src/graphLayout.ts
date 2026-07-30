@@ -1,10 +1,4 @@
-import {
-  Graph,
-  layout,
-  type EdgeLabel,
-  type GraphLabel,
-  type NodeLabel,
-} from "@dagrejs/dagre";
+import { type EdgeLabel, Graph, type GraphLabel, layout, type NodeLabel } from "@dagrejs/dagre";
 
 export interface LayoutNode {
   id: string;
@@ -70,9 +64,7 @@ export function tidyNodeLayout(
   graph.setDefaultEdgeLabel(() => ({}));
 
   const nodeIds = new Set(nodes.map((node) => node.id));
-  for (const node of [...nodes].sort((left, right) =>
-    left.id.localeCompare(right.id),
-  )) {
+  for (const node of [...nodes].sort((left, right) => left.id.localeCompare(right.id))) {
     graph.setNode(node.id, {
       width: Math.max(1, node.width),
       height: Math.max(1, node.height),
@@ -80,13 +72,10 @@ export function tidyNodeLayout(
   }
 
   const includedEdges = edges
-    .filter(
-      (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target),
-    )
+    .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
     .sort(
       (left, right) =>
-        left.source.localeCompare(right.source) ||
-        left.target.localeCompare(right.target),
+        left.source.localeCompare(right.source) || left.target.localeCompare(right.target),
     );
   includedEdges.forEach((edge, index) => {
     graph.setEdge(edge.source, edge.target, {}, `edge-${index}`);
@@ -103,9 +92,7 @@ export function tidyNodeLayout(
     });
   }
 
-  const originalPositions = new Map(
-    nodes.map((node) => [node.id, node.position]),
-  );
+  const originalPositions = new Map(nodes.map((node) => [node.id, node.position]));
   const originalCenter = centerOfBounds(nodes, originalPositions);
   const layoutCenter = centerOfBounds(nodes, positions);
   const offset = {

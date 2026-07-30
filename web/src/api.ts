@@ -6,6 +6,7 @@ import type {
   GraphSpec,
   LoadLoomResponse,
   LoadLoomTemplateResponse,
+  LoadWorkflowResponse,
   LoomDraft,
   LoomSpec,
   LoomSummary,
@@ -16,7 +17,6 @@ import type {
   RunScope,
   SaveWorkflowResponse,
   WorkflowDraft,
-  LoadWorkflowResponse,
 } from "./types";
 
 type JsonContent<Response> = Response extends {
@@ -42,35 +42,16 @@ type RequestPayload<Operation> = Operation extends {
 type CatalogPayload = SuccessPayload<paths["/api/catalog"]["get"], 200>;
 type LoomListPayload = SuccessPayload<paths["/api/looms"]["get"], 200>;
 type CreateLoomPayload = SuccessPayload<paths["/api/looms"]["post"], 201>;
-type LoadLoomPayload = SuccessPayload<
-  paths["/api/looms/{loom_id}"]["get"],
-  200
->;
-type UpdateLoomPayload = SuccessPayload<
-  paths["/api/looms/{loom_id}"]["put"],
-  200
->;
-type DeleteLoomPayload = SuccessPayload<
-  paths["/api/looms/{loom_id}"]["delete"],
-  200
->;
-type LoomTemplateListPayload = SuccessPayload<
-  paths["/api/loom-templates"]["get"],
-  200
->;
+type LoadLoomPayload = SuccessPayload<paths["/api/looms/{loom_id}"]["get"], 200>;
+type UpdateLoomPayload = SuccessPayload<paths["/api/looms/{loom_id}"]["put"], 200>;
+type DeleteLoomPayload = SuccessPayload<paths["/api/looms/{loom_id}"]["delete"], 200>;
+type LoomTemplateListPayload = SuccessPayload<paths["/api/loom-templates"]["get"], 200>;
 type LoadLoomTemplatePayload = SuccessPayload<
   paths["/api/loom-templates/{template_id}"]["get"],
   200
 >;
 type RunPayload = SuccessPayload<paths["/api/runs"]["post"], 200>;
-type WorkflowListPayload = SuccessPayload<
-  paths["/api/workflows"]["get"],
-  200
->;
-type SaveWorkflowPayload = SuccessPayload<
-  paths["/api/workflows"]["post"],
-  201
->;
+type SaveWorkflowPayload = SuccessPayload<paths["/api/workflows"]["post"], 201>;
 type LoadWorkflowPayload = SuccessPayload<
   paths["/api/workflows/{workflow_id}/versions/{version}"]["get"],
   200
@@ -79,19 +60,12 @@ type UpdateWorkflowPayload = SuccessPayload<
   paths["/api/workflows/{workflow_id}/versions"]["post"],
   201
 >;
-type DeleteWorkflowPayload = SuccessPayload<
-  paths["/api/workflows/{workflow_id}"]["delete"],
-  200
->;
+type DeleteWorkflowPayload = SuccessPayload<paths["/api/workflows/{workflow_id}"]["delete"], 200>;
 
 type RunRequestPayload = RequestPayload<paths["/api/runs"]["post"]>;
 type CreateLoomRequestPayload = RequestPayload<paths["/api/looms"]["post"]>;
-type UpdateLoomRequestPayload = RequestPayload<
-  paths["/api/looms/{loom_id}"]["put"]
->;
-type SaveWorkflowRequestPayload = RequestPayload<
-  paths["/api/workflows"]["post"]
->;
+type UpdateLoomRequestPayload = RequestPayload<paths["/api/looms/{loom_id}"]["put"]>;
+type SaveWorkflowRequestPayload = RequestPayload<paths["/api/workflows"]["post"]>;
 type UpdateWorkflowRequestPayload = RequestPayload<
   paths["/api/workflows/{workflow_id}/versions"]["post"]
 >;
@@ -102,9 +76,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isCatalogPayload(
-  value: unknown,
-): value is CatalogPayload & CatalogResponse {
+function isCatalogPayload(value: unknown): value is CatalogPayload & CatalogResponse {
   return (
     isRecord(value) &&
     Array.isArray(value.nodes) &&
@@ -157,30 +129,18 @@ function isLoomSummary(value: unknown): value is LoomSummary {
 }
 
 function isLoomListPayload(value: unknown): value is LoomListPayload {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.looms) &&
-    value.looms.every(isLoomSummary)
-  );
+  return isRecord(value) && Array.isArray(value.looms) && value.looms.every(isLoomSummary);
 }
 
-function isCreateLoomPayload(
-  value: unknown,
-): value is CreateLoomPayload &
+function isCreateLoomPayload(value: unknown): value is CreateLoomPayload &
   UpdateLoomPayload & {
     loom: LoomSpec;
   } {
   return isRecord(value) && isLoomSpec(value.loom);
 }
 
-function isLoadLoomPayload(
-  value: unknown,
-): value is LoadLoomPayload & LoadLoomResponse {
-  return (
-    isRecord(value) &&
-    isLoomSpec(value.loom) &&
-    Array.isArray(value.definitions)
-  );
+function isLoadLoomPayload(value: unknown): value is LoadLoomPayload & LoadLoomResponse {
+  return isRecord(value) && isLoomSpec(value.loom) && Array.isArray(value.definitions);
 }
 
 function isDeleteLoomPayload(value: unknown): value is DeleteLoomPayload {
@@ -194,9 +154,7 @@ function isDeleteLoomPayload(value: unknown): value is DeleteLoomPayload {
   );
 }
 
-function isLoomTemplateListPayload(
-  value: unknown,
-): value is LoomTemplateListPayload {
+function isLoomTemplateListPayload(value: unknown): value is LoomTemplateListPayload {
   return (
     isRecord(value) &&
     Array.isArray(value.templates) &&
@@ -233,9 +191,7 @@ function isNodeRunResult(value: unknown): value is NodeRunResult {
   );
 }
 
-function isRunPayload(
-  value: unknown,
-): value is RunPayload & RunResponse {
+function isRunPayload(value: unknown): value is RunPayload & RunResponse {
   return (
     isRecord(value) &&
     value.status === "completed" &&
@@ -249,9 +205,7 @@ function isRunPayload(
   );
 }
 
-function isWorkflowSpec(
-  value: unknown,
-): value is SaveWorkflowResponse["workflow"] {
+function isWorkflowSpec(value: unknown): value is SaveWorkflowResponse["workflow"] {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
@@ -266,39 +220,19 @@ function isWorkflowSpec(
   );
 }
 
-function isWorkflowListPayload(value: unknown): value is WorkflowListPayload {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.workflows) &&
-    value.workflows.every(isWorkflowSpec)
-  );
-}
-
 function isSaveWorkflowPayload(
   value: unknown,
-): value is SaveWorkflowPayload &
-  UpdateWorkflowPayload &
-  SaveWorkflowResponse {
-  return (
-    isRecord(value) &&
-    isWorkflowSpec(value.workflow) &&
-    isRecord(value.definition)
-  );
+): value is SaveWorkflowPayload & UpdateWorkflowPayload & SaveWorkflowResponse {
+  return isRecord(value) && isWorkflowSpec(value.workflow) && isRecord(value.definition);
 }
 
 function isLoadWorkflowPayload(
   value: unknown,
 ): value is LoadWorkflowPayload & LoadWorkflowResponse {
-  return (
-    isRecord(value) &&
-    isWorkflowSpec(value.workflow) &&
-    Array.isArray(value.definitions)
-  );
+  return isRecord(value) && isWorkflowSpec(value.workflow) && Array.isArray(value.definitions);
 }
 
-function isDeleteWorkflowPayload(
-  value: unknown,
-): value is DeleteWorkflowPayload {
+function isDeleteWorkflowPayload(value: unknown): value is DeleteWorkflowPayload {
   return (
     isRecord(value) &&
     isRecord(value.deleted) &&
@@ -310,11 +244,7 @@ function isDeleteWorkflowPayload(
   );
 }
 
-async function decodeJson<T>(
-  response: Response,
-  label: string,
-  decoder: Decoder<T>,
-): Promise<T> {
+async function decodeJson<T>(response: Response, label: string, decoder: Decoder<T>): Promise<T> {
   let payload: unknown;
   try {
     payload = await response.json();
@@ -357,10 +287,7 @@ function runErrorDetail(payload: unknown, status: number): RunErrorDetail {
   ) {
     return { message: `Run failed with ${status}.` };
   }
-  const nodeId =
-    typeof payload.detail.node_id === "string"
-      ? payload.detail.node_id
-      : undefined;
+  const nodeId = typeof payload.detail.node_id === "string" ? payload.detail.node_id : undefined;
   const nodes = Array.isArray(payload.detail.nodes)
     ? payload.detail.nodes.filter(isNodeRunResult)
     : undefined;
@@ -388,10 +315,7 @@ export async function fetchCatalog(): Promise<CatalogResponse> {
   return decodeJson(response, "Catalog request", isCatalogPayload);
 }
 
-export async function runGraph(
-  graph: GraphSpec,
-  scope: RunScope,
-): Promise<RunResponse> {
+export async function runGraph(graph: GraphSpec, scope: RunScope): Promise<RunResponse> {
   const body = { graph, scope } satisfies RunRequestPayload;
   const response = await fetch("/api/runs", {
     method: "POST",
@@ -399,17 +323,12 @@ export async function runGraph(
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new ApiError(
-      runErrorDetail(await readOptionalJson(response), response.status),
-    );
+    throw new ApiError(runErrorDetail(await readOptionalJson(response), response.status));
   }
   return decodeJson(response, "Run request", isRunPayload);
 }
 
-async function documentResponseError(
-  response: Response,
-  fallback: string,
-): Promise<Error> {
+async function documentResponseError(response: Response, fallback: string): Promise<Error> {
   const detail = detailMessage(await readOptionalJson(response));
   return new Error(detail ?? `${fallback} (${response.status}).`);
 }
@@ -419,11 +338,7 @@ export async function fetchLooms(): Promise<LoomSummary[]> {
   if (!response.ok) {
     throw await documentResponseError(response, "Loom list failed");
   }
-  const payload = await decodeJson(
-    response,
-    "Loom list request",
-    isLoomListPayload,
-  );
+  const payload = await decodeJson(response, "Loom list request", isLoomListPayload);
   return payload.looms;
 }
 
@@ -437,11 +352,7 @@ export async function createLoom(draft: LoomDraft): Promise<LoomSpec> {
   if (!response.ok) {
     throw await documentResponseError(response, "Loom save failed");
   }
-  const payload = await decodeJson(
-    response,
-    "Loom save request",
-    isCreateLoomPayload,
-  );
+  const payload = await decodeJson(response, "Loom save request", isCreateLoomPayload);
   return payload.loom;
 }
 
@@ -470,17 +381,11 @@ export async function updateLoom(
   if (!response.ok) {
     throw await documentResponseError(response, "Loom update failed");
   }
-  const payload = await decodeJson(
-    response,
-    "Loom update request",
-    isCreateLoomPayload,
-  );
+  const payload = await decodeJson(response, "Loom update request", isCreateLoomPayload);
   return payload.loom;
 }
 
-export async function deleteLoom(
-  loomId: string,
-): Promise<DeleteLoomResponse> {
+export async function deleteLoom(loomId: string): Promise<DeleteLoomResponse> {
   const response = await fetch(`/api/looms/${encodeURIComponent(loomId)}`, {
     method: "DELETE",
   });
@@ -495,33 +400,19 @@ export async function fetchLoomTemplates(): Promise<LoomTemplateSummary[]> {
   if (!response.ok) {
     throw await documentResponseError(response, "Template list failed");
   }
-  const payload = await decodeJson(
-    response,
-    "Template list request",
-    isLoomTemplateListPayload,
-  );
+  const payload = await decodeJson(response, "Template list request", isLoomTemplateListPayload);
   return payload.templates;
 }
 
-export async function fetchLoomTemplate(
-  templateId: string,
-): Promise<LoadLoomTemplateResponse> {
-  const response = await fetch(
-    `/api/loom-templates/${encodeURIComponent(templateId)}`,
-  );
+export async function fetchLoomTemplate(templateId: string): Promise<LoadLoomTemplateResponse> {
+  const response = await fetch(`/api/loom-templates/${encodeURIComponent(templateId)}`);
   if (!response.ok) {
     throw await documentResponseError(response, "Template load failed");
   }
-  return decodeJson(
-    response,
-    "Template load request",
-    isLoadLoomTemplatePayload,
-  );
+  return decodeJson(response, "Template load request", isLoadLoomTemplatePayload);
 }
 
-export async function saveWorkflow(
-  draft: WorkflowDraft,
-): Promise<SaveWorkflowResponse> {
+export async function saveWorkflow(draft: WorkflowDraft): Promise<SaveWorkflowResponse> {
   const body = draft satisfies SaveWorkflowRequestPayload;
   const response = await fetch("/api/workflows", {
     method: "POST",
@@ -536,18 +427,12 @@ export async function saveWorkflow(
           "Restart Glitchloom, reload the page, and try again.",
       );
     }
-    throw new Error(
-      detailMessage(payload) ??
-        `Workflow save failed with ${response.status}.`,
-    );
+    throw new Error(detailMessage(payload) ?? `Workflow save failed with ${response.status}.`);
   }
   return decodeJson(response, "Workflow save request", isSaveWorkflowPayload);
 }
 
-async function workflowResponseError(
-  response: Response,
-  fallback: string,
-): Promise<Error> {
+async function workflowResponseError(response: Response, fallback: string): Promise<Error> {
   const detail = detailMessage(await readOptionalJson(response));
   return new Error(detail ?? `${fallback} (${response.status}).`);
 }
@@ -570,37 +455,23 @@ export async function updateWorkflow(
   draft: WorkflowDraft,
 ): Promise<SaveWorkflowResponse> {
   const body = draft satisfies UpdateWorkflowRequestPayload;
-  const response = await fetch(
-    `/api/workflows/${encodeURIComponent(workflowId)}/versions`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  );
+  const response = await fetch(`/api/workflows/${encodeURIComponent(workflowId)}/versions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!response.ok) {
     throw await workflowResponseError(response, "Workflow update failed");
   }
-  return decodeJson(
-    response,
-    "Workflow update request",
-    isSaveWorkflowPayload,
-  );
+  return decodeJson(response, "Workflow update request", isSaveWorkflowPayload);
 }
 
-export async function deleteWorkflow(
-  workflowId: string,
-): Promise<DeleteWorkflowResponse> {
-  const response = await fetch(
-    `/api/workflows/${encodeURIComponent(workflowId)}`,
-    { method: "DELETE" },
-  );
+export async function deleteWorkflow(workflowId: string): Promise<DeleteWorkflowResponse> {
+  const response = await fetch(`/api/workflows/${encodeURIComponent(workflowId)}`, {
+    method: "DELETE",
+  });
   if (!response.ok) {
     throw await workflowResponseError(response, "Workflow delete failed");
   }
-  return decodeJson(
-    response,
-    "Workflow delete request",
-    isDeleteWorkflowPayload,
-  );
+  return decodeJson(response, "Workflow delete request", isDeleteWorkflowPayload);
 }

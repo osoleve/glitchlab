@@ -1,17 +1,8 @@
 import { MarkerType } from "@xyflow/react";
 import { withControlPorts } from "./controlPorts";
-import type {
-  GraphSpec,
-  LoomEdge,
-  LoomNode,
-  NodeDefinition,
-} from "./types";
+import type { GraphSpec, LoomEdge, LoomNode, NodeDefinition } from "./types";
 
-export function serializeGraph(
-  name: string,
-  nodes: LoomNode[],
-  edges: LoomEdge[],
-): GraphSpec {
+export function serializeGraph(name: string, nodes: LoomNode[], edges: LoomEdge[]): GraphSpec {
   return {
     name,
     nodes: nodes.map((node) => ({

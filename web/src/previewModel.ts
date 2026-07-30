@@ -121,8 +121,7 @@ function rawCompletionResponse(value: JsonRecord): CompletionEntry[] | undefined
       {
         text: choice.text,
         model: asString(value.model),
-        modelRevision:
-          asString(value.model_revision) ?? asString(value.system_fingerprint),
+        modelRevision: asString(value.model_revision) ?? asString(value.system_fingerprint),
         finishReason: asString(choice.finish_reason),
         usage,
         latencyMs,
@@ -174,9 +173,7 @@ function textEntries(value: unknown): TextEntry[] | undefined {
   if (single) return [single];
   if (!Array.isArray(unwrapped) || unwrapped.length === 0) return undefined;
   const entries = unwrapped.map((item) => textEntry(unwrapOutput(item)));
-  return entries.every((entry) => entry !== undefined)
-    ? (entries as TextEntry[])
-    : undefined;
+  return entries.every((entry) => entry !== undefined) ? (entries as TextEntry[]) : undefined;
 }
 
 export function jsonText(value: unknown): string {
@@ -193,9 +190,7 @@ export function normalizePreviewValue(value: unknown): PreviewModel {
       entries: completions,
       raw,
       readableText: completions.map((entry) => entry.text).join("\n\n"),
-      shapeLabel: `${completions.length} completion${
-        completions.length === 1 ? "" : "s"
-      }`,
+      shapeLabel: `${completions.length} completion${completions.length === 1 ? "" : "s"}`,
     };
   }
 
@@ -214,8 +209,6 @@ export function normalizePreviewValue(value: unknown): PreviewModel {
   return {
     kind: "structured",
     raw,
-    shapeLabel: Array.isArray(unwrapped)
-      ? `${unwrapped.length} items`
-      : "Structured value",
+    shapeLabel: Array.isArray(unwrapped) ? `${unwrapped.length} items` : "Structured value",
   };
 }

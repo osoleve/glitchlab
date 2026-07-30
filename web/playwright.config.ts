@@ -1,7 +1,7 @@
-import { defineConfig } from "@playwright/test";
-import { fileURLToPath } from "node:url";
-import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "@playwright/test";
 
 const webRoot = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(webRoot, "..");
@@ -38,10 +38,7 @@ export default defineConfig({
       cwd: repositoryRoot,
       env: {
         ...process.env,
-        GLITCHLOOM_WORKSPACE: join(
-          tmpdir(),
-          `glitchloom-playwright-${process.pid}`,
-        ),
+        GLITCHLOOM_WORKSPACE: join(tmpdir(), `glitchloom-playwright-${process.pid}`),
       },
       url: `${backendUrl}/api/health`,
       reuseExistingServer: false,

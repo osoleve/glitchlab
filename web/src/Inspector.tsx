@@ -20,10 +20,7 @@ interface InspectorProps {
   error?: string;
   onUpdateTitle: (value: string) => void;
   onUpdateField: (field: string, value: unknown) => void;
-  onUpdateControlPort: (
-    field: string,
-    mode?: ControlPortMode,
-  ) => void;
+  onUpdateControlPort: (field: string, mode?: ControlPortMode) => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -38,11 +35,8 @@ function ControlPortSelector({
   onChange: (mode?: ControlPortMode) => void;
 }) {
   return (
-    <div
-      className="control-port-selector"
-      role="group"
-      aria-label={`${field.label} port mode`}
-    >
+    // biome-ignore lint/a11y/useSemanticElements: compact segmented control is not a form fieldset
+    <div className="control-port-selector" role="group" aria-label={`${field.label} port mode`}>
       <button
         type="button"
         className={!mode ? "is-active" : ""}
@@ -167,14 +161,10 @@ export function Inspector({
     () => run?.nodes.find((result) => result.node_id === selectedNode?.id),
     [run, selectedNode],
   );
-  const selectedTerminal = selectedNode
-    ? run?.terminal_outputs[selectedNode.id]
-    : undefined;
+  const selectedTerminal = selectedNode ? run?.terminal_outputs[selectedNode.id] : undefined;
   const selectedGlitchling =
     selectedNode?.data.kind === "glitchling"
-      ? glitchlings.find(
-          (item) => item.name === String(selectedNode.data.config.name ?? ""),
-        )
+      ? glitchlings.find((item) => item.name === String(selectedNode.data.config.name ?? ""))
       : undefined;
   const hasOutput = Boolean(selectedResult?.outputs ?? selectedTerminal);
   const itemLabels = useMemo(
@@ -182,10 +172,10 @@ export function Inspector({
     [edges, nodes, selectedNode],
   );
 
+  // Selecting another node of the same kind must still reset the inspector tab.
+  // biome-ignore lint/correctness/useExhaustiveDependencies(selectedNode?.id): trigger-only dependency
   useEffect(() => {
-    setActiveTab(
-      selectedNode?.data.kind === "preview" || hasOutput ? "output" : "configure",
-    );
+    setActiveTab(selectedNode?.data.kind === "preview" || hasOutput ? "output" : "configure");
   }, [hasOutput, selectedNode?.data.kind, selectedNode?.id]);
 
   return (
@@ -230,7 +220,7 @@ export function Inspector({
               onClick={() => setActiveTab("output")}
             >
               Output
-              {hasOutput && <i aria-label="Output available" />}
+              {hasOutput && <i role="img" aria-label="Output available" />}
             </button>
           </div>
           {activeTab === "configure" ? (
@@ -238,9 +228,7 @@ export function Inspector({
               <section className="inspector-section">
                 <div className="inspector-node-meta">
                   <span>{selectedNode.data.definition.category}</span>
-                  <span
-                    className={`inspector-status status-${selectedNode.data.runStatus}`}
-                  >
+                  <span className={`inspector-status status-${selectedNode.data.runStatus}`}>
                     <i />
                     {selectedNode.data.runStatus === "completed"
                       ? "complete"
@@ -254,18 +242,15 @@ export function Inspector({
                     onChange={(event) => onUpdateTitle(event.target.value)}
                   />
                 </label>
-                <p className="node-description">
-                  {selectedNode.data.definition.description}
-                </p>
+                <p className="node-description">{selectedNode.data.definition.description}</p>
               </section>
               <section className="inspector-section fields-section">
                 <h2>Configuration</h2>
                 {selectedNode.data.definition.fields.length > 0 && (
                   <p className="control-port-help">
-                    Keep a control local, promote it to a typed input or output,
-                    or use I/O as a pass-through. Inputs fall back to the local
-                    value when unconnected and can become saved workflow
-                    boundaries.
+                    Keep a control local, promote it to a typed input or output, or use I/O as a
+                    pass-through. Inputs fall back to the local value when unconnected and can
+                    become saved workflow boundaries.
                   </p>
                 )}
                 {selectedNode.data.definition.fields.length === 0 && (
@@ -274,8 +259,7 @@ export function Inspector({
                 {selectedNode.data.definition.fields.map((field) => {
                   const value = selectedNode.data.config[field.name] ?? field.default;
                   const portMode = selectedNode.data.controlPorts[field.name];
-                  const acceptsInput =
-                    portMode === "input" || portMode === "passthrough";
+                  const acceptsInput = portMode === "input" || portMode === "passthrough";
                   const inputHelp =
                     portMode === "passthrough"
                       ? "Unconnected uses this default; a connected value also passes to the output socket."
@@ -288,18 +272,14 @@ export function Inspector({
                           <ControlPortSelector
                             field={field}
                             mode={portMode}
-                            onChange={(mode) =>
-                              onUpdateControlPort(field.name, mode)
-                            }
+                            onChange={(mode) => onUpdateControlPort(field.name, mode)}
                           />
                         </div>
                         <label className="check-field">
                           <input
                             type="checkbox"
                             checked={Boolean(value)}
-                            onChange={(event) =>
-                              onUpdateField(field.name, event.target.checked)
-                            }
+                            onChange={(event) => onUpdateField(field.name, event.target.checked)}
                           />
                           <span>Enabled</span>
                         </label>
@@ -316,17 +296,13 @@ export function Inspector({
                           <ControlPortSelector
                             field={field}
                             mode={portMode}
-                            onChange={(mode) =>
-                              onUpdateControlPort(field.name, mode)
-                            }
+                            onChange={(mode) => onUpdateControlPort(field.name, mode)}
                           />
                         </div>
                         <select
                           aria-label={field.label}
                           value={String(value ?? "")}
-                          onChange={(event) =>
-                            onUpdateField(field.name, event.target.value)
-                          }
+                          onChange={(event) => onUpdateField(field.name, event.target.value)}
                         >
                           {field.options.map((option) => (
                             <option value={option.value} key={option.value}>
@@ -339,8 +315,7 @@ export function Inspector({
                       </div>
                     );
                   }
-                  const multiline =
-                    field.control === "textarea" || field.control === "json";
+                  const multiline = field.control === "textarea" || field.control === "json";
                   return (
                     <div className="config-control" key={field.name}>
                       <div className="config-control-heading">
@@ -348,9 +323,7 @@ export function Inspector({
                         <ControlPortSelector
                           field={field}
                           mode={portMode}
-                          onChange={(mode) =>
-                            onUpdateControlPort(field.name, mode)
-                          }
+                          onChange={(mode) => onUpdateControlPort(field.name, mode)}
                         />
                       </div>
                       {multiline ? (
@@ -360,16 +333,13 @@ export function Inspector({
                           value={displayValue(field, value)}
                           placeholder={field.placeholder}
                           spellCheck={field.control !== "json"}
-                          onChange={(event) =>
-                            onUpdateField(field.name, event.target.value)
-                          }
+                          onChange={(event) => onUpdateField(field.name, event.target.value)}
                         />
                       ) : (
                         <input
                           aria-label={field.label}
                           type={
-                            field.control === "number" ||
-                            field.control === "number_optional"
+                            field.control === "number" || field.control === "number_optional"
                               ? "number"
                               : "text"
                           }
@@ -394,22 +364,21 @@ export function Inspector({
                     </div>
                   );
                 })}
-                {selectedGlitchling &&
-                  selectedGlitchling.parameters.length > 0 && (
-                    <details className="schema-details">
-                      <summary>
-                        Constructor schema <ChevronRight size={14} />
-                      </summary>
-                      <ul>
-                        {selectedGlitchling.parameters.map((parameter) => (
-                          <li key={parameter.name}>
-                            <code>{parameter.name}</code>
-                            <span>{parameter.annotation ?? "value"}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
+                {selectedGlitchling && selectedGlitchling.parameters.length > 0 && (
+                  <details className="schema-details">
+                    <summary>
+                      Constructor schema <ChevronRight size={14} />
+                    </summary>
+                    <ul>
+                      {selectedGlitchling.parameters.map((parameter) => (
+                        <li key={parameter.name}>
+                          <code>{parameter.name}</code>
+                          <span>{parameter.annotation ?? "value"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </section>
               <button type="button" className="delete-button" onClick={onDelete}>
                 <Trash2 size={15} /> Delete node

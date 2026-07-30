@@ -27,11 +27,7 @@ describe("graph traversal", () => {
   });
 
   it("computes downstream branches in stable graph order", () => {
-    expect(downstreamClosure(nodeIds, edges, ["right"])).toEqual([
-      "right",
-      "merge",
-      "after",
-    ]);
+    expect(downstreamClosure(nodeIds, edges, ["right"])).toEqual(["right", "merge", "after"]);
   });
 
   it("keeps only edges wholly inside a scope", () => {
@@ -72,9 +68,7 @@ describe("semantic execution fingerprint", () => {
       ],
     };
 
-    expect(semanticExecutionFingerprint(rearranged)).toBe(
-      semanticExecutionFingerprint(graph),
-    );
+    expect(semanticExecutionFingerprint(rearranged)).toBe(semanticExecutionFingerprint(graph));
   });
 
   it("changes for execution-affecting config and topology", () => {
@@ -103,8 +97,6 @@ describe("semantic execution fingerprint", () => {
     expect(semanticExecutionFingerprint(reconfigured)).not.toBe(
       semanticExecutionFingerprint(graph),
     );
-    expect(semanticExecutionFingerprint(rewired)).not.toBe(
-      semanticExecutionFingerprint(graph),
-    );
+    expect(semanticExecutionFingerprint(rewired)).not.toBe(semanticExecutionFingerprint(graph));
   });
 });

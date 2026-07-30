@@ -1,3 +1,4 @@
+import { serializeGraph } from "./graph";
 import type {
   LoomEdge,
   LoomNode,
@@ -7,17 +8,12 @@ import type {
   WorkflowOutput,
   WorkflowSpec,
 } from "./types";
-import { serializeGraph } from "./graph";
 
 function portKey(nodeId: string, portName: string): string {
   return `${nodeId}\u0000${portName}`;
 }
 
-function uniqueName(
-  port: PortDefinition,
-  node: LoomNode,
-  used: Set<string>,
-): string {
+function uniqueName(port: PortDefinition, node: LoomNode, used: Set<string>): string {
   const clean = (value: string) =>
     value
       .trim()
@@ -92,8 +88,7 @@ export function inferWorkflowDraft(
       const key = portKey(node.id, port.name);
       const shouldExpose =
         externalTargets.has(key) ||
-        (!internalTargets.has(key) &&
-          (port.required || port.control !== undefined));
+        (!internalTargets.has(key) && (port.required || port.control !== undefined));
       if (!shouldExpose) continue;
       inputs.push({
         ...port,
@@ -112,9 +107,7 @@ export function inferWorkflowDraft(
       const key = portKey(node.id, port.name);
       const shouldExpose =
         port.control !== undefined ||
-        (externalSources.size > 0
-          ? externalSources.has(key)
-          : !internalSources.has(key));
+        (externalSources.size > 0 ? externalSources.has(key) : !internalSources.has(key));
       if (!shouldExpose) continue;
       outputs.push({
         name: uniqueName(port, node, outputNames),
@@ -160,11 +153,7 @@ function uniqueBindingName(name: string, used: Set<string>): string {
   return candidate;
 }
 
-function conciseLegacyLabel(
-  label: string,
-  node: LoomNode,
-  port: PortDefinition,
-): string {
+function conciseLegacyLabel(label: string, node: LoomNode, port: PortDefinition): string {
   const legacyLabel = `${node.data.title} · ${port.label}`;
   return label === legacyLabel ? port.label : label;
 }
@@ -186,16 +175,11 @@ export function reviseWorkflowDraft(
 
   const preservedInputs = original.inputs.flatMap((binding) => {
     const node = nodeMap.get(binding.node_id);
-    const port = node?.data.definition.inputs.find(
-      (item) => item.name === binding.node_port,
-    );
+    const port = node?.data.definition.inputs.find((item) => item.name === binding.node_port);
     if (
       !node ||
       !port ||
-      (!port.multiple &&
-        internallyConnected.has(
-          portKey(binding.node_id, binding.node_port),
-        ))
+      (!port.multiple && internallyConnected.has(portKey(binding.node_id, binding.node_port)))
     ) {
       return [];
     }
@@ -210,18 +194,13 @@ export function reviseWorkflowDraft(
     ];
   });
   const inputTargets = new Set(
-    preservedInputs.map((binding) =>
-      portKey(binding.node_id, binding.node_port),
-    ),
+    preservedInputs.map((binding) => portKey(binding.node_id, binding.node_port)),
   );
   const inputNames = new Set(preservedInputs.map((binding) => binding.name));
   const inputs = [
     ...preservedInputs,
     ...inferred.inputs
-      .filter(
-        (binding) =>
-          !inputTargets.has(portKey(binding.node_id, binding.node_port)),
-      )
+      .filter((binding) => !inputTargets.has(portKey(binding.node_id, binding.node_port)))
       .map((binding) => ({
         ...binding,
         name: uniqueBindingName(binding.name, inputNames),
@@ -230,9 +209,7 @@ export function reviseWorkflowDraft(
 
   const preservedOutputs = original.outputs.flatMap((binding) => {
     const node = nodeMap.get(binding.node_id);
-    const port = node?.data.definition.outputs.find(
-      (item) => item.name === binding.node_port,
-    );
+    const port = node?.data.definition.outputs.find((item) => item.name === binding.node_port);
     if (!node || !port) return [];
     return [
       {
@@ -243,18 +220,13 @@ export function reviseWorkflowDraft(
     ];
   });
   const outputSources = new Set(
-    preservedOutputs.map((binding) =>
-      portKey(binding.node_id, binding.node_port),
-    ),
+    preservedOutputs.map((binding) => portKey(binding.node_id, binding.node_port)),
   );
   const outputNames = new Set(preservedOutputs.map((binding) => binding.name));
   const outputs = [
     ...preservedOutputs,
     ...inferred.outputs
-      .filter(
-        (binding) =>
-          !outputSources.has(portKey(binding.node_id, binding.node_port)),
-      )
+      .filter((binding) => !outputSources.has(portKey(binding.node_id, binding.node_port)))
       .map((binding) => ({
         ...binding,
         name: uniqueBindingName(binding.name, outputNames),

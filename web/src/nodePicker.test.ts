@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  compatibleNodeInputs,
-  valueTypesCompatible,
-} from "./nodePicker";
-import type {
-  NodeDefinition,
-  PortDefinition,
-  ValueType,
-} from "./types";
+import { compatibleNodeInputs, valueTypesCompatible } from "./nodePicker";
+import type { NodeDefinition, PortDefinition, ValueType } from "./types";
 
 function port(name: string, type: ValueType): PortDefinition {
   return {
@@ -19,10 +12,7 @@ function port(name: string, type: ValueType): PortDefinition {
   };
 }
 
-function definition(
-  kind: string,
-  inputs: PortDefinition[],
-): NodeDefinition {
+function definition(kind: string, inputs: PortDefinition[]): NodeDefinition {
   return {
     kind,
     label: kind,
@@ -63,15 +53,11 @@ describe("compatibleNodeInputs", () => {
   });
 
   it("retains distinct compatible inputs on the same node", () => {
-    const definitions = [
-      definition("merge", [
-        port("left", "text"),
-        port("right", "any"),
-      ]),
-    ];
+    const definitions = [definition("merge", [port("left", "text"), port("right", "any")])];
 
-    expect(
-      compatibleNodeInputs(definitions, "text").map(({ input }) => input.name),
-    ).toEqual(["left", "right"]);
+    expect(compatibleNodeInputs(definitions, "text").map(({ input }) => input.name)).toEqual([
+      "left",
+      "right",
+    ]);
   });
 });

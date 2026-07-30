@@ -81,10 +81,7 @@ describe("Inspector output selection", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: "Configure" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(screen.getByRole("tab", { name: "Configure" })).toHaveAttribute("aria-selected", "true");
 
     view.rerender(
       <Inspector
@@ -97,10 +94,7 @@ describe("Inspector output selection", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: /Output/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(screen.getByRole("tab", { name: /Output/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("result arrived")).toBeInTheDocument();
   });
 
@@ -120,10 +114,7 @@ describe("Inspector output selection", () => {
 
     await user.click(screen.getByRole("tab", { name: "Configure" }));
 
-    expect(screen.getByRole("tab", { name: "Configure" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(screen.getByRole("tab", { name: "Configure" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("opens preview nodes on Output before a run exists", () => {
@@ -138,12 +129,7 @@ describe("Inspector output selection", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: "Output" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(
-      screen.getByText("Run the loom to inspect this node’s output."),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Output" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Run the loom to inspect this node’s output.")).toBeInTheDocument();
   });
 });

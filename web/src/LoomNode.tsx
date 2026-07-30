@@ -1,4 +1,4 @@
-import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
+import { Handle, type NodeProps, NodeResizer, Position } from "@xyflow/react";
 import {
   Binary,
   BookOpenText,
@@ -23,11 +23,7 @@ import {
   Workflow,
 } from "lucide-react";
 import type { ComponentType, CSSProperties } from "react";
-import type {
-  FieldDefinition,
-  LoomNode,
-  LoomNodeData,
-} from "./types";
+import type { FieldDefinition, LoomNode, LoomNodeData } from "./types";
 
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
   text_input: TextCursorInput,
@@ -56,8 +52,7 @@ const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number 
 function summary(data: LoomNodeData): string {
   const config = data.config;
   const suppliedByPort = (field: string) =>
-    data.controlPorts[field] === "input" ||
-    data.controlPorts[field] === "passthrough";
+    data.controlPorts[field] === "input" || data.controlPorts[field] === "passthrough";
   switch (data.kind) {
     case "text_input":
       return suppliedByPort("text")
@@ -72,23 +67,15 @@ function summary(data: LoomNodeData): string {
         ? "template supplied by input"
         : String(config.template ?? "").slice(0, 54);
     case "model":
-      return suppliedByPort("model_id")
-        ? "model supplied by input"
-        : String(config.model_id ?? "");
+      return suppliedByPort("model_id") ? "model supplied by input" : String(config.model_id ?? "");
     case "endpoint":
       return suppliedByPort("base_url")
         ? "endpoint supplied by input"
         : String(config.base_url ?? "");
     case "completion":
       return `${
-        suppliedByPort("max_tokens")
-          ? "wired tokens"
-          : `${String(config.max_tokens ?? 96)} tokens`
-      } · ${
-        suppliedByPort("seed")
-          ? "wired seed"
-          : `seed ${String(config.seed ?? "—")}`
-      }`;
+        suppliedByPort("max_tokens") ? "wired tokens" : `${String(config.max_tokens ?? 96)} tokens`
+      } · ${suppliedByPort("seed") ? "wired seed" : `seed ${String(config.seed ?? "—")}`}`;
     case "glitchling":
       return `${String(config.name ?? "")} · seed ${String(config.seed ?? "")}`;
     case "read_file":
@@ -103,10 +90,7 @@ function categoryClass(category: string): string {
   return category.toLowerCase().replace(/\s+/g, "-");
 }
 
-function inlineValue(
-  field: FieldDefinition,
-  value: unknown,
-): string | number {
+function inlineValue(field: FieldDefinition, value: unknown): string | number {
   if (value === null || value === undefined) return "";
   if (field.control === "number" || field.control === "number_optional") {
     return typeof value === "number" ? value : Number(value);
@@ -126,27 +110,19 @@ function inlineControlHeight(fields: FieldDefinition[]): number {
     return height;
   }, 0);
   const compactCount = fields.filter(
-    (field) =>
-      field.control !== "textarea" &&
-      field.control !== "text" &&
-      field.control !== "json",
+    (field) => field.control !== "textarea" && field.control !== "text" && field.control !== "json",
   ).length;
   return wideHeight + Math.ceil(compactCount / 3) * 40 + 4;
 }
 
 export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
-  const Icon = data.kind.startsWith("workflow:") ? Workflow : ICONS[data.kind] ?? Box;
+  const Icon = data.kind.startsWith("workflow:") ? Workflow : (ICONS[data.kind] ?? Box);
   const inlineFields = data.definition.fields.filter((field) => field.inline);
   const summaryText = summary(data);
   const hasSummary = inlineFields.length === 0 && summaryText.length > 0;
-  const inlineHeight =
-    inlineFields.length > 0 ? inlineControlHeight(inlineFields) : 0;
+  const inlineHeight = inlineFields.length > 0 ? inlineControlHeight(inlineFields) : 0;
   const contentHeight = hasSummary ? 28 : inlineHeight;
-  const portRows = Math.max(
-    data.definition.inputs.length,
-    data.definition.outputs.length,
-    1,
-  );
+  const portRows = Math.max(data.definition.inputs.length, data.definition.outputs.length, 1);
   const baseHeight = 74 + contentHeight;
   const minimumHeight = baseHeight + portRows * 28;
   const nodeStyle = {
@@ -161,9 +137,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
       className={`loom-node category-${categoryClass(data.definition.category)} ${
         selected ? "is-selected" : ""
       } status-${data.runStatus} ${
-        data.executionScopeRole
-          ? `execution-scope-${data.executionScopeRole}`
-          : ""
+        data.executionScopeRole ? `execution-scope-${data.executionScopeRole}` : ""
       }`}
       style={nodeStyle}
     >
@@ -185,7 +159,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
           <span>{data.definition.category}</span>
           <strong>{data.title}</strong>
         </div>
-        <span className="node-status" aria-label={`Run status: ${data.runStatus}`}>
+        <span className="node-status" role="status" aria-label={`Run status: ${data.runStatus}`}>
           <i aria-hidden="true" />
           <b>{data.runStatus === "completed" ? "done" : data.runStatus}</b>
         </span>
@@ -201,12 +175,11 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
             const mode = data.controlPorts[field.name];
             const disabled = mode === "input" || mode === "passthrough";
             const wide =
-              field.control === "text" ||
-              field.control === "textarea" ||
-              field.control === "json";
-            const update = (nextValue: unknown) =>
-              data.onUpdateField?.(field.name, nextValue);
+              field.control === "text" || field.control === "textarea" || field.control === "json";
+            const update = (nextValue: unknown) => data.onUpdateField?.(field.name, nextValue);
             return (
+              // Biome cannot see that every conditional branch renders a nested form control.
+              // biome-ignore lint/a11y/noLabelWithoutControl: the input, select, or textarea is nested below
               <label
                 className={`node-inline-field ${wide ? "is-wide" : ""} ${
                   field.control === "textarea" ? "is-textarea" : ""
@@ -247,8 +220,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
                 ) : (
                   <input
                     type={
-                      field.control === "number" ||
-                      field.control === "number_optional"
+                      field.control === "number" || field.control === "number_optional"
                         ? "number"
                         : "text"
                     }
@@ -278,17 +250,11 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
       <div className="node-inputs">
         {data.definition.inputs.map((port) => (
           <div
-            className={`node-port node-port-input ${
-              port.control ? "is-control-port" : ""
-            }`}
+            className={`node-port node-port-input ${port.control ? "is-control-port" : ""}`}
             key={port.name}
             title={port.control ? `${port.label} control input` : undefined}
           >
-            <Handle
-              id={port.name}
-              type="target"
-              position={Position.Left}
-            />
+            <Handle id={port.name} type="target" position={Position.Left} />
             <span className="port-label">{port.label}</span>
             <em>{port.type}</em>
           </div>
@@ -297,19 +263,13 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
       <div className="node-outputs">
         {data.definition.outputs.map((port) => (
           <div
-            className={`node-port node-port-output ${
-              port.control ? "is-control-port" : ""
-            }`}
+            className={`node-port node-port-output ${port.control ? "is-control-port" : ""}`}
             key={port.name}
             title={port.control ? `${port.label} control output` : undefined}
           >
             <em>{port.type}</em>
             <span className="port-label">{port.label}</span>
-            <Handle
-              id={port.name}
-              type="source"
-              position={Position.Right}
-            />
+            <Handle id={port.name} type="source" position={Position.Right} />
           </div>
         ))}
       </div>

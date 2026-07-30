@@ -46,10 +46,7 @@ function node(id: string, nodeDefinition: NodeDefinition): LoomNode {
 
 const nodes = [
   node("text", definition("text", [], [{ name: "text", type: "text" }])),
-  node(
-    "model",
-    definition("model", [], [{ name: "model", type: "model" }]),
-  ),
+  node("model", definition("model", [], [{ name: "model", type: "model" }])),
   node(
     "collect",
     definition(
@@ -60,11 +57,7 @@ const nodes = [
   ),
   node(
     "preview",
-    definition(
-      "preview",
-      [{ name: "value", type: "any" }],
-      [{ name: "value", type: "any" }],
-    ),
+    definition("preview", [{ name: "value", type: "any" }], [{ name: "value", type: "any" }]),
   ),
 ];
 
@@ -152,11 +145,9 @@ describe("isGraphConnectionValid", () => {
 
     expect(isGraphConnectionValid(candidate, nodes, [existing])).toBe(false);
     expect(
-      isGraphConnectionValid(
-        { ...existing, source: "text", sourceHandle: "text" },
-        nodes,
-        [existing],
-      ),
+      isGraphConnectionValid({ ...existing, source: "text", sourceHandle: "text" }, nodes, [
+        existing,
+      ]),
     ).toBe(true);
   });
 
