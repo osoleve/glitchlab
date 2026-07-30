@@ -45,6 +45,7 @@ export interface FieldDefinition {
   help: string;
   options: FieldOption[];
   placeholder: string;
+  inline: boolean;
 }
 
 export type ControlPortMode = "input" | "output" | "passthrough";
@@ -102,6 +103,7 @@ export interface LoomNodeData extends Record<string, unknown> {
   controlPorts: Record<string, ControlPortMode>;
   runStatus: NodeRunStatus;
   executionScopeRole?: "target" | "required" | "unrelated";
+  onUpdateField?: (field: string, value: unknown) => void;
 }
 
 export type LoomNode = Node<LoomNodeData, "loomNode">;

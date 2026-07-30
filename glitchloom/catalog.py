@@ -36,6 +36,7 @@ def _field(
     options: list[dict[str, Any]] | None = None,
     placeholder: str = "",
     value_type: str | None = None,
+    inline: bool = False,
 ) -> dict[str, Any]:
     if value_type is None:
         value_type = {
@@ -53,6 +54,7 @@ def _field(
         "help": help_text,
         "options": options or [],
         "placeholder": placeholder,
+        "inline": inline,
     }
 
 
@@ -64,7 +66,14 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "description": "A literal text value.",
         "inputs": [],
         "outputs": [_port("text", "text")],
-        "fields": [_field("text", "textarea", "The future arrives unevenly.")],
+        "fields": [
+            _field(
+                "text",
+                "textarea",
+                "The future arrives unevenly.",
+                inline=True,
+            )
+        ],
     },
     {
         "kind": "number_input",
@@ -73,7 +82,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "description": "A numeric value for parameter and control sockets.",
         "inputs": [],
         "outputs": [_port("number", "number")],
-        "fields": [_field("value", "number", 0)],
+        "fields": [_field("value", "number", 0, inline=True)],
     },
     {
         "kind": "template_input",
@@ -88,6 +97,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
                 "textarea",
                 "?person went to ?store yesterday.",
                 help_text="Use ?? for a literal question mark.",
+                inline=True,
             )
         ],
     },
@@ -105,8 +115,14 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
             _port("text", "text", label="Bound text"),
         ],
         "fields": [
-            _field("name", "text", "person", placeholder="person"),
-            _field("value", "text", "Ada", help_text="Used when the value port is unconnected."),
+            _field("name", "text", "person", placeholder="person", inline=True),
+            _field(
+                "value",
+                "text",
+                "Ada",
+                help_text="Used when the value port is unconnected.",
+                inline=True,
+            ),
         ],
     },
     {
@@ -126,8 +142,8 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "inputs": [_port("text", "text")],
         "outputs": [_port("items", "collection")],
         "fields": [
-            _field("pattern", "text", "\\n"),
-            _field("regex", "checkbox", False),
+            _field("pattern", "text", "\\n", inline=True),
+            _field("regex", "checkbox", False, inline=True),
         ],
     },
     {
@@ -138,9 +154,9 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "inputs": [_port("text", "text")],
         "outputs": [_port("text", "text")],
         "fields": [
-            _field("find", "text", ""),
-            _field("replacement", "text", ""),
-            _field("regex", "checkbox", False),
+            _field("find", "text", "", inline=True),
+            _field("replacement", "text", "", inline=True),
+            _field("regex", "checkbox", False, inline=True),
         ],
     },
     {
@@ -150,7 +166,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Join a collection with an optional separator.",
         "inputs": [_port("items", "collection")],
         "outputs": [_port("text", "text")],
-        "fields": [_field("separator", "text", "\\n")],
+        "fields": [_field("separator", "text", "\\n", inline=True)],
     },
     {
         "kind": "list_input",
@@ -159,7 +175,14 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "description": "A JSON array or one item per line.",
         "inputs": [],
         "outputs": [_port("items", "collection")],
-        "fields": [_field("items", "textarea", "first prompt\nsecond prompt")],
+        "fields": [
+            _field(
+                "items",
+                "textarea",
+                "first prompt\nsecond prompt",
+                inline=True,
+            )
+        ],
     },
     {
         "kind": "collect",
@@ -168,7 +191,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Collect multiple values into one ordered collection.",
         "inputs": [_port("item", "any", multiple=True)],
         "outputs": [_port("items", "collection")],
-        "fields": [_field("flatten", "checkbox", False)],
+        "fields": [_field("flatten", "checkbox", False, inline=True)],
     },
     {
         "kind": "cartesian",
@@ -189,7 +212,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Read a dotted field path from a record or collection.",
         "inputs": [_port("value", "any")],
         "outputs": [_port("value", "any")],
-        "fields": [_field("path", "text", "text")],
+        "fields": [_field("path", "text", "text", inline=True)],
     },
     {
         "kind": "passthrough",
@@ -208,7 +231,12 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "inputs": [],
         "outputs": [_port("endpoint", "endpoint")],
         "fields": [
-            _field("base_url", "text", "http://127.0.0.1:8000/v1"),
+            _field(
+                "base_url",
+                "text",
+                "http://127.0.0.1:8000/v1",
+                inline=True,
+            ),
             _field(
                 "api_key_env",
                 "text",
@@ -225,7 +253,14 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "description": "A completion model identifier.",
         "inputs": [],
         "outputs": [_port("model", "model")],
-        "fields": [_field("model_id", "text", "talkie-1930-13b-base")],
+        "fields": [
+            _field(
+                "model_id",
+                "text",
+                "talkie-1930-13b-base",
+                inline=True,
+            )
+        ],
     },
     {
         "kind": "completion",
@@ -239,10 +274,10 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         ],
         "outputs": [_port("result", "completion")],
         "fields": [
-            _field("temperature", "number", 0.8),
+            _field("temperature", "number", 0.8, inline=True),
             _field("top_p", "number", 0.95),
-            _field("max_tokens", "number", 96),
-            _field("seed", "number_optional", 151),
+            _field("max_tokens", "number", 96, inline=True),
+            _field("seed", "number_optional", 151, inline=True),
             _field("stop", "textarea", "", help_text="One stop string per line."),
             _field("logprobs", "number_optional", None),
             _field("extra_body", "json", {}, help_text="Provider-specific request fields."),
@@ -266,8 +301,8 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "inputs": [],
         "outputs": [_port("glitchling", "glitchling")],
         "fields": [
-            _field("name", "select", "typogre", options=[]),
-            _field("seed", "number", 151),
+            _field("name", "select", "typogre", options=[], inline=True),
+            _field("seed", "number", 151, inline=True),
             _field("params", "json", {}),
         ],
     },
@@ -279,7 +314,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "inputs": [_port("members", "glitchling", multiple=True)],
         "outputs": [_port("gaggle", "gaggle")],
         "fields": [
-            _field("seed", "number", 151),
+            _field("seed", "number", 151, inline=True),
             _field("transcript_target", "text", "last"),
             _field("exclude_patterns", "json", []),
             _field("include_only_patterns", "json", []),
@@ -304,7 +339,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Read UTF-8 text within the configured workspace.",
         "inputs": [],
         "outputs": [_port("text", "text")],
-        "fields": [_field("path", "text", "prompts.txt")],
+        "fields": [_field("path", "text", "prompts.txt", inline=True)],
     },
     {
         "kind": "write_file",
@@ -314,7 +349,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         "inputs": [_port("value", "any")],
         "outputs": [_port("file", "file")],
         "fields": [
-            _field("path", "text", "runs/output.jsonl"),
+            _field("path", "text", "runs/output.jsonl", inline=True),
             _field(
                 "format",
                 "select",
@@ -324,6 +359,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
                     {"label": "JSON", "value": "json"},
                     {"label": "Text", "value": "text"},
                 ],
+                inline=True,
             ),
             _field("overwrite", "checkbox", False),
         ],

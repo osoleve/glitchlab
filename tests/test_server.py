@@ -39,6 +39,10 @@ async def test_health_and_catalog_contract() -> None:
     assert field_types["temperature"] == "number"
     assert field_types["stop"] == "text"
     assert field_types["extra_body"] == "any"
+    inline_fields = {
+        field["name"] for field in completion["fields"] if field["inline"]
+    }
+    assert inline_fields == {"temperature", "max_tokens", "seed"}
     number_input = next(
         node for node in catalog.json()["nodes"] if node["kind"] == "number_input"
     )
@@ -52,6 +56,7 @@ async def test_health_and_catalog_contract() -> None:
         }
     ]
     assert number_input["fields"][0]["default"] == 0
+    assert number_input["fields"][0]["inline"] is True
     fill_hole = next(
         node for node in catalog.json()["nodes"] if node["kind"] == "fill_hole"
     )

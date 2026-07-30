@@ -31,6 +31,12 @@ disconnects it. `Ctrl+Enter` runs the loom. The node library and inspector use
 standard draggable dividers, support arrow-key resizing when focused, and reset
 to their responsive defaults on double-click.
 
+Frequently tuned catalog fields can also render directly on their workflow
+cards. Text and template sources, model IDs, file paths, Glitchling choices,
+and the primary completion knobs can be edited without opening the inspector.
+The catalog explicitly chooses these inline controls; the inspector remains the
+complete configuration and control-port surface.
+
 ## Partial execution and run freshness
 
 The topbar and `Ctrl+Enter` still run the complete loom. Right-click a node and
@@ -81,9 +87,10 @@ selection tidy leaves the surrounding spatial context in place. Selecting nodes
 emphasizes their complete upstream and downstream wire paths; unrelated wires
 recede while a selected wire remains fully visible. Wires use smooth stepped
 routing to keep parallel branches legible. A wire can be disconnected or split
-by inserting the one-input, one-output **Passthrough** node. That initial
-insertion action preserves the original endpoint handles and leaves room for a
-future type-aware compatible-node picker.
+by inserting the one-input, one-output **Passthrough** node. Dragging a new
+output wire onto empty canvas opens a searchable node picker filtered to
+type-compatible input ports. Choosing an entry creates the node at the drop
+point and connects the wire to the exact input named in the picker.
 
 ## Promoted control ports
 

@@ -84,6 +84,7 @@ import {
 } from "./graphTraversal";
 import { Inspector } from "./Inspector";
 import { LoomNodeCard } from "./LoomNode";
+import { compatibleNodeInputs } from "./nodePicker";
 import { talkieStarter } from "./starter";
 import type {
   CatalogResponse,
@@ -95,8 +96,10 @@ import type {
   LoomEdge,
   LoomNode,
   NodeDefinition,
+  PortDefinition,
   RunResponse,
   RunScope,
+  ValueType,
   WorkflowDraft,
   WorkflowSpec,
 } from "./types";
@@ -145,12 +148,22 @@ type ContextMenuState =
       y: number;
       scope: "pane";
       flowPosition: { x: number; y: number };
+      pendingConnection?: {
+        sourceNodeId: string;
+        sourceHandle: string;
+        sourceType: ValueType;
+      };
     };
 
 interface WorkflowMenuState {
   x: number;
   y: number;
   definition: NodeDefinition;
+}
+
+interface QuickAddEntry {
+  definition: NodeDefinition;
+  input?: PortDefinition;
 }
 
 interface ExecutionScopeState {
@@ -269,6 +282,16 @@ function isEditableTarget(target: EventTarget | null): target is HTMLElement {
     (target.isContentEditable ||
       target.matches("input, textarea, select, [role='textbox']"))
   );
+}
+
+function connectionEndClientPosition(
+  event: MouseEvent | TouchEvent,
+): { x: number; y: number } | undefined {
+  if ("changedTouches" in event) {
+    const touch = event.changedTouches[0];
+    return touch ? { x: touch.clientX, y: touch.clientY } : undefined;
+  }
+  return { x: event.clientX, y: event.clientY };
 }
 
 type ResizablePanel = "palette" | "inspector";
@@ -658,30 +681,55 @@ function GlitchloomApp() {
     }
     return groups;
   }, [catalog, paletteQuery]);
-  const quickAddDefinitions = useMemo(() => {
+  const pendingConnection =
+    contextMenu?.scope === "pane"
+      ? contextMenu.pendingConnection
+      : undefined;
+  const quickAddEntries = useMemo(() => {
     const query = quickAddQuery.trim().toLowerCase();
-    return [...(catalog?.nodes ?? [])]
-      .filter(
-        (definition) =>
-          !query ||
-          `${definition.label} ${definition.description} ${definition.category} ${definition.kind}`
-            .toLowerCase()
-            .includes(query),
-      )
-      .sort((left, right) => {
-        const leftStarts = left.label.toLowerCase().startsWith(query);
-        const rightStarts = right.label.toLowerCase().startsWith(query);
-        if (leftStarts !== rightStarts) return leftStarts ? -1 : 1;
-        return left.label.localeCompare(right.label);
+    const entries: QuickAddEntry[] = pendingConnection
+      ? compatibleNodeInputs(
+          catalog?.nodes ?? [],
+          pendingConnection.sourceType,
+        )
+      : (catalog?.nodes ?? []).map((definition) => ({ definition }));
+    return entries
+      .filter(({ definition, input }) => {
+        const searchable =
+          `${definition.label} ${definition.description} ${definition.category} ` +
+          `${definition.kind} ${input?.label ?? ""} ${input?.type ?? ""}`;
+        return !query || searchable.toLowerCase().includes(query);
       })
-      .slice(0, 9);
-  }, [catalog, quickAddQuery]);
+      .sort((left, right) => {
+        const leftStarts = left.definition.label
+          .toLowerCase()
+          .startsWith(query);
+        const rightStarts = right.definition.label
+          .toLowerCase()
+          .startsWith(query);
+        if (leftStarts !== rightStarts) return leftStarts ? -1 : 1;
+        if (pendingConnection) {
+          const leftExact =
+            left.input?.type === pendingConnection.sourceType &&
+            left.input.type !== "any";
+          const rightExact =
+            right.input?.type === pendingConnection.sourceType &&
+            right.input.type !== "any";
+          if (leftExact !== rightExact) return leftExact ? -1 : 1;
+        }
+        return (
+          left.definition.label.localeCompare(right.definition.label) ||
+          (left.input?.label ?? "").localeCompare(right.input?.label ?? "")
+        );
+      })
+      .slice(0, pendingConnection ? 12 : 9);
+  }, [catalog, pendingConnection, quickAddQuery]);
 
   useEffect(() => {
     setQuickAddIndex((current) =>
-      Math.min(current, Math.max(0, quickAddDefinitions.length - 1)),
+      Math.min(current, Math.max(0, quickAddEntries.length - 1)),
     );
-  }, [quickAddDefinitions.length]);
+  }, [quickAddEntries.length]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<LoomNode>[]) => {
@@ -795,6 +843,7 @@ function GlitchloomApp() {
       });
       setSelectedId(id);
       setInspectorOpen(true);
+      return id;
     },
     [markSemanticDirty, screenToFlowPosition],
   );
@@ -828,6 +877,26 @@ function GlitchloomApp() {
       current.map((node) => (node.id === selectedId ? updater(node) : node)),
     );
   };
+  const updateNodeField = useCallback(
+    (nodeId: string, field: string, value: unknown) => {
+      markSemanticDirty();
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  config: { ...node.data.config, [field]: value },
+                  runStatus: "idle",
+                },
+              }
+            : node,
+        ),
+      );
+    },
+    [markSemanticDirty],
+  );
   const updateControlPort = (
     fieldName: string,
     mode?: ControlPortMode,
@@ -1636,12 +1705,35 @@ function GlitchloomApp() {
     setInspectorOpen(nodes.length > 0);
     setContextMenu(undefined);
   };
-  const addQuickNode = (definition: NodeDefinition) => {
+  const addQuickNode = (
+    definition: NodeDefinition,
+    targetInput?: PortDefinition,
+  ) => {
     if (contextMenu?.scope !== "pane") return;
-    addNode(definition, {
+    const nodeId = addNode(definition, {
       x: contextMenu.flowPosition.x - 118,
       y: contextMenu.flowPosition.y - 72,
     });
+    if (contextMenu.pendingConnection && targetInput) {
+      const connection = contextMenu.pendingConnection;
+      setEdges((current) =>
+        addEdge(
+          {
+            id: crypto.randomUUID(),
+            source: connection.sourceNodeId,
+            sourceHandle: connection.sourceHandle,
+            target: nodeId,
+            targetHandle: targetInput.name,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 18,
+              height: 18,
+            },
+          },
+          current,
+        ),
+      );
+    }
     setContextMenu(undefined);
     setQuickAddQuery("");
     setQuickAddIndex(0);
@@ -2114,6 +2206,8 @@ function GlitchloomApp() {
     ...node,
     data: {
       ...node.data,
+      onUpdateField: (field: string, value: unknown) =>
+        updateNodeField(node.id, field, value),
       executionScopeRole:
         executionScope?.mode !== "targets"
           ? undefined
@@ -2529,6 +2623,51 @@ function GlitchloomApp() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onConnectEnd={(event, connectionState) => {
+              if (
+                connectionState.isValid === true ||
+                connectionState.toNode ||
+                connectionState.toHandle ||
+                connectionState.fromHandle?.type !== "source" ||
+                !connectionState.fromNode ||
+                !connectionState.fromHandle.id
+              ) {
+                return;
+              }
+              const point = connectionEndClientPosition(event);
+              const canvasBounds = canvasRef.current?.getBoundingClientRect();
+              if (
+                !point ||
+                !canvasBounds ||
+                point.x < canvasBounds.left ||
+                point.x > canvasBounds.right ||
+                point.y < canvasBounds.top ||
+                point.y > canvasBounds.bottom
+              ) {
+                return;
+              }
+              const sourceNode = nodes.find(
+                (node) => node.id === connectionState.fromNode?.id,
+              );
+              const sourceHandle = connectionState.fromHandle.id;
+              const sourcePort = sourceNode?.data.definition.outputs.find(
+                (port) => port.name === sourceHandle,
+              );
+              if (!sourceNode || !sourcePort) return;
+              setQuickAddQuery("");
+              setQuickAddIndex(0);
+              setContextMenu({
+                x: point.x,
+                y: point.y,
+                scope: "pane",
+                flowPosition: screenToFlowPosition(point),
+                pendingConnection: {
+                  sourceNodeId: sourceNode.id,
+                  sourceHandle,
+                  sourceType: sourcePort.type,
+                },
+              });
+            }}
             onReconnect={onReconnect}
             onReconnectStart={() => {
               reconnectSuccessful.current = false;
@@ -2737,6 +2876,11 @@ function GlitchloomApp() {
             <div
               className={`context-menu ${
                 contextMenu.scope === "pane" ? "quick-add-menu" : ""
+              } ${
+                contextMenu.scope === "pane" &&
+                contextMenu.pendingConnection
+                  ? "is-connection-picker"
+                  : ""
               }`}
               role="menu"
               style={{
@@ -2974,6 +3118,16 @@ function GlitchloomApp() {
               )}
               {contextMenu.scope === "pane" && (
                 <>
+                  {contextMenu.pendingConnection && (
+                    <div className="connection-picker-heading">
+                      <span>Connect output</span>
+                      <strong>
+                        <i aria-hidden="true" />
+                        {contextMenu.pendingConnection.sourceType}
+                      </strong>
+                      <small>Choose a compatible input port</small>
+                    </div>
+                  )}
                   <label className="quick-add-search">
                     <Search size={14} aria-hidden="true" />
                     <input
@@ -2989,7 +3143,7 @@ function GlitchloomApp() {
                           setQuickAddIndex((current) =>
                             Math.min(
                               current + 1,
-                              Math.max(0, quickAddDefinitions.length - 1),
+                              Math.max(0, quickAddEntries.length - 1),
                             ),
                           );
                         } else if (event.key === "ArrowUp") {
@@ -2997,68 +3151,98 @@ function GlitchloomApp() {
                           setQuickAddIndex((current) => Math.max(0, current - 1));
                         } else if (event.key === "Enter") {
                           event.preventDefault();
-                          const definition = quickAddDefinitions[quickAddIndex];
-                          if (definition) addQuickNode(definition);
+                          const entry = quickAddEntries[quickAddIndex];
+                          if (entry) {
+                            addQuickNode(entry.definition, entry.input);
+                          }
                         }
                       }}
-                      placeholder="Add a node…"
-                      aria-label="Find a node to add"
+                      placeholder={
+                        contextMenu.pendingConnection
+                          ? `Connect ${contextMenu.pendingConnection.sourceType} to…`
+                          : "Add a node…"
+                      }
+                      aria-label={
+                        contextMenu.pendingConnection
+                          ? "Find a compatible node input"
+                          : "Find a node to add"
+                      }
                       autoFocus
                     />
                   </label>
                   <div className="quick-add-results" role="listbox">
-                    {quickAddDefinitions.map((definition, index) => (
+                    {quickAddEntries.map(({ definition, input }, index) => (
                       <button
                         type="button"
                         role="option"
                         aria-selected={index === quickAddIndex}
                         className={index === quickAddIndex ? "is-active" : ""}
-                        key={definition.kind}
+                        key={`${definition.kind}:${input?.name ?? ""}`}
                         onMouseEnter={() => setQuickAddIndex(index)}
-                        onClick={() => addQuickNode(definition)}
+                        onClick={() => addQuickNode(definition, input)}
                       >
                         <Plus size={13} />
                         <span>
                           <strong>{definition.label}</strong>
-                          <small>{definition.category}</small>
+                          <small>
+                            {definition.category}
+                            {input && (
+                              <>
+                                {" "}
+                                · into {input.label} <em>{input.type}</em>
+                              </>
+                            )}
+                          </small>
                         </span>
                       </button>
                     ))}
-                    {quickAddDefinitions.length === 0 && (
-                      <p>No matching nodes</p>
+                    {quickAddEntries.length === 0 && (
+                      <p>
+                        {contextMenu.pendingConnection
+                          ? "No compatible node inputs match"
+                          : "No matching nodes"}
+                      </p>
                     )}
                   </div>
-                  <span className="context-menu-separator" />
-                  <button type="button" role="menuitem" onClick={selectAllNodes}>
-                    <Focus size={14} />
-                    Select all nodes
-                    <kbd>Ctrl+A</kbd>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={nodes.length < 2}
-                    onClick={() => tidyNodes()}
-                  >
-                    <Network size={14} />
-                    Tidy graph
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      void fitView({
-                        padding: 0.08,
-                        minZoom: 0.4,
-                        maxZoom: 1,
-                        duration: 300,
-                      });
-                      setContextMenu(undefined);
-                    }}
-                  >
-                    <Focus size={14} />
-                    Fit graph in view
-                  </button>
+                  {!contextMenu.pendingConnection && (
+                    <>
+                      <span className="context-menu-separator" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={selectAllNodes}
+                      >
+                        <Focus size={14} />
+                        Select all nodes
+                        <kbd>Ctrl+A</kbd>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={nodes.length < 2}
+                        onClick={() => tidyNodes()}
+                      >
+                        <Network size={14} />
+                        Tidy graph
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          void fitView({
+                            padding: 0.08,
+                            minZoom: 0.4,
+                            maxZoom: 1,
+                            duration: 300,
+                          });
+                          setContextMenu(undefined);
+                        }}
+                      >
+                        <Focus size={14} />
+                        Fit graph in view
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>

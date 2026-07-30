@@ -23,7 +23,11 @@ import {
   Workflow,
 } from "lucide-react";
 import type { ComponentType, CSSProperties } from "react";
-import type { LoomNode, LoomNodeData } from "./types";
+import type {
+  FieldDefinition,
+  LoomNode,
+  LoomNodeData,
+} from "./types";
 
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
   text_input: TextCursorInput,
@@ -99,20 +103,57 @@ function categoryClass(category: string): string {
   return category.toLowerCase().replace(/\s+/g, "-");
 }
 
+function inlineValue(
+  field: FieldDefinition,
+  value: unknown,
+): string | number {
+  if (value === null || value === undefined) return "";
+  if (field.control === "number" || field.control === "number_optional") {
+    return typeof value === "number" ? value : Number(value);
+  }
+  if (field.control === "json") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function inlineControlHeight(fields: FieldDefinition[]): number {
+  const wideHeight = fields.reduce((height, field) => {
+    if (field.control === "textarea") return height + 64;
+    if (field.control === "text" || field.control === "json") {
+      return height + 40;
+    }
+    return height;
+  }, 0);
+  const compactCount = fields.filter(
+    (field) =>
+      field.control !== "textarea" &&
+      field.control !== "text" &&
+      field.control !== "json",
+  ).length;
+  return wideHeight + Math.ceil(compactCount / 3) * 40 + 4;
+}
+
 export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
   const Icon = data.kind.startsWith("workflow:") ? Workflow : ICONS[data.kind] ?? Box;
+  const inlineFields = data.definition.fields.filter((field) => field.inline);
   const summaryText = summary(data);
-  const hasSummary = summaryText.length > 0;
+  const hasSummary = inlineFields.length === 0 && summaryText.length > 0;
+  const inlineHeight =
+    inlineFields.length > 0 ? inlineControlHeight(inlineFields) : 0;
+  const contentHeight = hasSummary ? 28 : inlineHeight;
   const portRows = Math.max(
     data.definition.inputs.length,
     data.definition.outputs.length,
     1,
   );
-  const minimumHeight = (hasSummary ? 102 : 74) + portRows * 28;
+  const baseHeight = 74 + contentHeight;
+  const minimumHeight = baseHeight + portRows * 28;
   const nodeStyle = {
-    "--node-base-height": hasSummary ? "102px" : "74px",
-    "--port-top": hasSummary ? "80px" : "52px",
+    "--node-base-height": `${baseHeight}px`,
+    "--port-top": `${52 + contentHeight}px`,
     "--port-rows": portRows,
+    "--inline-controls-height": `${inlineHeight}px`,
   } as CSSProperties;
 
   return (
@@ -150,6 +191,89 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
         </span>
       </header>
       {hasSummary && <p className="node-summary">{summaryText}</p>}
+      {inlineFields.length > 0 && (
+        <section
+          className="node-inline-fields nodrag nowheel"
+          aria-label={`Controls for ${data.title}`}
+        >
+          {inlineFields.map((field) => {
+            const value = data.config[field.name];
+            const mode = data.controlPorts[field.name];
+            const disabled = mode === "input" || mode === "passthrough";
+            const wide =
+              field.control === "text" ||
+              field.control === "textarea" ||
+              field.control === "json";
+            const update = (nextValue: unknown) =>
+              data.onUpdateField?.(field.name, nextValue);
+            return (
+              <label
+                className={`node-inline-field ${wide ? "is-wide" : ""} ${
+                  field.control === "textarea" ? "is-textarea" : ""
+                } ${field.control === "checkbox" ? "is-checkbox" : ""}`}
+                key={field.name}
+                title={disabled ? `${field.label} is supplied by an input wire.` : field.help}
+              >
+                <span>{field.label}</span>
+                {field.control === "checkbox" ? (
+                  <input
+                    type="checkbox"
+                    checked={Boolean(value)}
+                    disabled={disabled}
+                    onChange={(event) => update(event.target.checked)}
+                  />
+                ) : field.control === "select" ? (
+                  <select
+                    value={String(value ?? "")}
+                    disabled={disabled}
+                    onChange={(event) => update(event.target.value)}
+                    aria-label={`${field.label} for ${data.title}`}
+                  >
+                    {field.options.map((option) => (
+                      <option value={option.value} key={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : field.control === "textarea" ? (
+                  <textarea
+                    value={String(value ?? "")}
+                    placeholder={field.placeholder}
+                    disabled={disabled}
+                    onChange={(event) => update(event.target.value)}
+                    aria-label={`${field.label} for ${data.title}`}
+                    rows={2}
+                  />
+                ) : (
+                  <input
+                    type={
+                      field.control === "number" ||
+                      field.control === "number_optional"
+                        ? "number"
+                        : "text"
+                    }
+                    value={inlineValue(field, value)}
+                    placeholder={field.placeholder}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      update(
+                        field.control === "number"
+                          ? Number(event.target.value)
+                          : field.control === "number_optional"
+                            ? event.target.value === ""
+                              ? null
+                              : Number(event.target.value)
+                            : event.target.value,
+                      )
+                    }
+                    aria-label={`${field.label} for ${data.title}`}
+                  />
+                )}
+              </label>
+            );
+          })}
+        </section>
+      )}
 
       <div className="node-inputs">
         {data.definition.inputs.map((port) => (
