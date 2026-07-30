@@ -48,6 +48,8 @@ jobs:
         run: npm ci
       - name: Check generated API types
         run: npm run api:check
+      - name: Lint and check formatting
+        run: npm run lint
       - name: Test
         run: npm test
       - name: Build

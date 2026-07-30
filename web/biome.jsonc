@@ -1,0 +1,53 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "root": "..",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!!src/generated", "!!package-lock.json"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "useExhaustiveDependencies": "error",
+        "useHookAtTopLevel": "error"
+      },
+      "a11y": {
+        // Dialogs and contextual search deliberately move focus to their safest or primary control.
+        "noAutofocus": "off"
+      },
+      "complexity": {
+        // React Flow overrides and narrow responsive fallbacks require targeted declarations.
+        "noImportantStyles": "off"
+      },
+      "style": {
+        // The stylesheet is organized by feature/state rather than global specificity order.
+        "noDescendingSpecificity": "off",
+        // Typed graph lookups use assertions only after their invariants have been established.
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        // Backend result arrays are immutable and ordered but intentionally have no durable item IDs.
+        "noArrayIndexKey": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  }
+}

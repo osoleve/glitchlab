@@ -39,6 +39,7 @@ uv run pytest -q
 Set-Location web
 npm ci
 npm run api:check
+npm run lint
 npm test
 npm run build
 npm run test:e2e

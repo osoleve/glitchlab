@@ -231,6 +231,7 @@ Frontend:
 cd web
 npm ci
 npm run api:check
+npm run lint
 npm test
 npm run build
 npm run test:e2e:install
@@ -240,6 +241,9 @@ npm run dev
 
 `scripts/export_openapi.py` owns the checked-in backend schema snapshot;
 `npm run api:generate` refreshes the TypeScript declarations derived from it.
+`npm run lint` checks both Biome lint rules and formatting without changing
+files; `npm run format` applies the formatter. Generated API declarations and
+the npm lockfile remain generator-owned and are excluded from formatting.
 The Playwright suite launches isolated backend and Vite processes, uses
 deterministic run responses, and exercises both supported viewport sizes. Vite
 proxies `/api` to the backend on port 8788 during normal development.
