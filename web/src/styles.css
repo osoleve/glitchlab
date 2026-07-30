@@ -1815,6 +1815,123 @@ summary:focus-visible {
   color: #e18a91;
 }
 
+.app-error-boundary {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  color: #e5dce8;
+  background: var(--canvas);
+}
+
+.app-error-card {
+  width: min(520px, 100%);
+  padding: 26px;
+  background: var(--panel);
+  border: 1px solid #61495f;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.32);
+}
+
+.app-error-kicker {
+  display: block;
+  color: #e18a91;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.app-error-card h1 {
+  margin: 10px 0 0;
+  color: #f2eaf4;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.app-error-card p {
+  margin: 12px 0 0;
+  color: #b6aebb;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.app-error-card details {
+  margin-top: 18px;
+  color: #948b98;
+  font-size: 10px;
+}
+
+.app-error-card details code {
+  display: block;
+  margin-top: 8px;
+  padding: 8px;
+  overflow-wrap: anywhere;
+  color: #e18a91;
+  background: var(--panel-soft);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.app-error-card button {
+  margin-top: 18px;
+  padding: 9px 13px;
+  color: #1b141d;
+  background: #d9a8cc;
+  border: 0;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.preview-error {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  color: #d6c7d8;
+  background: rgba(68, 36, 48, 0.42);
+  border: 1px solid #69404e;
+}
+
+.preview-error strong {
+  color: #f0a0a6;
+  font-size: 11px;
+}
+
+.preview-error span {
+  color: #bcaeba;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.preview-error code,
+.node-error-card code {
+  overflow-wrap: anywhere;
+  color: #d88d98;
+  font-family: var(--mono);
+  font-size: 8px;
+}
+
+.node-error-card {
+  display: grid;
+  min-height: 116px;
+  gap: 8px;
+  align-content: center;
+  padding: 16px;
+  border-color: #69404e;
+}
+
+.node-error-card > strong {
+  color: #f0e6f1;
+  font-size: 12px;
+}
+
+.node-error-card > span:not(.app-error-kicker) {
+  color: #bcaeba;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .field {
   display: block;
   margin-bottom: 14px;

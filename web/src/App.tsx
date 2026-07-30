@@ -77,7 +77,7 @@ import {
   upstreamClosure,
 } from "./graphTraversal";
 import { Inspector } from "./Inspector";
-import { LoomNodeCard } from "./LoomNode";
+import { LoomNodeCardWithBoundary } from "./LoomNode";
 import { compatibleNodeInputs } from "./nodePicker";
 import { talkieStarter } from "./starter";
 import type {
@@ -99,7 +99,7 @@ import type {
 } from "./types";
 import { inferWorkflowDraft, reviseWorkflowDraft } from "./workflow";
 
-const nodeTypes = { loomNode: LoomNodeCard };
+const nodeTypes = { loomNode: LoomNodeCardWithBoundary };
 
 interface GraphSnapshot {
   nodes: LoomNode[];

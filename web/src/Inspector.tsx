@@ -1,5 +1,6 @@
 import { ChevronRight, Gauge, PanelRightClose, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ErrorBoundary, PreviewErrorFallback } from "./ErrorBoundary";
 import { PreviewValue } from "./PreviewValue";
 import type {
   ControlPortMode,
@@ -107,7 +108,9 @@ function ResultView({
           <span>Completed in {result.duration_ms.toFixed(1)} ms</span>
         </div>
       )}
-      <PreviewValue value={value} itemLabels={itemLabels} />
+      <ErrorBoundary fallback={(error) => <PreviewErrorFallback error={error} />}>
+        <PreviewValue value={value} itemLabels={itemLabels} />
+      </ErrorBoundary>
     </div>
   );
 }

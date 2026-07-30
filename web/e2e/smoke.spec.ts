@@ -24,7 +24,7 @@ function watchPageErrors(page: Page): string[] {
   return errors;
 }
 
-async function successfulRunResponse(route: Route, delayMs = 0) {
+async function successfulRunResponse(route: Route, delayMs = 0, poisonPreview = false) {
   const request = route.request().postDataJSON() as {
     graph: {
       name: string;
@@ -49,12 +49,13 @@ async function successfulRunResponse(route: Route, delayMs = 0) {
     },
     parameters: { seed: 151 },
   };
+  const previewOutput = poisonPreview ? { __glitchloomPoison: true } : { value: [completion] };
   const nodes = request.graph.nodes.map((node) => ({
     node_id: node.id,
     kind: node.kind,
     status: "completed",
     duration_ms: 1,
-    outputs: node.id === "preview" ? { value: [completion] } : {},
+    outputs: node.id === "preview" ? previewOutput : {},
   }));
 
   await route.fulfill({
@@ -78,7 +79,7 @@ async function successfulRunResponse(route: Route, delayMs = 0) {
       },
       nodes,
       terminal_outputs: {
-        preview: { value: [completion] },
+        preview: previewOutput,
       },
     }),
   });
@@ -173,6 +174,34 @@ test("a successful run selects and renders deterministic output", async ({ page 
     /status-completed/,
   );
   expect(errors).toEqual([]);
+});
+
+test("a poisoned preview output degrades inline while the canvas stays live", async ({ page }) => {
+  const errors = watchPageErrors(page);
+  await page.route("**/api/runs", (route) => successfulRunResponse(route, 0, true));
+  await page.goto("/");
+
+  await page.evaluate(() => {
+    const originalStringify = JSON.stringify;
+    (JSON as { stringify: typeof JSON.stringify }).stringify = (
+      ...args: Parameters<typeof JSON.stringify>
+    ) => {
+      const [value] = args;
+      if (value && typeof value === "object" && "__glitchloomPoison" in value) {
+        throw new Error("Synthetic preview render failure");
+      }
+      return originalStringify(...args);
+    };
+  });
+
+  await page.getByRole("button", { name: "Run loom" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("Output could not be rendered");
+  await expect(page.locator(".react-flow__node")).toHaveCount(12);
+  await expect(page.getByRole("button", { name: "Run loom" })).toBeVisible();
+  expect(errors.filter((message) => !message.includes("Synthetic preview render failure"))).toEqual(
+    [],
+  );
 });
 
 test("an edit during a delayed run marks the returned result stale", async ({ page }) => {

@@ -23,6 +23,7 @@ import {
   Workflow,
 } from "lucide-react";
 import type { ComponentType, CSSProperties } from "react";
+import { ErrorBoundary, NodeErrorFallback } from "./ErrorBoundary";
 import type { FieldDefinition, LoomNode, LoomNodeData } from "./types";
 
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -274,5 +275,15 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
         ))}
       </div>
     </article>
+  );
+}
+
+export function LoomNodeCardWithBoundary(props: NodeProps<LoomNode>) {
+  return (
+    <ErrorBoundary
+      fallback={(error) => <NodeErrorFallback error={error} title={props.data.title} />}
+    >
+      <LoomNodeCard {...props} />
+    </ErrorBoundary>
   );
 }
