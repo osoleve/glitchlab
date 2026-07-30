@@ -1,97 +1,24 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { components } from "./generated/api";
 
-export type ValueType =
-  | "any"
-  | "boolean"
-  | "number"
-  | "text"
-  | "template"
-  | "collection"
-  | "endpoint"
-  | "model"
-  | "completion"
-  | "glitchling"
-  | "gaggle"
-  | "corruption"
-  | "file";
+type ApiSchemas = components["schemas"];
 
-export interface PortDefinition {
-  name: string;
-  label: string;
-  type: ValueType;
-  required: boolean;
-  multiple: boolean;
-  control?: string;
-}
-
-export interface FieldOption {
-  label: string;
-  value: string;
-}
-
-export interface FieldDefinition {
-  name: string;
-  label: string;
-  type: ValueType;
-  control:
-    | "text"
-    | "textarea"
-    | "number"
-    | "number_optional"
-    | "checkbox"
-    | "select"
-    | "json";
-  default: unknown;
-  help: string;
-  options: FieldOption[];
-  placeholder: string;
-  inline: boolean;
-}
-
-export type ControlPortMode = "input" | "output" | "passthrough";
-
-export interface NodeDefinition {
-  kind: string;
-  label: string;
-  category: string;
-  description: string;
-  inputs: PortDefinition[];
-  outputs: PortDefinition[];
-  fields: FieldDefinition[];
-  workflow?: {
-    id: string;
-    version: number;
-    digest: string;
-  };
-}
-
-export interface GlitchlingParameter {
-  name: string;
-  required: boolean;
-  default: unknown;
-  annotation: string | null;
-  choices: unknown[];
-}
-
-export interface GlitchlingDescriptor {
-  name: string;
-  label: string;
-  class: string;
-  parameters: GlitchlingParameter[];
-}
-
-export interface PluginStatus {
-  available: boolean;
-  version: string | null;
+export type ValueType = ApiSchemas["PortDefinition"]["type"];
+export type PortDefinition = ApiSchemas["PortDefinition"];
+export type FieldOption = ApiSchemas["FieldOption"];
+export type FieldDefinition = ApiSchemas["FieldDefinition"];
+export type ControlPortMode = NonNullable<
+  ApiSchemas["GraphNode"]["control_ports"]
+>[string];
+export type NodeDefinition = ApiSchemas["NodeDefinition"];
+export type GlitchlingParameter = ApiSchemas["GlitchlingParameter"];
+export type GlitchlingDescriptor = ApiSchemas["GlitchlingDescriptor"];
+export type PluginStatus = Omit<ApiSchemas["PluginStatus"], "path"> & {
   path?: string;
-  error?: string | null;
-}
-
-export interface CatalogResponse {
-  nodes: NodeDefinition[];
-  glitchlings: GlitchlingDescriptor[];
+};
+export type CatalogResponse = Omit<ApiSchemas["CatalogResponse"], "plugin"> & {
   plugin: PluginStatus;
-}
+};
 
 export type NodeRunStatus = "idle" | "running" | "completed" | "failed";
 
@@ -109,167 +36,114 @@ export interface LoomNodeData extends Record<string, unknown> {
 export type LoomNode = Node<LoomNodeData, "loomNode">;
 export type LoomEdge = Edge;
 
-export interface NodeRunResult {
-  node_id: string;
-  kind: string;
-  status: "completed" | "failed";
-  duration_ms: number;
-  outputs: Record<string, unknown>;
-  error?: string;
-}
+export type NodeRunResult = Omit<ApiSchemas["NodeRunResult"], "outputs"> & {
+  outputs: NonNullable<ApiSchemas["NodeRunResult"]["outputs"]>;
+};
 
-export interface RunResponse {
-  status: string;
-  manifest: {
-    run_id: string;
-    graph_name: string;
-    graph_digest: string;
-    engine_version: string;
-    started_at: string;
-    finished_at: string;
-    glitchlings_version: string | null;
-    scope: {
-      mode: "full" | "targets";
-      target_node_ids: string[];
-      executed_node_ids: string[];
-    };
+type BackendRunManifest = ApiSchemas["RunManifest"];
+type BackendRunScope = ApiSchemas["RunManifestScope"];
+type RunManifest = Omit<
+  BackendRunManifest,
+  "scope" | "graph" | "python_version" | "workspace"
+> & {
+  scope: Omit<
+    BackendRunScope,
+    "target_node_ids" | "executed_node_ids"
+  > & {
+    target_node_ids: string[];
+    executed_node_ids: string[];
   };
+};
+
+export type RunResponse = Omit<
+  ApiSchemas["RunResponse"],
+  "manifest" | "nodes"
+> & {
+  manifest: RunManifest;
   nodes: NodeRunResult[];
-  terminal_outputs: Record<string, Record<string, unknown>>;
   client?: {
     execution_fingerprint: string;
     stale: boolean;
   };
-}
+};
 
-export interface RunScope {
-  mode: "full" | "targets";
+export type RunScope = Omit<
+  ApiSchemas["RunScope"],
+  "target_node_ids"
+> & {
   target_node_ids: string[];
-}
+};
 
-export interface RunErrorDetail {
-  message: string;
+export type RunErrorDetail = Omit<
+  ApiSchemas["RunErrorDetail"],
+  "node_id" | "nodes"
+> & {
   node_id?: string;
   nodes?: NodeRunResult[];
-}
+};
 
-export interface GraphNodeSpec {
-  id: string;
-  kind: string;
-  title?: string | null;
-  config: Record<string, unknown>;
-  control_ports: Record<string, ControlPortMode>;
-  position: { x: number; y: number };
-}
-
-export interface GraphEdgeSpec {
-  id: string;
-  source: string;
-  source_port: string;
-  target: string;
-  target_port: string;
-}
-
-export interface GraphSpec {
-  name: string;
+type GeneratedGraphNode = ApiSchemas["GraphNode"];
+export type GraphNodeSpec = Omit<
+  GeneratedGraphNode,
+  "config" | "control_ports" | "position"
+> & {
+  config: NonNullable<GeneratedGraphNode["config"]>;
+  control_ports: NonNullable<GeneratedGraphNode["control_ports"]>;
+  position: NonNullable<GeneratedGraphNode["position"]>;
+};
+export type GraphEdgeSpec = ApiSchemas["GraphEdge"];
+export type GraphSpec = Omit<ApiSchemas["GraphSpec"], "nodes"> & {
   nodes: GraphNodeSpec[];
-  edges: GraphEdgeSpec[];
-}
-
-export interface LoomDraft {
+};
+export type LoomDraft = Omit<ApiSchemas["LoomDraft"], "graph"> & {
   graph: GraphSpec;
-}
-
-export interface LoomSpec extends LoomDraft {
-  id: string;
-  revision: number;
-  digest: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface LoomSummary {
-  id: string;
-  name: string;
-  revision: number;
-  digest: string;
-  created_at: string;
-  updated_at: string;
-  node_count: number;
-}
-
-export interface LoomTemplateSummary {
-  id: string;
-  name: string;
-  node_count: number;
-}
-
-export interface LoadLoomResponse {
+};
+export type LoomSpec = Omit<ApiSchemas["LoomSpec"], "graph"> & {
+  graph: GraphSpec;
+};
+export type LoomSummary = ApiSchemas["LoomSummary"];
+export type LoomTemplateSummary = ApiSchemas["LoomTemplateSummary"];
+export type LoadLoomResponse = Omit<
+  ApiSchemas["LoadLoomResponse"],
+  "loom"
+> & {
   loom: LoomSpec;
-  definitions: NodeDefinition[];
-}
-
-export interface LoadLoomTemplateResponse {
-  template: {
-    id: string;
+};
+export type LoadLoomTemplateResponse = Omit<
+  ApiSchemas["LoadLoomTemplateResponse"],
+  "template"
+> & {
+  template: Omit<ApiSchemas["LoomTemplate"], "graph"> & {
     graph: GraphSpec;
   };
-  definitions: NodeDefinition[];
-}
-
-export interface DeleteLoomResponse {
-  deleted: {
-    id: string;
-    name: string;
-    revision: number;
-    recoverable_path: string;
-  };
-}
-
-export interface WorkflowInput extends PortDefinition {
-  node_id: string;
-  node_port: string;
-}
-
-export interface WorkflowOutput {
-  name: string;
-  label: string;
-  type: ValueType;
-  node_id: string;
-  node_port: string;
-}
-
-export interface WorkflowDraft {
-  name: string;
-  description: string;
+};
+export type DeleteLoomResponse = ApiSchemas["DeleteLoomResponse"];
+export type WorkflowInput = ApiSchemas["WorkflowInput"];
+export type WorkflowOutput = ApiSchemas["WorkflowOutput"];
+type GeneratedWorkflowDraft = ApiSchemas["WorkflowDraft"];
+export type WorkflowDraft = Omit<
+  GeneratedWorkflowDraft,
+  "graph" | "inputs" | "outputs"
+> & {
   graph: GraphSpec;
   inputs: WorkflowInput[];
   outputs: WorkflowOutput[];
-}
-
-export interface WorkflowSpec extends WorkflowDraft {
-  id: string;
-  version: number;
-  digest: string;
-  created_at: string;
-}
-
-export interface SaveWorkflowResponse {
+};
+export type WorkflowSpec = Omit<
+  ApiSchemas["WorkflowSpec"],
+  "graph" | "inputs" | "outputs"
+> &
+  WorkflowDraft;
+export type SaveWorkflowResponse = Omit<
+  ApiSchemas["SaveWorkflowResponse"],
+  "workflow"
+> & {
   workflow: WorkflowSpec;
-  definition: NodeDefinition;
-}
-
-export interface LoadWorkflowResponse {
+};
+export type LoadWorkflowResponse = Omit<
+  ApiSchemas["LoadWorkflowResponse"],
+  "workflow"
+> & {
   workflow: WorkflowSpec;
-  definitions: NodeDefinition[];
-}
-
-export interface DeleteWorkflowResponse {
-  deleted: {
-    id: string;
-    name: string;
-    versions: number;
-    dependents: string[];
-    recoverable_path: string;
-  };
-}
+};
+export type DeleteWorkflowResponse = ApiSchemas["DeleteWorkflowResponse"];

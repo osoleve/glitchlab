@@ -1,0 +1,2066 @@
+{
+  "components": {
+    "schemas": {
+      "CatalogResponse": {
+        "description": "Complete catalog and live optional-plugin metadata.",
+        "properties": {
+          "glitchlings": {
+            "items": {
+              "$ref": "#/components/schemas/GlitchlingDescriptor"
+            },
+            "title": "Glitchlings",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeDefinition"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "plugin": {
+            "$ref": "#/components/schemas/PluginStatus"
+          }
+        },
+        "required": [
+          "nodes",
+          "glitchlings",
+          "plugin"
+        ],
+        "title": "CatalogResponse",
+        "type": "object"
+      },
+      "DeleteLoomResponse": {
+        "description": "Envelope returned after moving a loom to recoverable trash.",
+        "properties": {
+          "deleted": {
+            "$ref": "#/components/schemas/DeletedLoom"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DeleteLoomResponse",
+        "type": "object"
+      },
+      "DeleteWorkflowResponse": {
+        "description": "Envelope returned after moving workflow versions to recoverable trash.",
+        "properties": {
+          "deleted": {
+            "$ref": "#/components/schemas/DeletedWorkflow"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DeleteWorkflowResponse",
+        "type": "object"
+      },
+      "DeletedLoom": {
+        "description": "Recoverable deletion metadata for one mutable loom.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recoverable_path": {
+            "title": "Recoverable Path",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "revision",
+          "recoverable_path"
+        ],
+        "title": "DeletedLoom",
+        "type": "object"
+      },
+      "DeletedWorkflow": {
+        "description": "Recoverable deletion metadata for one workflow family.",
+        "properties": {
+          "dependents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dependents",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recoverable_path": {
+            "title": "Recoverable Path",
+            "type": "string"
+          },
+          "versions": {
+            "title": "Versions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "versions",
+          "dependents",
+          "recoverable_path"
+        ],
+        "title": "DeletedWorkflow",
+        "type": "object"
+      },
+      "FieldDefinition": {
+        "description": "One catalog-driven node configuration control.",
+        "properties": {
+          "control": {
+            "enum": [
+              "text",
+              "textarea",
+              "number",
+              "number_optional",
+              "checkbox",
+              "select",
+              "json"
+            ],
+            "title": "Control",
+            "type": "string"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "inline": {
+            "title": "Inline",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/FieldOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "placeholder": {
+            "title": "Placeholder",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "any",
+              "boolean",
+              "number",
+              "text",
+              "template",
+              "collection",
+              "endpoint",
+              "model",
+              "completion",
+              "glitchling",
+              "gaggle",
+              "corruption",
+              "file"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "type",
+          "control",
+          "help",
+          "options",
+          "placeholder",
+          "inline"
+        ],
+        "title": "FieldDefinition",
+        "type": "object"
+      },
+      "FieldOption": {
+        "description": "One selectable catalog-field option.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "FieldOption",
+        "type": "object"
+      },
+      "GlitchlingDescriptor": {
+        "description": "One Glitchling discovered from the optional public registry.",
+        "properties": {
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/GlitchlingParameter"
+            },
+            "title": "Parameters",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "class",
+          "parameters"
+        ],
+        "title": "GlitchlingDescriptor",
+        "type": "object"
+      },
+      "GlitchlingParameter": {
+        "description": "Constructor metadata for one discovered Glitchling parameter.",
+        "properties": {
+          "annotation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annotation"
+          },
+          "choices": {
+            "items": {},
+            "title": "Choices",
+            "type": "array"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "required",
+          "annotation",
+          "choices"
+        ],
+        "title": "GlitchlingParameter",
+        "type": "object"
+      },
+      "GraphEdge": {
+        "description": "A typed connection between two node ports.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_port": {
+            "title": "Source Port",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_port": {
+            "title": "Target Port",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "source_port",
+          "target",
+          "target_port"
+        ],
+        "title": "GraphEdge",
+        "type": "object"
+      },
+      "GraphNode": {
+        "description": "A configured node in a Glitchloom graph.",
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "control_ports": {
+            "additionalProperties": {
+              "enum": [
+                "input",
+                "output",
+                "passthrough"
+              ],
+              "type": "string"
+            },
+            "title": "Control Ports",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "GraphNode",
+        "type": "object"
+      },
+      "GraphSpec": {
+        "description": "Serializable graph submitted for execution.",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "name": {
+            "default": "Untitled loom",
+            "title": "Name",
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "title": "GraphSpec",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "Backend and optional-plugin health.",
+        "properties": {
+          "glitchlings": {
+            "$ref": "#/components/schemas/PluginStatus"
+          },
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "workspace": {
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "workspace",
+          "glitchlings"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "LoadLoomResponse": {
+        "description": "A saved loom plus exact catalog definitions needed to render it.",
+        "properties": {
+          "definitions": {
+            "items": {
+              "$ref": "#/components/schemas/NodeDefinition"
+            },
+            "title": "Definitions",
+            "type": "array"
+          },
+          "loom": {
+            "$ref": "#/components/schemas/LoomSpec"
+          }
+        },
+        "required": [
+          "loom",
+          "definitions"
+        ],
+        "title": "LoadLoomResponse",
+        "type": "object"
+      },
+      "LoadLoomTemplateResponse": {
+        "description": "A checked-in template plus exact definitions needed to render it.",
+        "properties": {
+          "definitions": {
+            "items": {
+              "$ref": "#/components/schemas/NodeDefinition"
+            },
+            "title": "Definitions",
+            "type": "array"
+          },
+          "template": {
+            "$ref": "#/components/schemas/LoomTemplate"
+          }
+        },
+        "required": [
+          "template",
+          "definitions"
+        ],
+        "title": "LoadLoomTemplateResponse",
+        "type": "object"
+      },
+      "LoadWorkflowResponse": {
+        "description": "An exact workflow version plus definitions for its graph.",
+        "properties": {
+          "definitions": {
+            "items": {
+              "$ref": "#/components/schemas/NodeDefinition"
+            },
+            "title": "Definitions",
+            "type": "array"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/WorkflowSpec"
+          }
+        },
+        "required": [
+          "workflow",
+          "definitions"
+        ],
+        "title": "LoadWorkflowResponse",
+        "type": "object"
+      },
+      "LoomDraft": {
+        "description": "An editable top-level graph before document identity is assigned.",
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          }
+        },
+        "required": [
+          "graph"
+        ],
+        "title": "LoomDraft",
+        "type": "object"
+      },
+      "LoomListResponse": {
+        "description": "Saved mutable loom summaries.",
+        "properties": {
+          "looms": {
+            "items": {
+              "$ref": "#/components/schemas/LoomSummary"
+            },
+            "title": "Looms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "looms"
+        ],
+        "title": "LoomListResponse",
+        "type": "object"
+      },
+      "LoomResponse": {
+        "description": "Envelope returned after creating or updating a loom.",
+        "properties": {
+          "loom": {
+            "$ref": "#/components/schemas/LoomSpec"
+          }
+        },
+        "required": [
+          "loom"
+        ],
+        "title": "LoomResponse",
+        "type": "object"
+      },
+      "LoomSpec": {
+        "description": "A mutable top-level graph document stored independently of workflows.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "graph",
+          "id",
+          "revision",
+          "digest",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LoomSpec",
+        "type": "object"
+      },
+      "LoomSummary": {
+        "description": "Compact metadata used by the saved-loom picker.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "revision",
+          "digest",
+          "created_at",
+          "updated_at",
+          "node_count"
+        ],
+        "title": "LoomSummary",
+        "type": "object"
+      },
+      "LoomTemplate": {
+        "description": "A checked-in graph example exposed as a read-only starting point.",
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "graph"
+        ],
+        "title": "LoomTemplate",
+        "type": "object"
+      },
+      "LoomTemplateListResponse": {
+        "description": "Checked-in graph template summaries.",
+        "properties": {
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/LoomTemplateSummary"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates"
+        ],
+        "title": "LoomTemplateListResponse",
+        "type": "object"
+      },
+      "LoomTemplateSummary": {
+        "description": "Compact metadata for the template picker.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "node_count"
+        ],
+        "title": "LoomTemplateSummary",
+        "type": "object"
+      },
+      "LoomUpdate": {
+        "description": "A guarded update to an existing mutable loom document.",
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          }
+        },
+        "required": [
+          "graph",
+          "expected_revision"
+        ],
+        "title": "LoomUpdate",
+        "type": "object"
+      },
+      "NodeDefinition": {
+        "description": "Catalog contract used to render and validate one node kind.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldDefinition"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/PortDefinition"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/PortDefinition"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "workflow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "category",
+          "description",
+          "inputs",
+          "outputs",
+          "fields"
+        ],
+        "title": "NodeDefinition",
+        "type": "object"
+      },
+      "NodeRunResult": {
+        "description": "One node's execution outcome.",
+        "properties": {
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "number"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "outputs": {
+            "additionalProperties": true,
+            "title": "Outputs",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "kind",
+          "status",
+          "duration_ms"
+        ],
+        "title": "NodeRunResult",
+        "type": "object"
+      },
+      "PluginStatus": {
+        "description": "Availability metadata for the optional Glitchlings integration.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "available",
+          "version"
+        ],
+        "title": "PluginStatus",
+        "type": "object"
+      },
+      "PortDefinition": {
+        "description": "One typed node input or output exposed by the catalog.",
+        "properties": {
+          "control": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "multiple": {
+            "title": "Multiple",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "any",
+              "boolean",
+              "number",
+              "text",
+              "template",
+              "collection",
+              "endpoint",
+              "model",
+              "completion",
+              "glitchling",
+              "gaggle",
+              "corruption",
+              "file"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "type",
+          "required",
+          "multiple"
+        ],
+        "title": "PortDefinition",
+        "type": "object"
+      },
+      "Position": {
+        "description": "Canvas position retained as part of a graph snapshot.",
+        "properties": {
+          "x": {
+            "default": 0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "default": 0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "title": "Position",
+        "type": "object"
+      },
+      "RunErrorDetail": {
+        "description": "Structured graph validation or node-execution failure.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeRunResult"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "RunErrorDetail",
+        "type": "object"
+      },
+      "RunErrorResponse": {
+        "description": "Graph failure or request-validation detail returned with HTTP 422.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunErrorDetail"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ValidationIssue"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "RunErrorResponse",
+        "type": "object"
+      },
+      "RunManifest": {
+        "description": "Reproducibility metadata for a complete graph run.",
+        "properties": {
+          "engine_version": {
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "finished_at": {
+            "title": "Finished At",
+            "type": "string"
+          },
+          "glitchlings_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Glitchlings Version"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          },
+          "graph_digest": {
+            "title": "Graph Digest",
+            "type": "string"
+          },
+          "graph_name": {
+            "title": "Graph Name",
+            "type": "string"
+          },
+          "python_version": {
+            "title": "Python Version",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RunManifestScope"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "workspace": {
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "graph_name",
+          "graph_digest",
+          "engine_version",
+          "started_at",
+          "finished_at",
+          "python_version",
+          "workspace",
+          "scope",
+          "graph"
+        ],
+        "title": "RunManifest",
+        "type": "object"
+      },
+      "RunManifestScope": {
+        "description": "Normalized effective scope recorded for a graph run.",
+        "properties": {
+          "executed_node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Executed Node Ids",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "full",
+              "targets"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "target_node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Node Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "RunManifestScope",
+        "type": "object"
+      },
+      "RunRequest": {
+        "description": "Graph execution request with an explicit scope envelope.",
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RunScope"
+          }
+        },
+        "required": [
+          "graph"
+        ],
+        "title": "RunRequest",
+        "type": "object"
+      },
+      "RunResponse": {
+        "description": "Successful graph execution response.",
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/RunManifest"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeRunResult"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "status": {
+            "const": "completed",
+            "title": "Status",
+            "type": "string"
+          },
+          "terminal_outputs": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Terminal Outputs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "status",
+          "manifest",
+          "nodes",
+          "terminal_outputs"
+        ],
+        "title": "RunResponse",
+        "type": "object"
+      },
+      "RunScope": {
+        "description": "Requested portion of a submitted graph to execute.",
+        "properties": {
+          "mode": {
+            "default": "full",
+            "enum": [
+              "full",
+              "targets"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "target_node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Node Ids",
+            "type": "array"
+          }
+        },
+        "title": "RunScope",
+        "type": "object"
+      },
+      "SaveWorkflowResponse": {
+        "description": "A saved workflow and its catalog node definition.",
+        "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/NodeDefinition"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/WorkflowSpec"
+          }
+        },
+        "required": [
+          "workflow",
+          "definition"
+        ],
+        "title": "SaveWorkflowResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ValidationIssue": {
+        "description": "One request-validation issue emitted by FastAPI.",
+        "properties": {
+          "ctx": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ctx"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Loc",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationIssue",
+        "type": "object"
+      },
+      "WorkflowDraft": {
+        "description": "A named reusable graph before immutable identity and version assignment.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInput"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowOutput"
+            },
+            "title": "Outputs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "graph"
+        ],
+        "title": "WorkflowDraft",
+        "type": "object"
+      },
+      "WorkflowInput": {
+        "description": "One public workflow input bound to an internal node port.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "multiple": {
+            "default": false,
+            "title": "Multiple",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_port": {
+            "title": "Node Port",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "any",
+              "boolean",
+              "number",
+              "text",
+              "template",
+              "collection",
+              "endpoint",
+              "model",
+              "completion",
+              "glitchling",
+              "gaggle",
+              "corruption",
+              "file"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "type",
+          "node_id",
+          "node_port"
+        ],
+        "title": "WorkflowInput",
+        "type": "object"
+      },
+      "WorkflowListResponse": {
+        "description": "Latest immutable version of every saved workflow.",
+        "properties": {
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowSpec"
+            },
+            "title": "Workflows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "workflows"
+        ],
+        "title": "WorkflowListResponse",
+        "type": "object"
+      },
+      "WorkflowOutput": {
+        "description": "One public workflow output sourced from an internal node port.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_port": {
+            "title": "Node Port",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "any",
+              "boolean",
+              "number",
+              "text",
+              "template",
+              "collection",
+              "endpoint",
+              "model",
+              "completion",
+              "glitchling",
+              "gaggle",
+              "corruption",
+              "file"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "type",
+          "node_id",
+          "node_port"
+        ],
+        "title": "WorkflowOutput",
+        "type": "object"
+      },
+      "WorkflowReference": {
+        "description": "Immutable workflow identity embedded in a catalog definition.",
+        "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "digest"
+        ],
+        "title": "WorkflowReference",
+        "type": "object"
+      },
+      "WorkflowSpec": {
+        "description": "An immutable, versioned reusable workflow stored on disk.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInput"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowOutput"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "graph",
+          "id",
+          "version",
+          "digest",
+          "created_at"
+        ],
+        "title": "WorkflowSpec",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Glitchloom",
+    "version": "0.7.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/catalog": {
+      "get": {
+        "description": "Return node definitions and live Glitchlings controls.",
+        "operationId": "catalog_api_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Catalog"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "Return backend and plugin health.",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/loom-templates": {
+      "get": {
+        "description": "List checked-in graphs that always open as unsaved copies.",
+        "operationId": "list_loom_templates_api_loom_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoomTemplateListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Loom Templates"
+      }
+    },
+    "/api/loom-templates/{template_id}": {
+      "get": {
+        "description": "Load one read-only template and exact definitions for its graph.",
+        "operationId": "get_loom_template_api_loom_templates__template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadLoomTemplateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Loom Template"
+      }
+    },
+    "/api/looms": {
+      "get": {
+        "description": "Return saved editable graph documents without their full graph bodies.",
+        "operationId": "list_looms_api_looms_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoomListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Looms"
+      },
+      "post": {
+        "description": "Create a mutable top-level loom document.",
+        "operationId": "create_loom_api_looms_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoomDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoomResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Loom"
+      }
+    },
+    "/api/looms/{loom_id}": {
+      "delete": {
+        "description": "Move a saved top-level loom to recoverable trash.",
+        "operationId": "delete_loom_api_looms__loom_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "loom_id",
+            "required": true,
+            "schema": {
+              "title": "Loom Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteLoomResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Loom"
+      },
+      "get": {
+        "description": "Load a saved document and exact definitions for its versioned nodes.",
+        "operationId": "get_loom_api_looms__loom_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "loom_id",
+            "required": true,
+            "schema": {
+              "title": "Loom Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadLoomResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Loom"
+      },
+      "put": {
+        "description": "Update a mutable loom with optimistic revision protection.",
+        "operationId": "update_loom_api_looms__loom_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "loom_id",
+            "required": true,
+            "schema": {
+              "title": "Loom Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoomUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoomResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Loom"
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "description": "Execute a graph and surface node-scoped failures.",
+        "operationId": "run_graph_api_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Run Graph"
+      }
+    },
+    "/api/workflows": {
+      "get": {
+        "description": "Return the latest immutable version of each named workflow.",
+        "operationId": "list_workflows_api_workflows_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Workflows"
+      },
+      "post": {
+        "description": "Persist a selected graph as a new immutable workflow version.",
+        "operationId": "save_workflow_api_workflows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveWorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Workflow"
+      }
+    },
+    "/api/workflows/{workflow_id}": {
+      "delete": {
+        "description": "Move a saved workflow and all versions to recoverable trash.",
+        "operationId": "delete_workflow_api_workflows__workflow_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteWorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Workflow"
+      }
+    },
+    "/api/workflows/{workflow_id}/versions": {
+      "post": {
+        "description": "Append an edited workflow as a new immutable version.",
+        "operationId": "update_workflow_api_workflows__workflow_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveWorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Workflow"
+      }
+    },
+    "/api/workflows/{workflow_id}/versions/{version}": {
+      "get": {
+        "description": "Load one exact workflow version for tabbed editing.",
+        "operationId": "get_workflow_api_workflows__workflow_id__versions__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadWorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workflow"
+      }
+    }
+  }
+}

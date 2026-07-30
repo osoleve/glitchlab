@@ -17,11 +17,25 @@ from .engine import GraphEngine
 from .glitchlings_adapter import discover_glitchlings, plugin_status
 from .looms import LoomConflictError, LoomStore, LoomTemplateStore
 from .models import (
+    CatalogResponse,
+    DeleteLoomResponse,
+    DeleteWorkflowResponse,
     GraphRunFailure,
+    HealthResponse,
+    LoadLoomResponse,
+    LoadLoomTemplateResponse,
+    LoadWorkflowResponse,
     LoomDraft,
+    LoomListResponse,
+    LoomResponse,
+    LoomTemplateListResponse,
     LoomUpdate,
+    RunErrorResponse,
     RunRequest,
+    RunResponse,
+    SaveWorkflowResponse,
     WorkflowDraft,
+    WorkflowListResponse,
 )
 from .workflows import WorkflowInUseError, WorkflowStore, workflow_definition
 
@@ -38,7 +52,7 @@ app.add_middleware(
 )
 
 
-@app.get("/api/health")
+@app.get("/api/health", response_model=HealthResponse)
 def health() -> dict[str, Any]:
     """Return backend and plugin health."""
 
@@ -50,7 +64,7 @@ def health() -> dict[str, Any]:
     }
 
 
-@app.get("/api/catalog")
+@app.get("/api/catalog", response_model=CatalogResponse)
 def catalog() -> dict[str, Any]:
     """Return node definitions and live Glitchlings controls."""
 
@@ -74,7 +88,7 @@ def catalog() -> dict[str, Any]:
     }
 
 
-@app.get("/api/looms")
+@app.get("/api/looms", response_model=LoomListResponse)
 def list_looms() -> dict[str, Any]:
     """Return saved editable graph documents without their full graph bodies."""
 
@@ -84,7 +98,7 @@ def list_looms() -> dict[str, Any]:
     }
 
 
-@app.post("/api/looms", status_code=201)
+@app.post("/api/looms", status_code=201, response_model=LoomResponse)
 def create_loom(draft: LoomDraft) -> dict[str, Any]:
     """Create a mutable top-level loom document."""
 
@@ -105,7 +119,7 @@ def create_loom(draft: LoomDraft) -> dict[str, Any]:
     return {"loom": loom.model_dump(mode="json")}
 
 
-@app.get("/api/looms/{loom_id}")
+@app.get("/api/looms/{loom_id}", response_model=LoadLoomResponse)
 def get_loom(loom_id: str) -> dict[str, Any]:
     """Load a saved document and exact definitions for its versioned nodes."""
 
@@ -121,7 +135,7 @@ def get_loom(loom_id: str) -> dict[str, Any]:
     }
 
 
-@app.put("/api/looms/{loom_id}")
+@app.put("/api/looms/{loom_id}", response_model=LoomResponse)
 def update_loom(loom_id: str, draft: LoomUpdate) -> dict[str, Any]:
     """Update a mutable loom with optimistic revision protection."""
 
@@ -146,7 +160,7 @@ def update_loom(loom_id: str, draft: LoomUpdate) -> dict[str, Any]:
     return {"loom": loom.model_dump(mode="json")}
 
 
-@app.delete("/api/looms/{loom_id}")
+@app.delete("/api/looms/{loom_id}", response_model=DeleteLoomResponse)
 def delete_loom(loom_id: str) -> dict[str, Any]:
     """Move a saved top-level loom to recoverable trash."""
 
@@ -158,7 +172,7 @@ def delete_loom(loom_id: str) -> dict[str, Any]:
     return {"deleted": deleted}
 
 
-@app.get("/api/loom-templates")
+@app.get("/api/loom-templates", response_model=LoomTemplateListResponse)
 def list_loom_templates() -> dict[str, Any]:
     """List checked-in graphs that always open as unsaved copies."""
 
@@ -170,7 +184,10 @@ def list_loom_templates() -> dict[str, Any]:
     }
 
 
-@app.get("/api/loom-templates/{template_id}")
+@app.get(
+    "/api/loom-templates/{template_id}",
+    response_model=LoadLoomTemplateResponse,
+)
 def get_loom_template(template_id: str) -> dict[str, Any]:
     """Load one read-only template and exact definitions for its graph."""
 
@@ -186,7 +203,7 @@ def get_loom_template(template_id: str) -> dict[str, Any]:
     }
 
 
-@app.get("/api/workflows")
+@app.get("/api/workflows", response_model=WorkflowListResponse)
 def list_workflows() -> dict[str, Any]:
     """Return the latest immutable version of each named workflow."""
 
@@ -198,7 +215,7 @@ def list_workflows() -> dict[str, Any]:
     }
 
 
-@app.post("/api/workflows", status_code=201)
+@app.post("/api/workflows", status_code=201, response_model=SaveWorkflowResponse)
 def save_workflow(draft: WorkflowDraft) -> dict[str, Any]:
     """Persist a selected graph as a new immutable workflow version."""
 
@@ -232,7 +249,10 @@ def _validate_workflow_draft(
     )
 
 
-@app.get("/api/workflows/{workflow_id}/versions/{version}")
+@app.get(
+    "/api/workflows/{workflow_id}/versions/{version}",
+    response_model=LoadWorkflowResponse,
+)
 def get_workflow(workflow_id: str, version: int) -> dict[str, Any]:
     """Load one exact workflow version for tabbed editing."""
 
@@ -251,7 +271,11 @@ def get_workflow(workflow_id: str, version: int) -> dict[str, Any]:
     }
 
 
-@app.post("/api/workflows/{workflow_id}/versions", status_code=201)
+@app.post(
+    "/api/workflows/{workflow_id}/versions",
+    status_code=201,
+    response_model=SaveWorkflowResponse,
+)
 def update_workflow(
     workflow_id: str,
     draft: WorkflowDraft,
@@ -270,7 +294,10 @@ def update_workflow(
     }
 
 
-@app.delete("/api/workflows/{workflow_id}")
+@app.delete(
+    "/api/workflows/{workflow_id}",
+    response_model=DeleteWorkflowResponse,
+)
 def delete_workflow(workflow_id: str, force: bool = False) -> dict[str, Any]:
     """Move a saved workflow and all versions to recoverable trash."""
 
@@ -290,7 +317,11 @@ def delete_workflow(workflow_id: str, force: bool = False) -> dict[str, Any]:
     return {"deleted": deleted}
 
 
-@app.post("/api/runs")
+@app.post(
+    "/api/runs",
+    response_model=RunResponse,
+    responses={422: {"model": RunErrorResponse}},
+)
 async def run_graph(request: RunRequest) -> dict[str, Any]:
     """Execute a graph and surface node-scoped failures."""
 

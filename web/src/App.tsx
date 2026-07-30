@@ -73,6 +73,7 @@ import {
   updateLoom,
   updateWorkflow,
 } from "./api";
+import { isGraphConnectionValid } from "./connectionValidation";
 import { controlPortName, withControlPorts } from "./controlPorts";
 import { hydrateGraph, serializeGraph } from "./graph";
 import { tidyNodeLayout } from "./graphLayout";
@@ -771,6 +772,11 @@ function GlitchloomApp() {
       );
     },
     [markSemanticDirty],
+  );
+  const isValidConnection = useCallback(
+    (connection: Connection | LoomEdge) =>
+      isGraphConnectionValid(connection, nodes, edges),
+    [edges, nodes],
   );
   const onReconnect = useCallback(
     (oldEdge: LoomEdge, connection: Connection) => {
@@ -2623,6 +2629,7 @@ function GlitchloomApp() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
             onConnectEnd={(event, connectionState) => {
               if (
                 connectionState.isValid === true ||

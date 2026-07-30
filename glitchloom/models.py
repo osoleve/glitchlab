@@ -6,6 +6,139 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+ValueType = Literal[
+    "any",
+    "boolean",
+    "number",
+    "text",
+    "template",
+    "collection",
+    "endpoint",
+    "model",
+    "completion",
+    "glitchling",
+    "gaggle",
+    "corruption",
+    "file",
+]
+ControlPortMode = Literal["input", "output", "passthrough"]
+FieldControl = Literal[
+    "text",
+    "textarea",
+    "number",
+    "number_optional",
+    "checkbox",
+    "select",
+    "json",
+]
+
+
+class PortDefinition(BaseModel):
+    """One typed node input or output exposed by the catalog."""
+
+    name: str
+    label: str
+    type: ValueType
+    required: bool
+    multiple: bool
+    control: str | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+
+
+class FieldOption(BaseModel):
+    """One selectable catalog-field option."""
+
+    label: str
+    value: str
+
+
+class FieldDefinition(BaseModel):
+    """One catalog-driven node configuration control."""
+
+    name: str
+    label: str
+    type: ValueType
+    control: FieldControl
+    default: Any = None
+    help: str
+    options: list[FieldOption]
+    placeholder: str
+    inline: bool
+
+
+class WorkflowReference(BaseModel):
+    """Immutable workflow identity embedded in a catalog definition."""
+
+    id: str
+    version: int
+    digest: str
+
+
+class NodeDefinition(BaseModel):
+    """Catalog contract used to render and validate one node kind."""
+
+    kind: str
+    label: str
+    category: str
+    description: str
+    inputs: list[PortDefinition]
+    outputs: list[PortDefinition]
+    fields: list[FieldDefinition]
+    workflow: WorkflowReference | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+
+
+class GlitchlingParameter(BaseModel):
+    """Constructor metadata for one discovered Glitchling parameter."""
+
+    name: str
+    required: bool
+    default: Any = None
+    annotation: str | None
+    choices: list[Any]
+
+
+class GlitchlingDescriptor(BaseModel):
+    """One Glitchling discovered from the optional public registry."""
+
+    name: str
+    label: str
+    class_name: str = Field(alias="class")
+    parameters: list[GlitchlingParameter]
+
+
+class PluginStatus(BaseModel):
+    """Availability metadata for the optional Glitchlings integration."""
+
+    available: bool
+    version: str | None
+    path: str | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+    error: str | None = None
+
+
+class HealthResponse(BaseModel):
+    """Backend and optional-plugin health."""
+
+    status: Literal["ok"]
+    version: str
+    workspace: str
+    glitchlings: PluginStatus
+
+
+class CatalogResponse(BaseModel):
+    """Complete catalog and live optional-plugin metadata."""
+
+    nodes: list[NodeDefinition]
+    glitchlings: list[GlitchlingDescriptor]
+    plugin: PluginStatus
+
 
 class Position(BaseModel):
     """Canvas position retained as part of a graph snapshot."""
@@ -21,9 +154,7 @@ class GraphNode(BaseModel):
     kind: str
     title: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
-    control_ports: dict[str, Literal["input", "output", "passthrough"]] = Field(
-        default_factory=dict
-    )
+    control_ports: dict[str, ControlPortMode] = Field(default_factory=dict)
     position: Position = Field(default_factory=Position)
 
 
@@ -108,12 +239,58 @@ class LoomTemplateSummary(BaseModel):
     node_count: int
 
 
+class LoomListResponse(BaseModel):
+    """Saved mutable loom summaries."""
+
+    looms: list[LoomSummary]
+
+
+class LoomResponse(BaseModel):
+    """Envelope returned after creating or updating a loom."""
+
+    loom: LoomSpec
+
+
+class LoadLoomResponse(LoomResponse):
+    """A saved loom plus exact catalog definitions needed to render it."""
+
+    definitions: list[NodeDefinition]
+
+
+class LoomTemplateListResponse(BaseModel):
+    """Checked-in graph template summaries."""
+
+    templates: list[LoomTemplateSummary]
+
+
+class LoadLoomTemplateResponse(BaseModel):
+    """A checked-in template plus exact definitions needed to render it."""
+
+    template: LoomTemplate
+    definitions: list[NodeDefinition]
+
+
+class DeletedLoom(BaseModel):
+    """Recoverable deletion metadata for one mutable loom."""
+
+    id: str
+    name: str
+    revision: int
+    recoverable_path: str
+
+
+class DeleteLoomResponse(BaseModel):
+    """Envelope returned after moving a loom to recoverable trash."""
+
+    deleted: DeletedLoom
+
+
 class WorkflowInput(BaseModel):
     """One public workflow input bound to an internal node port."""
 
     name: str
     label: str
-    type: str
+    type: ValueType
     required: bool = True
     multiple: bool = False
     node_id: str
@@ -125,7 +302,7 @@ class WorkflowOutput(BaseModel):
 
     name: str
     label: str
-    type: str
+    type: ValueType
     node_id: str
     node_port: str
 
@@ -149,12 +326,48 @@ class WorkflowSpec(WorkflowDraft):
     created_at: str
 
 
+class WorkflowListResponse(BaseModel):
+    """Latest immutable version of every saved workflow."""
+
+    workflows: list[WorkflowSpec]
+
+
+class SaveWorkflowResponse(BaseModel):
+    """A saved workflow and its catalog node definition."""
+
+    workflow: WorkflowSpec
+    definition: NodeDefinition
+
+
+class LoadWorkflowResponse(BaseModel):
+    """An exact workflow version plus definitions for its graph."""
+
+    workflow: WorkflowSpec
+    definitions: list[NodeDefinition]
+
+
+class DeletedWorkflow(BaseModel):
+    """Recoverable deletion metadata for one workflow family."""
+
+    id: str
+    name: str
+    versions: int
+    dependents: list[str]
+    recoverable_path: str
+
+
+class DeleteWorkflowResponse(BaseModel):
+    """Envelope returned after moving workflow versions to recoverable trash."""
+
+    deleted: DeletedWorkflow
+
+
 class NodeRunResult(BaseModel):
     """One node's execution outcome."""
 
     node_id: str
     kind: str
-    status: str
+    status: Literal["completed", "failed"]
     duration_ms: float
     outputs: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
@@ -187,10 +400,34 @@ class RunManifest(BaseModel):
 class RunResponse(BaseModel):
     """Successful graph execution response."""
 
-    status: str
+    status: Literal["completed"]
     manifest: RunManifest
     nodes: list[NodeRunResult]
     terminal_outputs: dict[str, dict[str, Any]]
+
+
+class RunErrorDetail(BaseModel):
+    """Structured graph validation or node-execution failure."""
+
+    message: str
+    node_id: str | None = None
+    nodes: list[NodeRunResult] = Field(default_factory=list)
+
+
+class ValidationIssue(BaseModel):
+    """One request-validation issue emitted by FastAPI."""
+
+    loc: list[str | int]
+    msg: str
+    type: str
+    input: Any = None
+    ctx: dict[str, Any] | None = None
+
+
+class RunErrorResponse(BaseModel):
+    """Graph failure or request-validation detail returned with HTTP 422."""
+
+    detail: RunErrorDetail | list[ValidationIssue]
 
 
 class GraphRunFailure(Exception):

@@ -6,7 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8788",
+      "/api":
+        process.env.GLITCHLOOM_API_TARGET ?? "http://127.0.0.1:8788",
     },
   },
   build: {

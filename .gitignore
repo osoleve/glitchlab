@@ -16,6 +16,8 @@ web/*.tsbuildinfo
 web/vite.config.js
 web/vite.config.d.ts
 web/vite.config.js.map
+web/playwright-report/
+web/test-results/
 runs/
 .glitchloom/
 talkie-smoke.result.json

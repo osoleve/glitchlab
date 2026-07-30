@@ -219,8 +219,9 @@ Backend:
 
 ```powershell
 uv sync --python 3.12
-uv run pytest
 uv run ruff check .
+uv run python scripts/export_openapi.py --check
+uv run pytest
 uv run uvicorn glitchloom.server:app --host 127.0.0.1 --port 8788
 ```
 
@@ -228,11 +229,20 @@ Frontend:
 
 ```powershell
 cd web
-npm install
+npm ci
+npm run api:check
+npm test
+npm run build
+npm run test:e2e:install
+npm run test:e2e
 npm run dev
 ```
 
-Vite proxies `/api` to the backend on port 8788.
+`scripts/export_openapi.py` owns the checked-in backend schema snapshot;
+`npm run api:generate` refreshes the TypeScript declarations derived from it.
+The Playwright suite launches isolated backend and Vite processes, uses
+deterministic run responses, and exercises both supported viewport sizes. Vite
+proxies `/api` to the backend on port 8788 during normal development.
 
 ## Spike boundaries
 

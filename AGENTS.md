@@ -33,11 +33,15 @@ Use Python 3.12 because the local Glitchlings native extension targets CPython
 ```powershell
 uv sync --python 3.12
 uv run ruff check .
+uv run python scripts/export_openapi.py --check
 uv run pytest -q
 
 Set-Location web
 npm ci
+npm run api:check
+npm test
 npm run build
+npm run test:e2e
 ```
 
 The real Glitchlings integration test runs when
