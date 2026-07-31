@@ -3,6 +3,12 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    dedupe: ["react", "react-dom"],
+  },
+  optimizeDeps: {
+    include: ["zustand"],
+  },
   server: {
     port: 5173,
     proxy: {
