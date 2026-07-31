@@ -20,16 +20,18 @@ The output view recognizes both those records and raw OpenAI-compatible completi
 envelopes, including lists of either shape. It keeps generated text prominent,
 surfaces compact model, finish, token, latency, cache, revision, and seed context,
 and leaves request details plus the complete JSON available on demand.
-The workbench also tracks unsaved graph changes, confirms and can undo a starter
-reset, preserves the current selection while a run completes, and labels
-collected completion cards with their source node titles. Selected canvas nodes
-have working resize handles, `Ctrl`/`Cmd`+click builds a multi-node selection,
-and `Delete` / `Backspace` removes the current canvas selection. Right-clicking
-nodes, selections, wires, or the canvas opens Glitchloom's context menu. Selected
-wires expose draggable endpoints; dropping one away from a compatible port
-disconnects it. `Ctrl+Enter` runs the loom. The node library and inspector use
-standard draggable dividers, support arrow-key resizing when focused, and reset
-to their responsive defaults on double-click.
+The workbench also tracks unsaved graph changes and provides document-wide
+undo/redo from the topbar or `Ctrl`/`Cmd`+`Z` and `Ctrl`/`Cmd`+`Shift`+`Z`.
+History covers graph edits and starter resets while excluding run results and
+selection state. The workbench preserves the current selection while a run
+completes and labels collected completion cards with their source node titles.
+Selected canvas nodes have working resize handles, `Ctrl`/`Cmd`+click builds a
+multi-node selection, and `Delete` / `Backspace` removes the current canvas
+selection. Right-clicking nodes, selections, wires, or the canvas opens
+Glitchloom's context menu. Selected wires expose draggable endpoints; dropping
+one away from a compatible port disconnects it. `Ctrl+Enter` runs the loom. The
+node library and inspector use standard draggable dividers, support arrow-key
+resizing when focused, and reset to their responsive defaults on double-click.
 
 Frequently tuned catalog fields can also render directly on their workflow
 cards. Text and template sources, model IDs, file paths, Glitchling choices,

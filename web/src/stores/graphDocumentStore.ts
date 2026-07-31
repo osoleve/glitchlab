@@ -6,12 +6,17 @@ import {
   type EdgeChange,
   type NodeChange,
 } from "@xyflow/react";
+import { temporal } from "zundo";
 import { create, type StateCreator } from "zustand";
 import { withControlPorts } from "../controlPorts";
 import { downstreamClosure, upstreamClosure } from "../graphTraversal";
 import type { ControlPortMode, LoomEdge, LoomNode } from "../types";
 
 type Updater<T> = T | ((current: T) => T);
+type GraphDocumentFields = Pick<GraphDocumentState, "nodes" | "edges" | "loomName" | "isDirty">;
+type GraphDocumentUpdate = Partial<GraphDocumentFields>;
+
+export interface GraphHistoryState extends GraphDocumentFields {}
 
 export interface GraphDocumentState {
   nodes: LoomNode[];
@@ -26,6 +31,11 @@ export interface GraphDocumentState {
   setIsDirty: (isDirty: boolean) => void;
   markDirty: () => void;
   markSemanticDirty: () => void;
+  renameLoom: (loomName: string) => void;
+  updateDocument: (
+    updater: (document: GraphDocumentFields) => GraphDocumentUpdate,
+    semantic?: boolean,
+  ) => void;
   applyNodeChanges: (changes: NodeChange<LoomNode>[]) => void;
   applyEdgeChanges: (changes: EdgeChange<LoomEdge>[]) => void;
   connect: (connection: Connection | LoomEdge) => void;
@@ -45,6 +55,50 @@ export interface GraphDocumentState {
   replaceGraph: (nodes: LoomNode[], edges: LoomEdge[], loomName: string, isDirty: boolean) => void;
 }
 
+function resetRunStatuses(nodes: LoomNode[]): LoomNode[] {
+  return nodes.map((node) => ({
+    ...node,
+    data: { ...node.data, runStatus: "idle" as const },
+  }));
+}
+
+function historyNode(node: LoomNode): LoomNode {
+  return {
+    ...node,
+    measured: undefined,
+    selected: false,
+    dragging: false,
+    resizing: false,
+    data: {
+      ...node.data,
+      runStatus: "idle",
+      executionScopeRole: undefined,
+      onUpdateField: undefined,
+    },
+  };
+}
+
+function historyEdge(edge: LoomEdge): LoomEdge {
+  return {
+    ...edge,
+    selected: false,
+    animated: false,
+  };
+}
+
+function graphHistoryState(state: GraphDocumentState): GraphHistoryState {
+  return {
+    nodes: state.nodes.map(historyNode),
+    edges: state.edges.map(historyEdge),
+    loomName: state.loomName,
+    isDirty: state.isDirty,
+  };
+}
+
+function graphHistoryEqual(left: GraphHistoryState, right: GraphHistoryState): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
   nodes: [],
   edges: [],
@@ -61,11 +115,24 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
   markSemanticDirty: () =>
     set((state) => ({
       isDirty: true,
-      nodes: state.nodes.map((node) => ({
-        ...node,
-        data: { ...node.data, runStatus: "idle" as const },
-      })),
+      nodes: resetRunStatuses(state.nodes),
     })),
+  renameLoom: (loomName) => set({ loomName, isDirty: true }),
+  updateDocument: (updater, semantic = true) =>
+    set((state) => {
+      const update = updater({
+        nodes: state.nodes,
+        edges: state.edges,
+        loomName: state.loomName,
+        isDirty: state.isDirty,
+      });
+      const nodes = update.nodes ?? state.nodes;
+      return {
+        ...update,
+        nodes: semantic ? resetRunStatuses(nodes) : nodes,
+        isDirty: update.isDirty ?? true,
+      };
+    }),
   applyNodeChanges: (changes) =>
     set((state) => {
       const semantic = changes.some((change) => change.type === "add" || change.type === "remove");
@@ -73,24 +140,26 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         (change) =>
           change.type === "position" || (change.type === "dimensions" && Boolean(change.resizing)),
       );
+      const nodes = applyNodeChanges(changes, state.nodes);
       return {
-        nodes: applyNodeChanges(changes, state.nodes),
+        nodes: semantic ? resetRunStatuses(nodes) : nodes,
         isDirty: state.isDirty || semantic || layout,
       };
     }),
   applyEdgeChanges: (changes) =>
-    set((state) => ({
-      edges: applyEdgeChanges(changes, state.edges),
-      isDirty: state.isDirty || changes.some((change) => change.type !== "select"),
-    })),
+    set((state) => {
+      const semantic = changes.some((change) => change.type !== "select");
+      return {
+        edges: applyEdgeChanges(changes, state.edges),
+        nodes: semantic ? resetRunStatuses(state.nodes) : state.nodes,
+        isDirty: state.isDirty || semantic,
+      };
+    }),
   connect: (connection) =>
     set((state) => ({
       edges: addEdge(connection, state.edges),
       isDirty: true,
-      nodes: state.nodes.map((node) => ({
-        ...node,
-        data: { ...node.data, runStatus: "idle" as const },
-      })),
+      nodes: resetRunStatuses(state.nodes),
     })),
   updateNodeField: (nodeId, field, value) =>
     set((state) => ({
@@ -146,7 +215,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     set((state) => {
       const ids = new Set(nodeIds);
       return {
-        nodes: state.nodes.filter((node) => !ids.has(node.id)),
+        nodes: resetRunStatuses(state.nodes.filter((node) => !ids.has(node.id))),
         edges: state.edges.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target)),
         selectedId: undefined,
         isDirty: true,
@@ -156,10 +225,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     set((state) => ({
       edges: state.edges.filter((edge) => edge.id !== edgeId),
       isDirty: true,
-      nodes: state.nodes.map((node) => ({
-        ...node,
-        data: { ...node.data, runStatus: "idle" as const },
-      })),
+      nodes: resetRunStatuses(state.nodes),
     })),
   selectNode: (nodeId, additive = false) => {
     let selectedId: string | undefined;
@@ -279,7 +345,14 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     });
     return duplicatedIds;
   },
-  replaceGraph: (nodes, edges, loomName, isDirty) => set({ nodes, edges, loomName, isDirty }),
+  replaceGraph: (nodes, edges, loomName, isDirty) =>
+    set({ nodes, edges, selectedId: undefined, loomName, isDirty }),
 });
 
-export const useGraphDocumentStore = create<GraphDocumentState>(graphDocumentState);
+export const useGraphDocumentStore = create<GraphDocumentState>()(
+  temporal<GraphDocumentState, [], [], GraphHistoryState>(graphDocumentState, {
+    partialize: graphHistoryState,
+    equality: graphHistoryEqual,
+    limit: 100,
+  }),
+);

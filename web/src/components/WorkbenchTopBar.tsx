@@ -1,4 +1,14 @@
-import { Bug, FilePlus2, FolderOpen, LoaderCircle, Play, RotateCcw, Save } from "lucide-react";
+import {
+  Bug,
+  FilePlus2,
+  FolderOpen,
+  LoaderCircle,
+  Play,
+  Redo2,
+  RotateCcw,
+  Save,
+  Undo2,
+} from "lucide-react";
 import styles from "../App.module.css";
 import { moduleClassNames as cx } from "../moduleClassNames";
 import type { CatalogResponse, LoomSpec, WorkflowSpec } from "../types";
@@ -8,6 +18,8 @@ interface WorkbenchTopBarProps {
   activeTabId: string;
   activeWorkflow?: WorkflowSpec;
   afterHours: boolean;
+  canRedo: boolean;
+  canUndo: boolean;
   catalog?: CatalogResponse;
   graphBusy: boolean;
   isDirty: boolean;
@@ -22,7 +34,9 @@ interface WorkbenchTopBarProps {
   onOpenLibrary: () => void;
   onRequestSaveLoom: (saveAs: boolean) => void;
   onRequestStarterReset: () => void;
+  onRedo: () => void;
   onToggleAfterHours: () => void;
+  onUndo: () => void;
 }
 
 export function WorkbenchTopBar({
@@ -30,6 +44,8 @@ export function WorkbenchTopBar({
   activeTabId,
   activeWorkflow,
   afterHours,
+  canRedo,
+  canUndo,
   catalog,
   graphBusy,
   isDirty,
@@ -44,7 +60,9 @@ export function WorkbenchTopBar({
   onOpenLibrary,
   onRequestSaveLoom,
   onRequestStarterReset,
+  onRedo,
   onToggleAfterHours,
+  onUndo,
 }: WorkbenchTopBarProps) {
   return (
     <header className={cx(styles, "topbar")}>
@@ -104,6 +122,26 @@ export function WorkbenchTopBar({
         >
           <Bug size={13} />
         </span>
+        <button
+          type="button"
+          className={cx(styles, "secondary-button compact-action-button")}
+          onClick={onUndo}
+          disabled={!canUndo || running || graphBusy}
+          title="Undo graph change (Ctrl+Z)"
+          aria-label="Undo graph change"
+        >
+          <Undo2 size={15} />
+        </button>
+        <button
+          type="button"
+          className={cx(styles, "secondary-button compact-action-button")}
+          onClick={onRedo}
+          disabled={!canRedo || running || graphBusy}
+          title="Redo graph change (Ctrl+Shift+Z)"
+          aria-label="Redo graph change"
+        >
+          <Redo2 size={15} />
+        </button>
         <button
           type="button"
           className={cx(styles, "secondary-button")}

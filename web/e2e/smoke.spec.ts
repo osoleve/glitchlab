@@ -159,6 +159,47 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
   expect(errors).toEqual([]);
 });
 
+test("document edits undo and redo through shortcuts and toolbar controls", async ({ page }) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  const undo = page.getByRole("button", { name: "Undo graph change" });
+  const redo = page.getByRole("button", { name: "Redo graph change" });
+  await expect(undo).toBeDisabled();
+  await expect(redo).toBeDisabled();
+
+  await page.locator('.react-flow__node[data-id="prompt"] header').click();
+  const prompt = page.getByLabel("Text for Seed prompt");
+  const originalPrompt = await prompt.inputValue();
+  await prompt.fill("Undo and redo browser test");
+  await page.getByRole("button", { name: "Close inspector" }).click();
+
+  await expect(undo).toBeEnabled();
+  await page.keyboard.press("Control+z");
+  await expect(redo).toBeEnabled();
+  await page.locator('.react-flow__node[data-id="prompt"] header').click();
+  await expect(page.getByLabel("Text for Seed prompt")).toHaveValue(originalPrompt);
+  await page.getByRole("button", { name: "Close inspector" }).click();
+
+  await redo.click();
+  await page.locator('.react-flow__node[data-id="prompt"] header').click();
+  await expect(page.getByLabel("Text for Seed prompt")).toHaveValue("Undo and redo browser test");
+  await page.getByRole("button", { name: "Close inspector" }).click();
+
+  await undo.click();
+  await page.keyboard.press("Control+Shift+z");
+  await page.locator('.react-flow__node[data-id="prompt"] header').click();
+  await expect(page.getByLabel("Text for Seed prompt")).toHaveValue("Undo and redo browser test");
+  await page.getByRole("button", { name: "Close inspector" }).click();
+
+  await page.getByRole("button", { name: "Reset to starter graph" }).click();
+  await page.getByRole("button", { name: "Reset graph" }).click();
+  await undo.click();
+  await page.locator('.react-flow__node[data-id="prompt"] header').click();
+  await expect(page.getByLabel("Text for Seed prompt")).toHaveValue("Undo and redo browser test");
+  expect(errors).toEqual([]);
+});
+
 test("a successful run selects and renders deterministic output", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.route("**/api/runs", (route) => successfulRunResponse(route));

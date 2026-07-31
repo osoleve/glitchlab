@@ -38,6 +38,7 @@ interface GraphCanvasProps {
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
   onEdgesChange: (changes: EdgeChange<LoomEdge>[]) => void;
   onFitExecutionScope: () => void;
+  onNodeDragStop: () => void;
   onNodesChange: (changes: NodeChange<LoomNode>[]) => void;
   onOpenContextMenu: (contextMenu?: ContextMenuState) => void;
   onReconnect: (edge: LoomEdge, connection: Connection) => void;
@@ -83,6 +84,7 @@ export function GraphCanvas({
   onDrop,
   onEdgesChange,
   onFitExecutionScope,
+  onNodeDragStop,
   onNodesChange,
   onOpenContextMenu,
   onReconnect,
@@ -153,6 +155,7 @@ export function GraphCanvas({
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
+        onNodeDragStop={onNodeDragStop}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         isValidConnection={isValidConnection}

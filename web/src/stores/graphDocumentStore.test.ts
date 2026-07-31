@@ -43,6 +43,8 @@ describe("graph document store", () => {
       loomName: "Test graph",
       isDirty: false,
     });
+    useGraphDocumentStore.temporal.getState().resume();
+    useGraphDocumentStore.temporal.getState().clear();
   });
 
   it("updates node fields without mounting the app", () => {

@@ -1,10 +1,8 @@
 import {
-  addEdge,
   type Connection,
   type EdgeChange,
   MarkerType,
   type NodeChange,
-  reconnectEdge,
   useNodesInitialized,
   useReactFlow,
   type Viewport,
@@ -17,7 +15,6 @@ import {
   LoaderCircle,
   Save,
   Trash2,
-  Undo2,
   X,
 } from "lucide-react";
 import type {
@@ -69,6 +66,16 @@ import { moduleClassNames as cx } from "./moduleClassNames";
 import { compatibleNodeInputs } from "./nodePicker";
 import { talkieStarter } from "./starter";
 import { useGraphDocumentStore } from "./stores/graphDocumentStore";
+import {
+  clearGraphHistory,
+  pauseGraphHistory,
+  redoGraphDocument,
+  resumeGraphHistory,
+  undoGraphDocument,
+  useCanRedoGraph,
+  useCanUndoGraph,
+  withoutGraphHistory,
+} from "./stores/graphHistory";
 import { useRunControllerStore } from "./stores/runControllerStore";
 import type { ExecutionScopeState, GraphSnapshot, GraphTab } from "./stores/types";
 import { MAIN_TAB_ID, useWorkspaceStore } from "./stores/workspaceStore";
@@ -211,12 +218,11 @@ export function GlitchloomWorkbench() {
     loomName,
     isDirty,
     setNodes,
-    setEdges,
     setSelectedId,
     setLoomName,
     setIsDirty,
-    markDirty: markGraphDirty,
-    markSemanticDirty: markGraphSemanticDirty,
+    renameLoom,
+    updateDocument,
     applyNodeChanges,
     applyEdgeChanges,
     connect: connectGraph,
@@ -227,6 +233,7 @@ export function GlitchloomWorkbench() {
     duplicateNodes,
     selectAllNodes: selectAllGraphNodes,
     selectRelatedNodes,
+    replaceGraph,
   } = useGraphDocumentStore();
   const {
     running,
@@ -264,7 +271,6 @@ export function GlitchloomWorkbench() {
   const [paletteQuery, setPaletteQuery] = useState("");
   const [needsFit, setNeedsFit] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [undoSnapshot, setUndoSnapshot] = useState<GraphSnapshot>();
   const [resizingPanel, setResizingPanel] = useState<ResizablePanel>();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>();
   const [quickAddQuery, setQuickAddQuery] = useState("");
@@ -294,6 +300,7 @@ export function GlitchloomWorkbench() {
   const [deleteWorkflowError, setDeleteWorkflowError] = useState<string>();
   const [closeTabId, setCloseTabId] = useState<string>();
   const runStartedAt = useRef(0);
+  const nodeDragHistoryPaused = useRef(false);
   const reconnectSuccessful = useRef(false);
   const hasOpenedGraph = useRef(false);
   const canvasRef = useRef<HTMLElement>(null);
@@ -301,6 +308,8 @@ export function GlitchloomWorkbench() {
   const inspectorRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
+  const canUndo = useCanUndoGraph();
+  const canRedo = useCanRedoGraph();
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const activeWorkflow = activeTab.type === "workflow" ? activeTab.workflow : undefined;
   const activeLoom = activeTab.type === "loom" ? activeTab.loom : undefined;
@@ -325,31 +334,18 @@ export function GlitchloomWorkbench() {
 
   const applySnapshot = useCallback(
     (snapshot: GraphSnapshot) => {
-      setNodes(snapshot.nodes);
-      setEdges(snapshot.edges);
+      replaceGraph(snapshot.nodes, snapshot.edges, snapshot.loomName, snapshot.isDirty);
       setRun(snapshot.run);
       setRunError(snapshot.runError);
       setExecutionScope(snapshot.executionScope);
       setSelectedId(snapshot.selectedId);
-      setLoomName(snapshot.loomName);
-      setIsDirty(snapshot.isDirty);
       setInspectorOpen(Boolean(snapshot.selectedId));
-      setUndoSnapshot(undefined);
       setContextMenu(undefined);
       setWorkflowMenu(undefined);
       setNeedsFit(true);
+      clearGraphHistory();
     },
-    [
-      setEdges,
-      setExecutionScope,
-      setInspectorOpen,
-      setIsDirty,
-      setLoomName,
-      setNodes,
-      setRun,
-      setRunError,
-      setSelectedId,
-    ],
+    [setExecutionScope, setInspectorOpen, replaceGraph, setRun, setRunError, setSelectedId],
   );
 
   const switchGraphTab = useCallback(
@@ -384,9 +380,8 @@ export function GlitchloomWorkbench() {
         setCatalog(response);
         if (hasOpenedGraph.current) return;
         const starter = talkieStarter(response.nodes);
-        setNodes(starter.nodes);
-        setEdges(starter.edges);
-        setIsDirty(false);
+        replaceGraph(starter.nodes, starter.edges, "Talkie perturbation pair", false);
+        clearGraphHistory();
         setTabs((current) =>
           current.map((tab) =>
             tab.id === MAIN_TAB_ID
@@ -407,7 +402,7 @@ export function GlitchloomWorkbench() {
       .catch((error: unknown) => {
         setCatalogError(error instanceof Error ? error.message : String(error));
       });
-  }, [setEdges, setIsDirty, setNodes, setTabs]);
+  }, [replaceGraph, setTabs]);
 
   useEffect(() => {
     void Promise.all([fetchLooms(), fetchLoomTemplates()])
@@ -470,15 +465,9 @@ export function GlitchloomWorkbench() {
     return () => window.clearInterval(timer);
   }, [running, setRunElapsed]);
 
-  const markDirty = useCallback(() => {
-    markGraphDirty();
-    setUndoSnapshot(undefined);
-  }, [markGraphDirty]);
   const markSemanticDirty = useCallback(() => {
-    markGraphSemanticDirty();
     markSemanticEdit();
-    setUndoSnapshot(undefined);
-  }, [markGraphSemanticDirty, markSemanticEdit]);
+  }, [markSemanticEdit]);
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
@@ -580,15 +569,35 @@ export function GlitchloomWorkbench() {
   const onNodesChange = useCallback(
     (changes: NodeChange<LoomNode>[]) => {
       const semantic = changes.some((change) => change.type === "add" || change.type === "remove");
-      const layout = changes.some(
-        (change) =>
-          change.type === "position" || (change.type === "dimensions" && Boolean(change.resizing)),
-      );
       if (semantic) markSemanticDirty();
-      else if (layout) markDirty();
       applyNodeChanges(changes);
+      const dragging = changes.some(
+        (change) => change.type === "position" && change.dragging === true,
+      );
+      const dragEnded = changes.some(
+        (change) => change.type === "position" && change.dragging === false,
+      );
+      if (dragging && !nodeDragHistoryPaused.current) {
+        pauseGraphHistory();
+        nodeDragHistoryPaused.current = true;
+      }
+      if (dragEnded && nodeDragHistoryPaused.current) {
+        resumeGraphHistory();
+        nodeDragHistoryPaused.current = false;
+      }
     },
-    [applyNodeChanges, markDirty, markSemanticDirty],
+    [applyNodeChanges, markSemanticDirty],
+  );
+  const finishNodeDragHistory = useCallback(() => {
+    if (!nodeDragHistoryPaused.current) return;
+    resumeGraphHistory();
+    nodeDragHistoryPaused.current = false;
+  }, []);
+  useEffect(
+    () => () => {
+      if (nodeDragHistoryPaused.current) resumeGraphHistory();
+    },
+    [],
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange<LoomEdge>[]) => {
@@ -618,11 +627,24 @@ export function GlitchloomWorkbench() {
     (oldEdge: LoomEdge, connection: Connection) => {
       reconnectSuccessful.current = true;
       markSemanticDirty();
-      setEdges((current) =>
-        reconnectEdge(oldEdge, connection, current, { shouldReplaceId: false }),
+      updateDocument(
+        ({ edges: current }) => ({
+          edges: current.map((edge) =>
+            edge.id === oldEdge.id
+              ? {
+                  ...edge,
+                  source: connection.source ?? edge.source,
+                  sourceHandle: connection.sourceHandle ?? edge.sourceHandle,
+                  target: connection.target ?? edge.target,
+                  targetHandle: connection.targetHandle ?? edge.targetHandle,
+                }
+              : edge,
+          ),
+        }),
+        true,
       );
     },
-    [markSemanticDirty, setEdges],
+    [markSemanticDirty, updateDocument],
   );
   const onReconnectEnd = useCallback(
     (
@@ -633,18 +655,26 @@ export function GlitchloomWorkbench() {
     ) => {
       if (!reconnectSuccessful.current && connectionState.isValid !== true) {
         markSemanticDirty();
-        setEdges((current) => current.filter((item) => item.id !== edge.id));
+        removeEdge(edge.id);
       }
       reconnectSuccessful.current = false;
     },
-    [markSemanticDirty, setEdges],
+    [markSemanticDirty, removeEdge],
   );
 
   const addNode = useCallback(
-    (definition: NodeDefinition, position?: { x: number; y: number }) => {
+    (
+      definition: NodeDefinition,
+      position?: { x: number; y: number },
+      incoming?: {
+        sourceNodeId: string;
+        sourceHandle: string;
+        targetHandle: string;
+      },
+    ) => {
       const id = `${definition.kind}-${crypto.randomUUID().slice(0, 6)}`;
       markSemanticDirty();
-      setNodes((current) => {
+      updateDocument(({ nodes: current, edges: currentEdges }) => {
         let nextPosition = position;
         if (!nextPosition) {
           const canvasBounds = canvasRef.current?.getBoundingClientRect();
@@ -660,32 +690,51 @@ export function GlitchloomWorkbench() {
             current,
           );
         }
-        return [
-          ...current.map((node) => ({ ...node, selected: false })),
-          {
-            id,
-            type: "loomNode",
-            position: nextPosition,
-            data: {
-              kind: definition.kind,
-              title: definition.label,
-              definition,
-              config: {
-                ...defaultConfig(definition),
-                ...(definition.workflow ? { workflow_digest: definition.workflow.digest } : {}),
+        return {
+          nodes: [
+            ...current.map((node) => ({ ...node, selected: false })),
+            {
+              id,
+              type: "loomNode",
+              position: nextPosition,
+              data: {
+                kind: definition.kind,
+                title: definition.label,
+                definition,
+                config: {
+                  ...defaultConfig(definition),
+                  ...(definition.workflow ? { workflow_digest: definition.workflow.digest } : {}),
+                },
+                controlPorts: {},
+                runStatus: "idle",
               },
-              controlPorts: {},
-              runStatus: "idle",
+              selected: true,
             },
-            selected: true,
-          },
-        ];
-      });
+          ],
+          edges: incoming
+            ? [
+                ...currentEdges,
+                {
+                  id: crypto.randomUUID(),
+                  source: incoming.sourceNodeId,
+                  sourceHandle: incoming.sourceHandle,
+                  target: id,
+                  targetHandle: incoming.targetHandle,
+                  markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    width: 18,
+                    height: 18,
+                  },
+                },
+              ]
+            : currentEdges,
+        };
+      }, true);
       setSelectedId(id);
       setInspectorOpen(true);
       return id;
     },
-    [markSemanticDirty, screenToFlowPosition, setInspectorOpen, setNodes, setSelectedId],
+    [markSemanticDirty, screenToFlowPosition, setInspectorOpen, setSelectedId, updateDocument],
   );
 
   const onPaletteDrag = (event: DragEvent<HTMLButtonElement>, definition: NodeDefinition) => {
@@ -703,8 +752,12 @@ export function GlitchloomWorkbench() {
   const updateSelected = (updater: (node: LoomNode) => LoomNode, semantic = true) => {
     if (!selectedId) return;
     if (semantic) markSemanticDirty();
-    else markDirty();
-    setNodes((current) => current.map((node) => (node.id === selectedId ? updater(node) : node)));
+    updateDocument(
+      ({ nodes: current }) => ({
+        nodes: current.map((node) => (node.id === selectedId ? updater(node) : node)),
+      }),
+      semantic,
+    );
   };
   const updateNodeField = useCallback(
     (nodeId: string, field: string, value: unknown) => {
@@ -744,7 +797,6 @@ export function GlitchloomWorkbench() {
           : []);
     if (sourceIds.length === 0) return;
     markSemanticEdit();
-    setUndoSnapshot(undefined);
     const duplicatedIds = duplicateNodes(sourceIds);
     if (duplicatedIds.length === 0) return;
     setInspectorOpen(true);
@@ -805,12 +857,14 @@ export function GlitchloomWorkbench() {
         });
       });
     }
-    markDirty();
-    setNodes((current) =>
-      current.map((node) => {
-        const position = positions.get(node.id);
-        return position ? { ...node, position } : node;
+    updateDocument(
+      ({ nodes: current }) => ({
+        nodes: current.map((node) => {
+          const position = positions.get(node.id);
+          return position ? { ...node, position } : node;
+        }),
       }),
+      false,
     );
     setContextMenu(undefined);
   };
@@ -839,12 +893,14 @@ export function GlitchloomWorkbench() {
       );
     });
     if (changed) {
-      markDirty();
-      setNodes((current) =>
-        current.map((node) => {
-          const position = positions.get(node.id);
-          return position ? { ...node, position } : node;
+      updateDocument(
+        ({ nodes: current }) => ({
+          nodes: current.map((node) => {
+            const position = positions.get(node.id);
+            return position ? { ...node, position } : node;
+          }),
         }),
+        false,
       );
       if (!included) {
         window.setTimeout(() => {
@@ -875,46 +931,49 @@ export function GlitchloomWorkbench() {
       height: 18,
     };
     markSemanticDirty();
-    setNodes((current) => [
-      ...current.map((node) => ({ ...node, selected: false })),
-      {
-        id: nodeId,
-        type: "loomNode",
-        position,
-        selected: true,
-        data: {
-          kind: definition.kind,
-          title: definition.label,
-          definition,
-          config: defaultConfig(definition),
-          controlPorts: {},
-          runStatus: "idle",
-        },
-      },
-    ]);
-    setEdges((current) =>
-      current.flatMap((candidate) =>
-        candidate.id === edgeId
-          ? [
-              {
-                id: crypto.randomUUID(),
-                source: candidate.source,
-                sourceHandle: candidate.sourceHandle,
-                target: nodeId,
-                targetHandle: "value",
-                markerEnd,
-              },
-              {
-                id: crypto.randomUUID(),
-                source: nodeId,
-                sourceHandle: "value",
-                target: candidate.target,
-                targetHandle: candidate.targetHandle,
-                markerEnd,
-              },
-            ]
-          : [candidate],
-      ),
+    updateDocument(
+      ({ nodes: currentNodes, edges: currentEdges }) => ({
+        nodes: [
+          ...currentNodes.map((node) => ({ ...node, selected: false })),
+          {
+            id: nodeId,
+            type: "loomNode",
+            position,
+            selected: true,
+            data: {
+              kind: definition.kind,
+              title: definition.label,
+              definition,
+              config: defaultConfig(definition),
+              controlPorts: {},
+              runStatus: "idle",
+            },
+          },
+        ],
+        edges: currentEdges.flatMap((candidate) =>
+          candidate.id === edgeId
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  source: candidate.source,
+                  sourceHandle: candidate.sourceHandle,
+                  target: nodeId,
+                  targetHandle: "value",
+                  markerEnd,
+                },
+                {
+                  id: crypto.randomUUID(),
+                  source: nodeId,
+                  sourceHandle: "value",
+                  target: candidate.target,
+                  targetHandle: candidate.targetHandle,
+                  markerEnd,
+                },
+              ]
+            : [candidate],
+        ),
+      }),
+      true,
     );
     setSelectedId(nodeId);
     setInspectorOpen(true);
@@ -1140,8 +1199,10 @@ export function GlitchloomWorkbench() {
         ),
       );
       if (nextTabId !== activeTabId) setActiveTabId(nextTabId);
-      setLoomName(saved.graph.name);
-      setIsDirty(false);
+      withoutGraphHistory(() => {
+        setLoomName(saved.graph.name);
+        setIsDirty(false);
+      });
       rememberLoom(saved);
       setLoomSaveDialogOpen(false);
       setLoomNotice(`${saved.graph.name} saved at revision ${saved.revision}.`);
@@ -1349,8 +1410,10 @@ export function GlitchloomWorkbench() {
               : tab,
           ),
         );
-        setLoomName(response.workflow.name);
-        setIsDirty(false);
+        withoutGraphHistory(() => {
+          setLoomName(response.workflow.name);
+          setIsDirty(false);
+        });
       }
       setSaveDialogOpen(false);
       setWorkflowNotice(
@@ -1370,30 +1433,21 @@ export function GlitchloomWorkbench() {
   };
   const addQuickNode = (definition: NodeDefinition, targetInput?: PortDefinition) => {
     if (contextMenu?.scope !== "pane") return;
-    const nodeId = addNode(definition, {
-      x: contextMenu.flowPosition.x - 118,
-      y: contextMenu.flowPosition.y - 72,
-    });
-    if (contextMenu.pendingConnection && targetInput) {
-      const connection = contextMenu.pendingConnection;
-      setEdges((current) =>
-        addEdge(
-          {
-            id: crypto.randomUUID(),
-            source: connection.sourceNodeId,
+    const connection = contextMenu.pendingConnection;
+    addNode(
+      definition,
+      {
+        x: contextMenu.flowPosition.x - 118,
+        y: contextMenu.flowPosition.y - 72,
+      },
+      connection && targetInput
+        ? {
+            sourceNodeId: connection.sourceNodeId,
             sourceHandle: connection.sourceHandle,
-            target: nodeId,
             targetHandle: targetInput.name,
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 18,
-              height: 18,
-            },
-          },
-          current,
-        ),
-      );
-    }
+          }
+        : undefined,
+    );
     setContextMenu(undefined);
     setQuickAddQuery("");
     setQuickAddIndex(0);
@@ -1402,15 +1456,12 @@ export function GlitchloomWorkbench() {
     if (!catalog) return;
     const starter = talkieStarter(catalog.nodes);
     const starterName = "Talkie perturbation pair";
-    setNodes(starter.nodes);
-    setEdges(starter.edges);
+    markSemanticDirty();
+    replaceGraph(starter.nodes, starter.edges, starterName, false);
     setRun(undefined);
     setRunError(undefined);
     setExecutionScope(undefined);
-    setSelectedId(undefined);
     setInspectorOpen(false);
-    setLoomName(starterName);
-    setIsDirty(false);
     setTabs((current) =>
       current.map((tab) =>
         tab.id === activeTabId
@@ -1440,33 +1491,22 @@ export function GlitchloomWorkbench() {
   };
 
   const confirmStarterReset = () => {
-    setUndoSnapshot({
-      nodes,
-      edges,
-      run,
-      runError,
-      selectedId,
-      loomName,
-      isDirty,
-      executionScope,
-    });
     setResetDialogOpen(false);
     applyStarter();
   };
 
-  const undoStarterReset = () => {
-    if (!undoSnapshot) return;
-    setNodes(undoSnapshot.nodes);
-    setEdges(undoSnapshot.edges);
-    setRun(undoSnapshot.run);
-    setRunError(undoSnapshot.runError);
-    setExecutionScope(undoSnapshot.executionScope);
-    setSelectedId(undoSnapshot.selectedId);
-    setLoomName(undoSnapshot.loomName);
-    setInspectorOpen(Boolean(undoSnapshot.selectedId));
-    setIsDirty(true);
-    setUndoSnapshot(undefined);
-    setNeedsFit(true);
+  const undoDocument = () => {
+    if (!undoGraphDocument()) return;
+    setInspectorOpen(false);
+    setContextMenu(undefined);
+    setWorkflowMenu(undefined);
+  };
+
+  const redoDocument = () => {
+    if (!redoGraphDocument()) return;
+    setInspectorOpen(false);
+    setContextMenu(undefined);
+    setWorkflowMenu(undefined);
   };
 
   const execute = async (requestedTargetIds: string[] = []) => {
@@ -1709,6 +1749,28 @@ export function GlitchloomWorkbench() {
       }
 
       const commandKey = event.ctrlKey || event.metaKey;
+      const historyShortcut =
+        commandKey &&
+        !editable &&
+        !running &&
+        !graphBusy &&
+        !saveDialogOpen &&
+        !loomSaveDialogOpen &&
+        !resetDialogOpen;
+      if (
+        historyShortcut &&
+        ((event.key.toLowerCase() === "z" && event.shiftKey) ||
+          (event.key.toLowerCase() === "y" && !event.shiftKey))
+      ) {
+        event.preventDefault();
+        redoDocument();
+        return;
+      }
+      if (historyShortcut && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        undoDocument();
+        return;
+      }
       if (
         commandKey &&
         event.key.toLowerCase() === "s" &&
@@ -1753,17 +1815,6 @@ export function GlitchloomWorkbench() {
         event.preventDefault();
         void execute();
         return;
-      }
-
-      if (
-        commandKey &&
-        event.key.toLowerCase() === "z" &&
-        !editable &&
-        !savingLoom &&
-        undoSnapshot
-      ) {
-        event.preventDefault();
-        undoStarterReset();
       }
     };
 
@@ -1866,11 +1917,12 @@ export function GlitchloomWorkbench() {
         running={running}
         savingLoom={savingLoom}
         savingWorkflow={savingWorkflow}
+        canRedo={canRedo}
+        canUndo={canUndo}
+        onRedo={redoDocument}
+        onUndo={undoDocument}
         onExecute={() => void execute()}
-        onLoomNameChange={(name) => {
-          setLoomName(name);
-          markDirty();
-        }}
+        onLoomNameChange={renameLoom}
         onOpenEditSaveDialog={openEditSaveDialog}
         onOpenLibrary={() => {
           setLoomLibraryError(undefined);
@@ -1952,6 +2004,7 @@ export function GlitchloomWorkbench() {
           onDrop={onDrop}
           onEdgesChange={onEdgesChange}
           onFitExecutionScope={fitExecutionScope}
+          onNodeDragStop={finishNodeDragHistory}
           onNodesChange={onNodesChange}
           onOpenContextMenu={setContextMenu}
           onReconnect={onReconnect}
@@ -2564,26 +2617,6 @@ export function GlitchloomWorkbench() {
               </button>
             </div>
           </section>
-        </div>
-      )}
-      {undoSnapshot && !resetDialogOpen && (
-        <div className={cx(styles, "undo-toast")} role="status">
-          <div>
-            <strong>Starter graph restored</strong>
-            <span>Your previous graph is still recoverable.</span>
-          </div>
-          <button type="button" onClick={undoStarterReset}>
-            <Undo2 size={14} />
-            Undo
-          </button>
-          <button
-            type="button"
-            className={cx(styles, "undo-dismiss")}
-            onClick={() => setUndoSnapshot(undefined)}
-            aria-label="Dismiss undo"
-          >
-            <X size={13} />
-          </button>
         </div>
       )}
       {workflowNotice && !saveDialogOpen && (
