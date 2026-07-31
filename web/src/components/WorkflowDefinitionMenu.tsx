@@ -26,6 +26,7 @@ export function WorkflowDefinitionMenu({
 
   return (
     <div
+      data-context-menu
       className={cx(styles, "context-menu workflow-library-menu")}
       role="menu"
       style={{

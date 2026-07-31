@@ -109,6 +109,7 @@ export function CanvasContextMenu({
 }: CanvasContextMenuProps) {
   return (
     <div
+      data-context-menu
       className={cx(
         styles,
         "context-menu",

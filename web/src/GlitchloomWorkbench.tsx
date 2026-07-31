@@ -501,7 +501,7 @@ export function GlitchloomWorkbench() {
   useEffect(() => {
     if (!contextMenu && !workflowMenu) return;
     const dismiss = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest(".context-menu")) {
+      if (event.target instanceof Element && event.target.closest("[data-context-menu]")) {
         return;
       }
       setContextMenu(undefined);

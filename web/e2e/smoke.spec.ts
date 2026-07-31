@@ -159,6 +159,26 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
   expect(errors).toEqual([]);
 });
 
+test("canvas context menu adds a node with the mouse", async ({ page }) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  const nodes = page.locator(".react-flow__node");
+  await expect(nodes).toHaveCount(12);
+
+  await page.locator(".react-flow__pane").click({
+    button: "right",
+    position: { x: 400, y: 20 },
+  });
+  await page.getByRole("searchbox", { name: "Find a node to add" }).fill("Number");
+  await page.getByRole("option", { name: "Number Values", exact: true }).click();
+
+  await expect(nodes).toHaveCount(13);
+  await expect(page.locator('.react-flow__node[data-id^="number_input-"]')).toHaveCount(1);
+  await expect(page.getByRole("menu")).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test("document edits undo and redo through shortcuts and toolbar controls", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.goto("/");
