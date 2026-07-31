@@ -1,5 +1,7 @@
 import { Check, Copy, FileJson2, Text } from "lucide-react";
 import { useState } from "react";
+import { moduleClassNames as cx } from "./moduleClassNames";
+import styles from "./PreviewValue.module.css";
 import {
   type CompletionEntry,
   type JsonRecord,
@@ -50,20 +52,20 @@ function CompletionCard({
   const latency = latencySummary(entry.latencyMs);
   const hasRequestDetails = entry.prompt !== undefined || entry.parameters !== undefined;
   return (
-    <article className="completion-card">
-      <header className="completion-card-heading">
+    <article className={cx(styles, "completion-card")}>
+      <header className={cx(styles, "completion-card-heading")}>
         <div>
           <span>{label ?? (total > 1 ? `Completion ${index + 1}` : "Completion")}</span>
           <strong>{entry.model ?? "Model response"}</strong>
         </div>
         {entry.choiceIndex !== undefined && <code>choice {entry.choiceIndex}</code>}
       </header>
-      <div className="preview-tags">
+      <div className={cx(styles, "preview-tags")}>
         {entry.finishReason && <span title="Finish reason">{entry.finishReason}</span>}
         {tokens && <span title="Token usage">{tokens}</span>}
         {latency && <span title="Request latency">{latency}</span>}
         {entry.cacheHit !== undefined && (
-          <span className={entry.cacheHit ? "is-hit" : "is-miss"}>
+          <span className={cx(styles, entry.cacheHit ? "is-hit" : "is-miss")}>
             {entry.cacheHit ? "cache hit" : "fresh"}
           </span>
         )}
@@ -72,20 +74,20 @@ function CompletionCard({
           <span title={entry.modelRevision}>rev {entry.modelRevision.slice(0, 9)}</span>
         )}
       </div>
-      <pre className="preview-text">{entry.text}</pre>
+      <pre className={cx(styles, "preview-text")}>{entry.text}</pre>
       {hasRequestDetails && (
-        <details className="preview-details">
+        <details className={cx(styles, "preview-details")}>
           <summary>Request details</summary>
           {entry.prompt !== undefined && (
             <>
-              <span className="preview-detail-label">Prompt</span>
-              <pre className="preview-prompt">{entry.prompt}</pre>
+              <span className={cx(styles, "preview-detail-label")}>Prompt</span>
+              <pre className={cx(styles, "preview-prompt")}>{entry.prompt}</pre>
             </>
           )}
           {entry.parameters !== undefined && (
             <>
-              <span className="preview-detail-label">Parameters</span>
-              <pre className="preview-parameters">{jsonText(entry.parameters)}</pre>
+              <span className={cx(styles, "preview-detail-label")}>Parameters</span>
+              <pre className={cx(styles, "preview-parameters")}>{jsonText(entry.parameters)}</pre>
             </>
           )}
         </details>
@@ -106,18 +108,18 @@ function TextCard({
   label?: string;
 }) {
   return (
-    <article className="text-preview-card">
+    <article className={cx(styles, "text-preview-card")}>
       {(total > 1 || entry.label || entry.seed) && (
         <header>
           <strong>{label ?? entry.label ?? `Item ${index + 1}`}</strong>
           {entry.seed && <span>seed {entry.seed}</span>}
         </header>
       )}
-      <pre className="preview-text">{entry.text}</pre>
+      <pre className={cx(styles, "preview-text")}>{entry.text}</pre>
       {entry.input !== undefined && (
-        <details className="preview-details">
+        <details className={cx(styles, "preview-details")}>
           <summary>Original text</summary>
-          <pre className="preview-prompt">{entry.input}</pre>
+          <pre className={cx(styles, "preview-prompt")}>{entry.input}</pre>
         </details>
       )}
     </article>
@@ -140,17 +142,17 @@ export function PreviewValue({ value, itemLabels }: { value: unknown; itemLabels
   };
 
   return (
-    <div className="preview-value">
-      <div className="preview-toolbar">
-        <span className="preview-shape">
+    <div className={cx(styles, "preview-value")}>
+      <div className={cx(styles, "preview-toolbar")}>
+        <span className={cx(styles, "preview-shape")}>
           {completions || texts ? <Text size={13} /> : <FileJson2 size={13} />}
           {model.shapeLabel}
         </span>
-        <div className="preview-actions">
+        <div className={cx(styles, "preview-actions")}>
           {readableText !== undefined && (
             <button
               type="button"
-              className="preview-copy-button"
+              className={cx(styles, "preview-copy-button")}
               onClick={() => copy("text", readableText)}
               aria-label="Copy readable text"
               title="Copy readable text"
@@ -161,7 +163,7 @@ export function PreviewValue({ value, itemLabels }: { value: unknown; itemLabels
           )}
           <button
             type="button"
-            className="preview-copy-button"
+            className={cx(styles, "preview-copy-button")}
             onClick={() => copy("json", model.raw)}
             aria-label="Copy raw JSON"
             title="Copy raw JSON"
@@ -173,7 +175,7 @@ export function PreviewValue({ value, itemLabels }: { value: unknown; itemLabels
       </div>
 
       {completions && (
-        <div className="completion-list">
+        <div className={cx(styles, "completion-list")}>
           {completions.map((entry, index) => (
             <CompletionCard
               entry={entry}
@@ -186,7 +188,7 @@ export function PreviewValue({ value, itemLabels }: { value: unknown; itemLabels
         </div>
       )}
       {texts && (
-        <div className="text-preview-list">
+        <div className={cx(styles, "text-preview-list")}>
           {texts.map((entry, index) => (
             <TextCard
               entry={entry}
@@ -198,12 +200,12 @@ export function PreviewValue({ value, itemLabels }: { value: unknown; itemLabels
           ))}
         </div>
       )}
-      {!completions && !texts && <pre className="json-preview">{model.raw}</pre>}
+      {!completions && !texts && <pre className={cx(styles, "json-preview")}>{model.raw}</pre>}
 
       {(completions || texts) && (
-        <details className="raw-data-details">
+        <details className={cx(styles, "raw-data-details")}>
           <summary>Raw data</summary>
-          <pre className="json-preview">{model.raw}</pre>
+          <pre className={cx(styles, "json-preview")}>{model.raw}</pre>
         </details>
       )}
     </div>

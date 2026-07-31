@@ -1,6 +1,8 @@
 import { ChevronRight, Gauge, PanelRightClose, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorBoundary, PreviewErrorFallback } from "./ErrorBoundary";
+import styles from "./Inspector.module.css";
+import { moduleClassNames as cx } from "./moduleClassNames";
 import { PreviewValue } from "./PreviewValue";
 import type {
   ControlPortMode,
@@ -37,10 +39,14 @@ function ControlPortSelector({
 }) {
   return (
     // biome-ignore lint/a11y/useSemanticElements: compact segmented control is not a form fieldset
-    <div className="control-port-selector" role="group" aria-label={`${field.label} port mode`}>
+    <div
+      className={cx(styles, "control-port-selector")}
+      role="group"
+      aria-label={`${field.label} port mode`}
+    >
       <button
         type="button"
-        className={!mode ? "is-active" : ""}
+        className={cx(styles, !mode && "is-active")}
         aria-label={`Keep ${field.label} local`}
         aria-pressed={!mode}
         onClick={() => onChange(undefined)}
@@ -49,7 +55,7 @@ function ControlPortSelector({
       </button>
       <button
         type="button"
-        className={mode === "input" ? "is-active" : ""}
+        className={cx(styles, mode === "input" && "is-active")}
         aria-label={`Expose ${field.label} as input port`}
         aria-pressed={mode === "input"}
         onClick={() => onChange("input")}
@@ -58,7 +64,7 @@ function ControlPortSelector({
       </button>
       <button
         type="button"
-        className={mode === "output" ? "is-active" : ""}
+        className={cx(styles, mode === "output" && "is-active")}
         aria-label={`Expose ${field.label} as output port`}
         aria-pressed={mode === "output"}
         onClick={() => onChange("output")}
@@ -67,7 +73,7 @@ function ControlPortSelector({
       </button>
       <button
         type="button"
-        className={mode === "passthrough" ? "is-active" : ""}
+        className={cx(styles, mode === "passthrough" && "is-active")}
         aria-label={`Expose ${field.label} as input and output ports`}
         aria-pressed={mode === "passthrough"}
         onClick={() => onChange("passthrough")}
@@ -99,12 +105,12 @@ function ResultView({
 }) {
   const value = result?.outputs ?? terminal;
   if (!value) {
-    return <p className="empty-copy">Run the loom to inspect this node’s output.</p>;
+    return <p className={cx(styles, "empty-copy")}>Run the loom to inspect this node’s output.</p>;
   }
   return (
-    <div className="result-block">
+    <div className={cx(styles, "result-block")}>
       {result && (
-        <div className="result-runtime">
+        <div className={cx(styles, "result-runtime")}>
           <span>Completed in {result.duration_ms.toFixed(1)} ms</span>
         </div>
       )}
@@ -182,15 +188,15 @@ export function Inspector({
   }, [hasOutput, selectedNode?.data.kind, selectedNode?.id]);
 
   return (
-    <aside className="inspector">
-      <div className="inspector-heading">
+    <aside className={cx(styles, "inspector")} aria-label="Inspector">
+      <div className={cx(styles, "inspector-heading")}>
         <div>
           <span>Inspector</span>
           <small>{selectedNode?.data.title ?? "Loom telemetry"}</small>
         </div>
         <button
           type="button"
-          className="panel-close-button"
+          className={cx(styles, "panel-close-button")}
           onClick={onClose}
           aria-label="Close inspector"
           title="Close inspector"
@@ -199,18 +205,18 @@ export function Inspector({
         </button>
       </div>
       {run?.client?.stale && (
-        <p className="stale-run-notice">
+        <p className={cx(styles, "stale-run-notice")}>
           Prior output — the graph changed after this run was submitted.
         </p>
       )}
       {selectedNode ? (
         <>
-          <div className="inspector-tabs" role="tablist" aria-label="Inspector view">
+          <div className={cx(styles, "inspector-tabs")} role="tablist" aria-label="Inspector view">
             <button
               type="button"
               role="tab"
               aria-selected={activeTab === "configure"}
-              className={activeTab === "configure" ? "is-active" : ""}
+              className={cx(styles, activeTab === "configure" && "is-active")}
               onClick={() => setActiveTab("configure")}
             >
               Configure
@@ -219,7 +225,7 @@ export function Inspector({
               type="button"
               role="tab"
               aria-selected={activeTab === "output"}
-              className={activeTab === "output" ? "is-active" : ""}
+              className={cx(styles, activeTab === "output" && "is-active")}
               onClick={() => setActiveTab("output")}
             >
               Output
@@ -228,36 +234,44 @@ export function Inspector({
           </div>
           {activeTab === "configure" ? (
             <div role="tabpanel">
-              <section className="inspector-section">
-                <div className="inspector-node-meta">
+              <section className={cx(styles, "inspector-section")}>
+                <div className={cx(styles, "inspector-node-meta")}>
                   <span>{selectedNode.data.definition.category}</span>
-                  <span className={`inspector-status status-${selectedNode.data.runStatus}`}>
+                  <span
+                    className={cx(
+                      styles,
+                      "inspector-status",
+                      `status-${selectedNode.data.runStatus}`,
+                    )}
+                  >
                     <i />
                     {selectedNode.data.runStatus === "completed"
                       ? "complete"
                       : selectedNode.data.runStatus}
                   </span>
                 </div>
-                <label className="field">
+                <label className={cx(styles, "field")}>
                   <span>Node title</span>
                   <input
                     value={selectedNode.data.title}
                     onChange={(event) => onUpdateTitle(event.target.value)}
                   />
                 </label>
-                <p className="node-description">{selectedNode.data.definition.description}</p>
+                <p className={cx(styles, "node-description")}>
+                  {selectedNode.data.definition.description}
+                </p>
               </section>
-              <section className="inspector-section fields-section">
+              <section className={cx(styles, "inspector-section fields-section")}>
                 <h2>Configuration</h2>
                 {selectedNode.data.definition.fields.length > 0 && (
-                  <p className="control-port-help">
+                  <p className={cx(styles, "control-port-help")}>
                     Keep a control local, promote it to a typed input or output, or use I/O as a
                     pass-through. Inputs fall back to the local value when unconnected and can
                     become saved workflow boundaries.
                   </p>
                 )}
                 {selectedNode.data.definition.fields.length === 0 && (
-                  <p className="empty-copy">This node has no local controls.</p>
+                  <p className={cx(styles, "empty-copy")}>This node has no local controls.</p>
                 )}
                 {selectedNode.data.definition.fields.map((field) => {
                   const value = selectedNode.data.config[field.name] ?? field.default;
@@ -269,8 +283,8 @@ export function Inspector({
                       : "Used as the default while the input socket is unconnected.";
                   if (field.control === "checkbox") {
                     return (
-                      <div className="config-control" key={field.name}>
-                        <div className="config-control-heading">
+                      <div className={cx(styles, "config-control")} key={field.name}>
+                        <div className={cx(styles, "config-control-heading")}>
                           <span>{field.label}</span>
                           <ControlPortSelector
                             field={field}
@@ -278,7 +292,7 @@ export function Inspector({
                             onChange={(mode) => onUpdateControlPort(field.name, mode)}
                           />
                         </div>
-                        <label className="check-field">
+                        <label className={cx(styles, "check-field")}>
                           <input
                             type="checkbox"
                             checked={Boolean(value)}
@@ -293,8 +307,8 @@ export function Inspector({
                   }
                   if (field.control === "select") {
                     return (
-                      <div className="config-control" key={field.name}>
-                        <div className="config-control-heading">
+                      <div className={cx(styles, "config-control")} key={field.name}>
+                        <div className={cx(styles, "config-control-heading")}>
                           <span>{field.label}</span>
                           <ControlPortSelector
                             field={field}
@@ -320,8 +334,8 @@ export function Inspector({
                   }
                   const multiline = field.control === "textarea" || field.control === "json";
                   return (
-                    <div className="config-control" key={field.name}>
-                      <div className="config-control-heading">
+                    <div className={cx(styles, "config-control")} key={field.name}>
+                      <div className={cx(styles, "config-control-heading")}>
                         <span>{field.label}</span>
                         <ControlPortSelector
                           field={field}
@@ -368,7 +382,7 @@ export function Inspector({
                   );
                 })}
                 {selectedGlitchling && selectedGlitchling.parameters.length > 0 && (
-                  <details className="schema-details">
+                  <details className={cx(styles, "schema-details")}>
                     <summary>
                       Constructor schema <ChevronRight size={14} />
                     </summary>
@@ -383,12 +397,12 @@ export function Inspector({
                   </details>
                 )}
               </section>
-              <button type="button" className="delete-button" onClick={onDelete}>
+              <button type="button" className={cx(styles, "delete-button")} onClick={onDelete}>
                 <Trash2 size={15} /> Delete node
               </button>
             </div>
           ) : (
-            <section className="inspector-section result-section" role="tabpanel">
+            <section className={cx(styles, "inspector-section result-section")} role="tabpanel">
               <ResultView
                 result={selectedResult}
                 terminal={selectedTerminal}
@@ -398,16 +412,16 @@ export function Inspector({
           )}
         </>
       ) : (
-        <section className="inspector-section">
-          <div className="empty-inspector-mark" aria-hidden="true">
+        <section className={cx(styles, "inspector-section")}>
+          <div className={cx(styles, "empty-inspector-mark")} aria-hidden="true">
             <Gauge size={18} />
           </div>
           <h2>Loom telemetry</h2>
-          <p className="empty-copy">
+          <p className={cx(styles, "empty-copy")}>
             Select an instrument to tune its controls and inspect its latest output.
           </p>
           {run && (
-            <div className="run-summary">
+            <div className={cx(styles, "run-summary")}>
               <span>{run.client?.stale ? "Prior run · stale" : "Last run"}</span>
               <code>{run.manifest.run_id.slice(0, 8)}</code>
               <strong>
@@ -420,7 +434,7 @@ export function Inspector({
               </strong>
             </div>
           )}
-          {error && <p className="error-copy">{error}</p>}
+          {error && <p className={cx(styles, "error-copy")}>{error}</p>}
         </section>
       )}
     </aside>

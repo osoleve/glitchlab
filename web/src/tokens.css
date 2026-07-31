@@ -1,0 +1,30 @@
+:root {
+  color: #f0edf3;
+  background: #0d0b10;
+  font-family: "Segoe UI Variable", "Aptos", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  --ink: #0d0b10;
+  --ink-deep: #08070a;
+  --panel: #141117;
+  --panel-raised: #1a161e;
+  --panel-soft: #1e1a23;
+  --border: #302a35;
+  --border-soft: #26212b;
+  --text: #f0edf3;
+  --text-soft: #c9c3cf;
+  --muted: #8d8594;
+  --muted-deep: #6f6875;
+  --brass: #d3ad72;
+  --brass-soft: #9f7f55;
+  --thread-text: #67b8ae;
+  --thread-value: #c59a66;
+  --thread-flow: #709ed0;
+  --thread-model: #aa8ae0;
+  --thread-glitch: #df747d;
+  --thread-file: #c7a060;
+  --thread-inspect: #82b779;
+  --thread-workflow: #cf80bd;
+  --mono: "Cascadia Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}

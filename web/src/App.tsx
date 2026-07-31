@@ -51,6 +51,7 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from "react";
 import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import styles from "./App.module.css";
 import {
   ApiError,
   createLoom,
@@ -78,6 +79,7 @@ import {
 } from "./graphTraversal";
 import { Inspector } from "./Inspector";
 import { LoomNodeCardWithBoundary } from "./LoomNode";
+import { moduleClassNames as cx } from "./moduleClassNames";
 import { compatibleNodeInputs } from "./nodePicker";
 import { talkieStarter } from "./starter";
 import type {
@@ -2014,12 +2016,12 @@ function GlitchloomApp() {
     const inScope = !executionScope || scopedEdgeIdSet.has(edge.id);
     const className = executionScope
       ? inScope
-        ? "execution-scope-edge"
-        : "execution-unrelated-edge"
+        ? styles["execution-scope-edge"]
+        : styles["execution-unrelated-edge"]
       : showSelectedPaths
         ? selectedPathEdgeIdSet.has(edge.id)
-          ? "selection-path-edge"
-          : "selection-unrelated-edge"
+          ? styles["selection-path-edge"]
+          : styles["selection-unrelated-edge"]
         : undefined;
     return {
       ...edge,
@@ -2043,28 +2045,28 @@ function GlitchloomApp() {
   };
 
   return (
-    <div className={`app-shell ${afterHours ? "is-after-hours" : ""}`}>
-      <header className="topbar">
+    <div className={cx(styles, "app-shell", afterHours && "is-after-hours")}>
+      <header className={cx(styles, "topbar")}>
         <button
           type="button"
-          className="brand"
+          className={cx(styles, "brand")}
           aria-label="Toggle after-hours weave"
           aria-pressed={afterHours}
           title="Wake the loom"
           onClick={() => setAfterHours((current) => !current)}
         >
-          <div className="brand-mark" aria-hidden="true">
+          <div className={cx(styles, "brand-mark")} aria-hidden="true">
             <span />
             <span />
             <span />
           </div>
-          <span className="brand-copy">
+          <span className={cx(styles, "brand-copy")}>
             <strong>Glitchloom</strong>
             <small>{afterHours ? "the loom hums back" : "after hours"}</small>
           </span>
         </button>
-        <div className="loom-title">
-          <span className="loom-title-label">
+        <div className={cx(styles, "loom-title")}>
+          <span className={cx(styles, "loom-title-label")}>
             {activeWorkflow
               ? "workflow"
               : activeLoom
@@ -2083,16 +2085,20 @@ function GlitchloomApp() {
           {isDirty && (
             <span
               role="img"
-              className="dirty-indicator"
+              className={cx(styles, "dirty-indicator")}
               aria-label="Unsaved graph changes"
               title="Unsaved graph changes"
             />
           )}
         </div>
-        <div className="topbar-actions">
+        <div className={cx(styles, "topbar-actions")}>
           <span
             role="img"
-            className={`plugin-chip ${catalog?.plugin.available ? "is-ready" : "is-offline"}`}
+            className={cx(
+              styles,
+              "plugin-chip",
+              catalog?.plugin.available ? "is-ready" : "is-offline",
+            )}
             title={catalog?.plugin.error ?? catalog?.plugin.path}
             aria-label={
               catalog?.plugin.available ? "Glitchlings available" : "Glitchlings unavailable"
@@ -2102,7 +2108,7 @@ function GlitchloomApp() {
           </span>
           <button
             type="button"
-            className="secondary-button"
+            className={cx(styles, "secondary-button")}
             onClick={() => {
               setLoomLibraryError(undefined);
               setLoomLibraryOpen(true);
@@ -2116,7 +2122,7 @@ function GlitchloomApp() {
           {activeWorkflow ? (
             <button
               type="button"
-              className="secondary-button workflow-save-button"
+              className={cx(styles, "secondary-button workflow-save-button")}
               onClick={openEditSaveDialog}
               disabled={savingWorkflow}
               title="Save edits as a new immutable workflow version"
@@ -2128,17 +2134,21 @@ function GlitchloomApp() {
             <>
               <button
                 type="button"
-                className="secondary-button"
+                className={cx(styles, "secondary-button")}
                 onClick={() => requestSaveLoom(false)}
                 disabled={savingLoom || running || !catalog}
                 title="Save loom (Ctrl+S)"
               >
-                {savingLoom ? <LoaderCircle className="spin-icon" size={15} /> : <Save size={15} />}
+                {savingLoom ? (
+                  <LoaderCircle className={cx(styles, "spin-icon")} size={15} />
+                ) : (
+                  <Save size={15} />
+                )}
                 Save
               </button>
               <button
                 type="button"
-                className="secondary-button compact-action-button"
+                className={cx(styles, "secondary-button compact-action-button")}
                 onClick={() => requestSaveLoom(true)}
                 disabled={savingLoom || running || !catalog}
                 title="Save as a new loom (Ctrl+Shift+S)"
@@ -2149,7 +2159,7 @@ function GlitchloomApp() {
               {activeTabId === MAIN_TAB_ID && !activeLoom && (
                 <button
                   type="button"
-                  className="secondary-button compact-action-button"
+                  className={cx(styles, "secondary-button compact-action-button")}
                   onClick={requestStarterReset}
                   disabled={savingLoom || running || !catalog}
                   title="Reset to the starter graph"
@@ -2162,13 +2172,13 @@ function GlitchloomApp() {
           )}
           <button
             type="button"
-            className="run-button"
+            className={cx(styles, "run-button")}
             onClick={() => void execute()}
             disabled={running || savingLoom || nodes.length === 0}
             title="Run loom (Ctrl+Enter)"
           >
             {running ? (
-              <LoaderCircle className="spin-icon" size={16} />
+              <LoaderCircle className={cx(styles, "spin-icon")} size={16} />
             ) : (
               <Play size={16} fill="currentColor" />
             )}
@@ -2177,7 +2187,7 @@ function GlitchloomApp() {
         </div>
       </header>
 
-      <div className="graph-tabs" role="tablist" aria-label="Open graphs">
+      <div className={cx(styles, "graph-tabs")} role="tablist" aria-label="Open graphs">
         {tabs.map((tab) => {
           const active = tab.id === activeTabId;
           const dirty = active ? isDirty : tab.snapshot.isDirty;
@@ -2185,7 +2195,7 @@ function GlitchloomApp() {
           const version = active ? activeWorkflow?.version : tab.workflow?.version;
           const revision = active ? activeLoom?.revision : tab.loom?.revision;
           return (
-            <div className={`graph-tab ${active ? "is-active" : ""}`} key={tab.id}>
+            <div className={cx(styles, "graph-tab", active && "is-active")} key={tab.id}>
               <button
                 type="button"
                 role="tab"
@@ -2203,7 +2213,7 @@ function GlitchloomApp() {
               {tab.id !== MAIN_TAB_ID && (
                 <button
                   type="button"
-                  className="graph-tab-close"
+                  className={cx(styles, "graph-tab-close")}
                   onClick={() => requestCloseTab(tab)}
                   disabled={running || graphBusy}
                   aria-label={`Close ${title}`}
@@ -2217,7 +2227,7 @@ function GlitchloomApp() {
         })}
         <button
           type="button"
-          className="graph-tab-add"
+          className={cx(styles, "graph-tab-add")}
           onClick={() => setLoomLibraryOpen(true)}
           disabled={running || graphBusy || !catalog}
           aria-label="Open loom or template"
@@ -2228,17 +2238,21 @@ function GlitchloomApp() {
       </div>
 
       <main
-        className={`workspace ${paletteOpen ? "" : "palette-closed"} ${
-          inspectorOpen ? "" : "inspector-closed"
-        } ${resizingPanel ? "is-panel-resizing" : ""}`}
+        className={cx(
+          styles,
+          "workspace",
+          !paletteOpen && "palette-closed",
+          !inspectorOpen && "inspector-closed",
+          resizingPanel && "is-panel-resizing",
+        )}
         style={workspaceStyle}
       >
-        <aside ref={paletteRef} className="palette">
-          <div className="palette-heading">
+        <aside ref={paletteRef} className={cx(styles, "palette")}>
+          <div className={cx(styles, "palette-heading")}>
             <span>Node library</span>
             <button
               type="button"
-              className="panel-close-button"
+              className={cx(styles, "panel-close-button")}
               onClick={() => setPaletteOpen(false)}
               aria-label="Close node library"
               title="Close node library"
@@ -2246,7 +2260,7 @@ function GlitchloomApp() {
               <PanelLeftClose size={15} />
             </button>
           </div>
-          <label className="palette-search">
+          <label className={cx(styles, "palette-search")}>
             <Search size={13} aria-hidden="true" />
             <input
               type="search"
@@ -2265,17 +2279,17 @@ function GlitchloomApp() {
               </button>
             )}
           </label>
-          {catalogError && <p className="error-copy">{catalogError}</p>}
+          {catalogError && <p className={cx(styles, "error-copy")}>{catalogError}</p>}
           {[...groupedCatalog.entries()].map(([category, definitions]) => (
-            <details className="palette-group" key={category} open>
+            <details className={cx(styles, "palette-group")} key={category} open>
               <summary>{category}</summary>
               <div>
                 {definitions.map((definition) => (
-                  <div className="palette-node-shell" key={definition.kind}>
+                  <div className={cx(styles, "palette-node-shell")} key={definition.kind}>
                     <button
                       type="button"
                       draggable
-                      className={`palette-node category-${categorySlug(category)}`}
+                      className={cx(styles, "palette-node", `category-${categorySlug(category)}`)}
                       onDragStart={(event) => onPaletteDrag(event, definition)}
                       onClick={() => addNode(definition)}
                       onContextMenu={(event) => {
@@ -2289,7 +2303,7 @@ function GlitchloomApp() {
                       }}
                       title={definition.description}
                     >
-                      <span className="palette-thread" />
+                      <span className={cx(styles, "palette-thread")} />
                       <span>
                         <strong>{definition.label}</strong>
                         <small>{definition.description}</small>
@@ -2299,7 +2313,7 @@ function GlitchloomApp() {
                     {definition.workflow && (
                       <button
                         type="button"
-                        className="palette-node-manage"
+                        className={cx(styles, "palette-node-manage")}
                         onClick={(event) => {
                           const bounds = event.currentTarget.getBoundingClientRect();
                           setWorkflowMenu({
@@ -2320,14 +2334,16 @@ function GlitchloomApp() {
             </details>
           ))}
           {catalog && groupedCatalog.size === 0 && (
-            <p className="empty-copy palette-empty">No instruments match “{paletteQuery}”.</p>
+            <p className={cx(styles, "empty-copy palette-empty")}>
+              No instruments match “{paletteQuery}”.
+            </p>
           )}
         </aside>
         {paletteOpen && (
           // This is an interactive drag handle; div preserves pointer sizing and keyboard support.
           // biome-ignore lint/a11y/useSemanticElements: native hr cannot implement this resizer
           <div
-            className="panel-resizer palette-resizer"
+            className={cx(styles, "panel-resizer palette-resizer")}
             role="separator"
             aria-label="Resize node library"
             aria-orientation="vertical"
@@ -2344,14 +2360,14 @@ function GlitchloomApp() {
         {/* biome-ignore lint/a11y/noStaticElementInteractions: React Flow canvas is a native drop target */}
         <section
           ref={canvasRef}
-          className="canvas"
+          className={cx(styles, "canvas")}
           onDrop={onDrop}
           onDragOver={(event) => {
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
           }}
         >
-          <div className="after-hours-weave" aria-hidden="true">
+          <div className={cx(styles, "after-hours-weave")} aria-hidden="true">
             <span />
             <span />
             <span />
@@ -2359,11 +2375,11 @@ function GlitchloomApp() {
             <span />
             <span />
           </div>
-          <div className="after-hours-note" role="status">
+          <div className={cx(styles, "after-hours-note")} role="status">
             after hours · weave alive
           </div>
           {(!paletteOpen || !inspectorOpen) && (
-            <div className="canvas-panel-controls">
+            <div className={cx(styles, "canvas-panel-controls")}>
               {!paletteOpen && (
                 <button
                   type="button"
@@ -2567,8 +2583,11 @@ function GlitchloomApp() {
             <Controls showInteractive={false} />
           </ReactFlow>
           {executionScope && (
-            <div className={`execution-scope-bar status-${executionScope.status}`} role="status">
-              <span className="execution-scope-mark" aria-hidden="true" />
+            <div
+              className={cx(styles, "execution-scope-bar", `status-${executionScope.status}`)}
+              role="status"
+            >
+              <span className={cx(styles, "execution-scope-mark")} aria-hidden="true" />
               <div>
                 <strong>
                   {executionScope.mode === "targets"
@@ -2609,14 +2628,14 @@ function GlitchloomApp() {
             </div>
           )}
           {running && (
-            <div className="run-overlay">
-              <span className="shuttle" />
+            <div className={cx(styles, "run-overlay")}>
+              <span className={cx(styles, "shuttle")} />
               <strong>Throwing the shuttle</strong>
               <small>{formatElapsed(runElapsed)} · model endpoints may lazily load weights</small>
             </div>
           )}
           {runError && !running && (
-            <div className="run-error-banner">
+            <div className={cx(styles, "run-error-banner")}>
               <strong>Run stopped</strong>
               <span>{runError}</span>
               <button type="button" onClick={() => setRunError(undefined)}>
@@ -2626,11 +2645,14 @@ function GlitchloomApp() {
           )}
           {contextMenu && (
             <div
-              className={`context-menu ${contextMenu.scope === "pane" ? "quick-add-menu" : ""} ${
-                contextMenu.scope === "pane" && contextMenu.pendingConnection
-                  ? "is-connection-picker"
-                  : ""
-              }`}
+              className={cx(
+                styles,
+                "context-menu",
+                contextMenu.scope === "pane" && "quick-add-menu",
+                contextMenu.scope === "pane" &&
+                  Boolean(contextMenu.pendingConnection) &&
+                  "is-connection-picker",
+              )}
               role="menu"
               style={{
                 left: Math.max(
@@ -2670,13 +2692,13 @@ function GlitchloomApp() {
                       <button
                         type="button"
                         role="menuitem"
-                        className="is-danger"
+                        className={cx(styles, "is-danger")}
                         onClick={() => requestDeleteWorkflow(contextualWorkflowDefinition)}
                       >
                         <Trash2 size={14} />
                         Delete saved workflow
                       </button>
-                      <span className="context-menu-separator" />
+                      <span className={cx(styles, "context-menu-separator")} />
                     </>
                   )}
                   <button
@@ -2703,7 +2725,7 @@ function GlitchloomApp() {
                       Run to selection
                     </button>
                   )}
-                  <span className="context-menu-separator" />
+                  <span className={cx(styles, "context-menu-separator")} />
                   <button
                     type="button"
                     role="menuitem"
@@ -2735,7 +2757,7 @@ function GlitchloomApp() {
                   </button>
                   {contextSelectionIds.length >= 2 && (
                     <>
-                      <span className="context-menu-separator" />
+                      <span className={cx(styles, "context-menu-separator")} />
                       <button
                         type="button"
                         role="menuitem"
@@ -2782,11 +2804,11 @@ function GlitchloomApp() {
                       )}
                     </>
                   )}
-                  <span className="context-menu-separator" />
+                  <span className={cx(styles, "context-menu-separator")} />
                   <button
                     type="button"
                     role="menuitem"
-                    className="is-danger"
+                    className={cx(styles, "is-danger")}
                     onClick={() => {
                       deleteSelected(contextSelectionIds);
                       setContextMenu(undefined);
@@ -2808,11 +2830,11 @@ function GlitchloomApp() {
                     <Plus size={14} />
                     Insert passthrough
                   </button>
-                  <span className="context-menu-separator" />
+                  <span className={cx(styles, "context-menu-separator")} />
                   <button
                     type="button"
                     role="menuitem"
-                    className="is-danger"
+                    className={cx(styles, "is-danger")}
                     onClick={() => {
                       markSemanticDirty();
                       setEdges((current) =>
@@ -2829,7 +2851,7 @@ function GlitchloomApp() {
               {contextMenu.scope === "pane" && (
                 <>
                   {contextMenu.pendingConnection && (
-                    <div className="connection-picker-heading">
+                    <div className={cx(styles, "connection-picker-heading")}>
                       <span>Connect output</span>
                       <strong>
                         <i aria-hidden="true" />
@@ -2838,7 +2860,7 @@ function GlitchloomApp() {
                       <small>Choose a compatible input port</small>
                     </div>
                   )}
-                  <label className="quick-add-search">
+                  <label className={cx(styles, "quick-add-search")}>
                     <Search size={14} aria-hidden="true" />
                     <input
                       type="search"
@@ -2877,13 +2899,13 @@ function GlitchloomApp() {
                       autoFocus
                     />
                   </label>
-                  <div className="quick-add-results" role="listbox">
+                  <div className={cx(styles, "quick-add-results")} role="listbox">
                     {quickAddEntries.map(({ definition, input }, index) => (
                       <button
                         type="button"
                         role="option"
                         aria-selected={index === quickAddIndex}
-                        className={index === quickAddIndex ? "is-active" : ""}
+                        className={cx(styles, index === quickAddIndex && "is-active")}
                         key={`${definition.kind}:${input?.name ?? ""}`}
                         onMouseEnter={() => setQuickAddIndex(index)}
                         onClick={() => addQuickNode(definition, input)}
@@ -2913,7 +2935,7 @@ function GlitchloomApp() {
                   </div>
                   {!contextMenu.pendingConnection && (
                     <>
-                      <span className="context-menu-separator" />
+                      <span className={cx(styles, "context-menu-separator")} />
                       <button type="button" role="menuitem" onClick={selectAllNodes}>
                         <Focus size={14} />
                         Select all nodes
@@ -2951,7 +2973,7 @@ function GlitchloomApp() {
             </div>
           )}
         </section>
-        <div ref={inspectorRef} className="inspector-shell">
+        <div ref={inspectorRef} className={cx(styles, "inspector-shell")}>
           <Inspector
             selectedNode={selectedNode}
             nodes={nodes}
@@ -2987,7 +3009,7 @@ function GlitchloomApp() {
           // This is an interactive drag handle; div preserves pointer sizing and keyboard support.
           // biome-ignore lint/a11y/useSemanticElements: native hr cannot implement this resizer
           <div
-            className="panel-resizer inspector-resizer"
+            className={cx(styles, "panel-resizer inspector-resizer")}
             role="separator"
             aria-label="Resize inspector"
             aria-orientation="vertical"
@@ -3001,11 +3023,11 @@ function GlitchloomApp() {
             onDoubleClick={() => resetPanelWidth("inspector")}
           />
         )}
-        {savingLoom && <div className="edit-lock-overlay" aria-hidden="true" />}
+        {savingLoom && <div className={cx(styles, "edit-lock-overlay")} aria-hidden="true" />}
       </main>
       {workflowMenu && (
         <div
-          className="context-menu workflow-library-menu"
+          className={cx(styles, "context-menu workflow-library-menu")}
           role="menu"
           style={{
             left: Math.min(workflowMenu.x, window.innerWidth - 226),
@@ -3020,7 +3042,7 @@ function GlitchloomApp() {
             disabled={loadingWorkflowId === workflowMenu.definition.workflow?.id}
           >
             {loadingWorkflowId === workflowMenu.definition.workflow?.id ? (
-              <LoaderCircle className="spin-icon" size={14} />
+              <LoaderCircle className={cx(styles, "spin-icon")} size={14} />
             ) : (
               <Pencil size={14} />
             )}
@@ -3029,7 +3051,7 @@ function GlitchloomApp() {
           <button
             type="button"
             role="menuitem"
-            className="is-danger"
+            className={cx(styles, "is-danger")}
             onClick={() => requestDeleteWorkflow(workflowMenu.definition)}
           >
             <Trash2 size={14} />
@@ -3041,18 +3063,18 @@ function GlitchloomApp() {
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
         // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Close control
         <div
-          className="dialog-backdrop"
+          className={cx(styles, "dialog-backdrop")}
           onClick={() => !loadingDocumentId && setLoomLibraryOpen(false)}
         >
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
-            className="loom-library-dialog"
+            className={cx(styles, "loom-library-dialog")}
             role="dialog"
             aria-modal="true"
             aria-labelledby="loom-library-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="workflow-dialog-heading">
+            <div className={cx(styles, "workflow-dialog-heading")}>
               <span aria-hidden="true">
                 <FolderOpen size={18} />
               </span>
@@ -3064,16 +3086,16 @@ function GlitchloomApp() {
                 </p>
               </div>
             </div>
-            <div className="loom-library-scroll">
-              <section className="loom-library-section">
-                <div className="loom-library-section-heading">
+            <div className={cx(styles, "loom-library-scroll")}>
+              <section className={cx(styles, "loom-library-section")}>
+                <div className={cx(styles, "loom-library-section-heading")}>
                   <strong>Templates</strong>
                   <span>read-only starting points</span>
                 </div>
-                <div className="loom-library-list">
+                <div className={cx(styles, "loom-library-list")}>
                   <button
                     type="button"
-                    className="loom-library-item"
+                    className={cx(styles, "loom-library-item")}
                     onClick={openStarterCopy}
                     disabled={Boolean(loadingDocumentId) || !catalog}
                   >
@@ -3086,7 +3108,7 @@ function GlitchloomApp() {
                   {loomTemplates.map((template) => (
                     <button
                       type="button"
-                      className="loom-library-item"
+                      className={cx(styles, "loom-library-item")}
                       key={template.id}
                       onClick={() => void openLoomTemplate(template.id)}
                       disabled={Boolean(loadingDocumentId)}
@@ -3099,7 +3121,7 @@ function GlitchloomApp() {
                         </small>
                       </span>
                       {loadingDocumentId === `template:${template.id}` ? (
-                        <LoaderCircle className="spin-icon" size={15} />
+                        <LoaderCircle className={cx(styles, "spin-icon")} size={15} />
                       ) : (
                         <FilePlus2 size={15} />
                       )}
@@ -3107,16 +3129,16 @@ function GlitchloomApp() {
                   ))}
                 </div>
               </section>
-              <section className="loom-library-section">
-                <div className="loom-library-section-heading">
+              <section className={cx(styles, "loom-library-section")}>
+                <div className={cx(styles, "loom-library-section-heading")}>
                   <strong>Saved looms</strong>
                   <span>
                     {looms.length} local document{looms.length === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className="loom-library-list">
+                <div className={cx(styles, "loom-library-list")}>
                   {looms.map((loom) => (
-                    <div className="loom-library-item saved-loom-item" key={loom.id}>
+                    <div className={cx(styles, "loom-library-item saved-loom-item")} key={loom.id}>
                       <button
                         type="button"
                         onClick={() => void openSavedLoom(loom.id)}
@@ -3131,36 +3153,39 @@ function GlitchloomApp() {
                       </button>
                       <button
                         type="button"
-                        className="loom-copy-button"
+                        className={cx(styles, "loom-copy-button")}
                         onClick={() => void openSavedLoom(loom.id, true)}
                         disabled={Boolean(loadingDocumentId)}
                         title="Open as an unsaved copy"
                         aria-label={`Open ${loom.name} as a copy`}
                       >
                         {loadingDocumentId === `loom:${loom.id}:copy` ? (
-                          <LoaderCircle className="spin-icon" size={14} />
+                          <LoaderCircle className={cx(styles, "spin-icon")} size={14} />
                         ) : (
                           <Copy size={14} />
                         )}
                       </button>
                       {loadingDocumentId === `loom:${loom.id}:open` && (
-                        <LoaderCircle className="spin-icon loom-open-spinner" size={14} />
+                        <LoaderCircle
+                          className={cx(styles, "spin-icon loom-open-spinner")}
+                          size={14}
+                        />
                       )}
                     </div>
                   ))}
                   {looms.length === 0 && (
-                    <p className="empty-copy">
+                    <p className={cx(styles, "empty-copy")}>
                       No saved looms yet. Save the current tab to create one.
                     </p>
                   )}
                 </div>
               </section>
             </div>
-            {loomLibraryError && <p className="workflow-error">{loomLibraryError}</p>}
-            <div className="workflow-dialog-actions">
+            {loomLibraryError && <p className={cx(styles, "workflow-error")}>{loomLibraryError}</p>}
+            <div className={cx(styles, "workflow-dialog-actions")}>
               <button
                 type="button"
-                className="secondary-button"
+                className={cx(styles, "secondary-button")}
                 onClick={() => setLoomLibraryOpen(false)}
                 disabled={Boolean(loadingDocumentId)}
               >
@@ -3174,18 +3199,18 @@ function GlitchloomApp() {
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
         // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Cancel control
         <div
-          className="dialog-backdrop"
+          className={cx(styles, "dialog-backdrop")}
           onClick={() => !savingLoom && setLoomSaveDialogOpen(false)}
         >
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
-            className="workflow-dialog loom-save-dialog"
+            className={cx(styles, "workflow-dialog loom-save-dialog")}
             role="dialog"
             aria-modal="true"
             aria-labelledby="loom-save-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="workflow-dialog-heading">
+            <div className={cx(styles, "workflow-dialog-heading")}>
               <span aria-hidden="true">
                 <Save size={18} />
               </span>
@@ -3215,11 +3240,11 @@ function GlitchloomApp() {
                 }}
               />
             </label>
-            {loomSaveError && <p className="workflow-error">{loomSaveError}</p>}
-            <div className="workflow-dialog-actions">
+            {loomSaveError && <p className={cx(styles, "workflow-error")}>{loomSaveError}</p>}
+            <div className={cx(styles, "workflow-dialog-actions")}>
               <button
                 type="button"
-                className="secondary-button"
+                className={cx(styles, "secondary-button")}
                 onClick={() => setLoomSaveDialogOpen(false)}
                 disabled={savingLoom}
               >
@@ -3227,11 +3252,15 @@ function GlitchloomApp() {
               </button>
               <button
                 type="button"
-                className="run-button"
+                className={cx(styles, "run-button")}
                 onClick={() => void persistCurrentLoom(loomSaveName, { createNew: true })}
                 disabled={savingLoom || !loomSaveName.trim()}
               >
-                {savingLoom ? <LoaderCircle className="spin-icon" size={15} /> : <Save size={15} />}
+                {savingLoom ? (
+                  <LoaderCircle className={cx(styles, "spin-icon")} size={15} />
+                ) : (
+                  <Save size={15} />
+                )}
                 {savingLoom ? "Saving…" : "Save loom"}
               </button>
             </div>
@@ -3241,16 +3270,16 @@ function GlitchloomApp() {
       {resetDialogOpen && (
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
         // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Keep working control
-        <div className="dialog-backdrop" onClick={() => setResetDialogOpen(false)}>
+        <div className={cx(styles, "dialog-backdrop")} onClick={() => setResetDialogOpen(false)}>
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
-            className="reset-dialog"
+            className={cx(styles, "reset-dialog")}
             role="dialog"
             aria-modal="true"
             aria-labelledby="reset-dialog-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="reset-dialog-icon" aria-hidden="true">
+            <span className={cx(styles, "reset-dialog-icon")} aria-hidden="true">
               <AlertTriangle size={18} />
             </span>
             <div>
@@ -3260,16 +3289,20 @@ function GlitchloomApp() {
                 can undo immediately after resetting.
               </p>
             </div>
-            <div className="reset-dialog-actions">
+            <div className={cx(styles, "reset-dialog-actions")}>
               <button
                 type="button"
-                className="secondary-button"
+                className={cx(styles, "secondary-button")}
                 onClick={() => setResetDialogOpen(false)}
                 autoFocus
               >
                 Keep working
               </button>
-              <button type="button" className="danger-button" onClick={confirmStarterReset}>
+              <button
+                type="button"
+                className={cx(styles, "danger-button")}
+                onClick={confirmStarterReset}
+              >
                 Reset graph
               </button>
             </div>
@@ -3280,18 +3313,18 @@ function GlitchloomApp() {
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
         // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Cancel control
         <div
-          className="dialog-backdrop"
+          className={cx(styles, "dialog-backdrop")}
           onClick={() => !savingWorkflow && setSaveDialogOpen(false)}
         >
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
-            className="workflow-dialog"
+            className={cx(styles, "workflow-dialog")}
             role="dialog"
             aria-modal="true"
             aria-labelledby="workflow-dialog-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="workflow-dialog-heading">
+            <div className={cx(styles, "workflow-dialog-heading")}>
               <span aria-hidden="true">
                 <Save size={18} />
               </span>
@@ -3329,12 +3362,12 @@ function GlitchloomApp() {
                 disabled={savingWorkflow}
               />
             </label>
-            <div className="workflow-boundary">
+            <div className={cx(styles, "workflow-boundary")}>
               <div>
                 <strong>Inputs</strong>
                 {workflowDraft?.inputs.length ? (
                   workflowDraft.inputs.map((input) => (
-                    <label className="workflow-boundary-port" key={input.name}>
+                    <label className={cx(styles, "workflow-boundary-port")} key={input.name}>
                       <input
                         aria-label={`Public input name for ${input.name}`}
                         value={input.label}
@@ -3361,7 +3394,7 @@ function GlitchloomApp() {
                 <strong>Outputs</strong>
                 {workflowDraft?.outputs.length ? (
                   workflowDraft.outputs.map((output) => (
-                    <label className="workflow-boundary-port" key={output.name}>
+                    <label className={cx(styles, "workflow-boundary-port")} key={output.name}>
                       <input
                         aria-label={`Public output name for ${output.name}`}
                         value={output.label}
@@ -3382,11 +3415,11 @@ function GlitchloomApp() {
                 )}
               </div>
             </div>
-            {workflowError && <p className="workflow-error">{workflowError}</p>}
-            <div className="workflow-dialog-actions">
+            {workflowError && <p className={cx(styles, "workflow-error")}>{workflowError}</p>}
+            <div className={cx(styles, "workflow-dialog-actions")}>
               <button
                 type="button"
-                className="secondary-button"
+                className={cx(styles, "secondary-button")}
                 onClick={() => setSaveDialogOpen(false)}
                 disabled={savingWorkflow}
               >
@@ -3394,12 +3427,12 @@ function GlitchloomApp() {
               </button>
               <button
                 type="button"
-                className="run-button"
+                className={cx(styles, "run-button")}
                 onClick={() => void confirmSaveWorkflow()}
                 disabled={savingWorkflow || !workflowName.trim()}
               >
                 {savingWorkflow ? (
-                  <LoaderCircle className="spin-icon" size={15} />
+                  <LoaderCircle className={cx(styles, "spin-icon")} size={15} />
                 ) : (
                   <Save size={15} />
                 )}
@@ -3417,7 +3450,7 @@ function GlitchloomApp() {
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
         // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Keep workflow control
         <div
-          className="dialog-backdrop"
+          className={cx(styles, "dialog-backdrop")}
           onClick={() => {
             if (!deletingWorkflow) {
               setDeleteDefinition(undefined);
@@ -3427,13 +3460,13 @@ function GlitchloomApp() {
         >
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
-            className="reset-dialog workflow-delete-dialog"
+            className={cx(styles, "reset-dialog workflow-delete-dialog")}
             role="dialog"
             aria-modal="true"
             aria-labelledby="workflow-delete-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="reset-dialog-icon" aria-hidden="true">
+            <span className={cx(styles, "reset-dialog-icon")} aria-hidden="true">
               <Trash2 size={18} />
             </span>
             <div>
@@ -3448,13 +3481,13 @@ function GlitchloomApp() {
                   } in open tabs will retain an unavailable reference.`}
               </p>
               {deleteWorkflowError && (
-                <p className="workflow-delete-error">{deleteWorkflowError}</p>
+                <p className={cx(styles, "workflow-delete-error")}>{deleteWorkflowError}</p>
               )}
             </div>
-            <div className="reset-dialog-actions">
+            <div className={cx(styles, "reset-dialog-actions")}>
               <button
                 type="button"
-                className="secondary-button"
+                className={cx(styles, "secondary-button")}
                 onClick={() => {
                   setDeleteDefinition(undefined);
                   setDeleteWorkflowError(undefined);
@@ -3466,12 +3499,12 @@ function GlitchloomApp() {
               </button>
               <button
                 type="button"
-                className="danger-button"
+                className={cx(styles, "danger-button")}
                 onClick={() => void confirmDeleteWorkflow()}
                 disabled={deletingWorkflow}
               >
                 {deletingWorkflow ? (
-                  <LoaderCircle className="spin-icon" size={14} />
+                  <LoaderCircle className={cx(styles, "spin-icon")} size={14} />
                 ) : (
                   <Trash2 size={14} />
                 )}
@@ -3484,16 +3517,16 @@ function GlitchloomApp() {
       {closeTabId && (
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
         // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Keep editing control
-        <div className="dialog-backdrop" onClick={() => setCloseTabId(undefined)}>
+        <div className={cx(styles, "dialog-backdrop")} onClick={() => setCloseTabId(undefined)}>
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
-            className="reset-dialog"
+            className={cx(styles, "reset-dialog")}
             role="dialog"
             aria-modal="true"
             aria-labelledby="close-tab-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="reset-dialog-icon" aria-hidden="true">
+            <span className={cx(styles, "reset-dialog-icon")} aria-hidden="true">
               <AlertTriangle size={18} />
             </span>
             <div>
@@ -3506,10 +3539,10 @@ function GlitchloomApp() {
                 ” will discard changes made since it was opened or last saved.
               </p>
             </div>
-            <div className="reset-dialog-actions">
+            <div className={cx(styles, "reset-dialog-actions")}>
               <button
                 type="button"
-                className="secondary-button"
+                className={cx(styles, "secondary-button")}
                 onClick={() => setCloseTabId(undefined)}
                 autoFocus
               >
@@ -3517,7 +3550,7 @@ function GlitchloomApp() {
               </button>
               <button
                 type="button"
-                className="danger-button"
+                className={cx(styles, "danger-button")}
                 onClick={() => performCloseTab(closeTabId)}
               >
                 Discard and close
@@ -3527,7 +3560,7 @@ function GlitchloomApp() {
         </div>
       )}
       {undoSnapshot && !resetDialogOpen && (
-        <div className="undo-toast" role="status">
+        <div className={cx(styles, "undo-toast")} role="status">
           <div>
             <strong>Starter graph restored</strong>
             <span>Your previous graph is still recoverable.</span>
@@ -3538,7 +3571,7 @@ function GlitchloomApp() {
           </button>
           <button
             type="button"
-            className="undo-dismiss"
+            className={cx(styles, "undo-dismiss")}
             onClick={() => setUndoSnapshot(undefined)}
             aria-label="Dismiss undo"
           >
@@ -3547,14 +3580,14 @@ function GlitchloomApp() {
         </div>
       )}
       {workflowNotice && !saveDialogOpen && (
-        <div className="workflow-toast" role="status">
+        <div className={cx(styles, "workflow-toast")} role="status">
           <div>
             <strong>Workflow ready</strong>
             <span>{workflowNotice}</span>
           </div>
           <button
             type="button"
-            className="undo-dismiss"
+            className={cx(styles, "undo-dismiss")}
             onClick={() => setWorkflowNotice(undefined)}
             aria-label="Dismiss workflow notice"
           >
@@ -3563,14 +3596,14 @@ function GlitchloomApp() {
         </div>
       )}
       {loomNotice && !loomSaveDialogOpen && (
-        <div className="workflow-toast loom-toast" role="status">
+        <div className={cx(styles, "workflow-toast loom-toast")} role="status">
           <div>
             <strong>Loom document</strong>
             <span>{loomNotice}</span>
           </div>
           <button
             type="button"
-            className="undo-dismiss"
+            className={cx(styles, "undo-dismiss")}
             onClick={() => setLoomNotice(undefined)}
             aria-label="Dismiss loom notice"
           >

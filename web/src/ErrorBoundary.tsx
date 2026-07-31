@@ -1,4 +1,6 @@
 import { Component, type ReactNode } from "react";
+import styles from "./ErrorBoundary.module.css";
+import { moduleClassNames as cx } from "./moduleClassNames";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -27,9 +29,9 @@ function errorMessage(error: Error): string {
 
 export function AppErrorFallback({ error }: { error: Error }) {
   return (
-    <main className="app-error-boundary" role="alert">
-      <section className="app-error-card">
-        <span className="app-error-kicker">Render failure</span>
+    <main className={cx(styles, "app-error-boundary")} role="alert">
+      <section className={cx(styles, "app-error-card")}>
+        <span className={cx(styles, "app-error-kicker")}>Render failure</span>
         <h1>Glitchloom could not render this screen</h1>
         <p>
           The workbench hit an unexpected UI error. Reload the app to recover the normal workspace;
@@ -49,7 +51,7 @@ export function AppErrorFallback({ error }: { error: Error }) {
 
 export function PreviewErrorFallback({ error }: { error: Error }) {
   return (
-    <div className="preview-error" role="alert">
+    <div className={cx(styles, "preview-error")} role="alert">
       <strong>Output could not be rendered</strong>
       <span>The run is still available. Try another node or run the loom again.</span>
       <code>{errorMessage(error)}</code>
@@ -59,8 +61,8 @@ export function PreviewErrorFallback({ error }: { error: Error }) {
 
 export function NodeErrorFallback({ title, error }: { title: string; error: Error }) {
   return (
-    <article className="loom-node node-error-card" role="alert">
-      <span className="app-error-kicker">Node render failure</span>
+    <article className={cx(styles, "node-error-card")} role="alert">
+      <span className={cx(styles, "app-error-kicker")}>Node render failure</span>
       <strong>{title}</strong>
       <span>This node could not be displayed. The rest of the canvas is still available.</span>
       <code>{errorMessage(error)}</code>

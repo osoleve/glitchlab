@@ -147,15 +147,15 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
   await expect(page.locator(".react-flow__edge")).toHaveCount(20);
 
   const promptNode = page.locator('.react-flow__node[data-id="prompt"]');
-  await promptNode.locator(".node-header").click();
+  await promptNode.locator("header").click();
   await expect(page.getByText("Inspector", { exact: true })).toBeVisible();
   await page.getByLabel("Text for Seed prompt").fill("A browser-tested prompt");
   await expect(page.getByLabel("Unsaved graph changes")).toBeVisible();
 
   await page.getByRole("button", { name: "Close inspector" }).click();
-  await expect(page.locator(".inspector")).toBeHidden();
+  await expect(page.locator('aside[aria-label="Inspector"]')).toBeHidden();
   await page.getByRole("button", { name: "Open inspector" }).click();
-  await expect(page.locator(".inspector")).toBeVisible();
+  await expect(page.locator('aside[aria-label="Inspector"]')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -170,7 +170,7 @@ test("a successful run selects and renders deterministic output", async ({ page 
   await expect(page.getByText("1 completion", { exact: true })).toBeVisible();
   await expect(page.getByText("Full loom run")).toBeVisible();
   await expect(page.getByText(/12 nodes · completed/)).toBeVisible();
-  await expect(page.locator('.react-flow__node[data-id="preview"] .loom-node')).toHaveClass(
+  await expect(page.locator('.react-flow__node[data-id="preview"] article')).toHaveClass(
     /status-completed/,
   );
   expect(errors).toEqual([]);
@@ -206,13 +206,28 @@ test("a poisoned preview output degrades inline while the canvas stays live", as
 
 test("an edit during a delayed run marks the returned result stale", async ({ page }) => {
   const errors = watchPageErrors(page);
-  await page.route("**/api/runs", (route) => successfulRunResponse(route, 500));
+  let releaseRun: (() => void) | undefined;
+  const graphEdited = new Promise<void>((resolve) => {
+    releaseRun = resolve;
+  });
+  await page.route("**/api/runs", async (route) => {
+    await graphEdited;
+    await successfulRunResponse(route);
+  });
   await page.goto("/");
 
-  await page.locator('.react-flow__node[data-id="prompt"] .node-header').click();
+  await page.locator('.react-flow__node[data-id="prompt"] header').click();
   await page.getByRole("button", { name: "Run loom" }).click();
   await expect(page.getByText("Throwing the shuttle")).toBeVisible();
-  await page.getByLabel("Text", { exact: true }).fill("Changed while running");
+  await page.getByLabel("Text for Seed prompt").evaluate((element) => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    )?.set;
+    valueSetter?.call(element, "Changed while running");
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  releaseRun?.();
 
   await expect(
     page.getByText("Prior output — the graph changed after this run was submitted."),
@@ -242,10 +257,10 @@ test("a failed run exposes the backend error and failed node", async ({ page }) 
 
   await expect(page.getByText("Run stopped")).toBeVisible();
   await expect(page.getByText("Synthetic completion failure")).toBeVisible();
-  await expect(
-    page.locator('.react-flow__node[data-id="original_vintage"] .loom-node'),
-  ).toHaveClass(/status-failed/);
-  await expect(page.locator(".inspector")).toBeVisible();
+  await expect(page.locator('.react-flow__node[data-id="original_vintage"] article')).toHaveClass(
+    /status-failed/,
+  );
+  await expect(page.locator('aside[aria-label="Inspector"]')).toBeVisible();
   expect(
     errors.filter(
       (message) => !/Failed to load resource:.*422 \(Unprocessable Entity\)/.test(message),

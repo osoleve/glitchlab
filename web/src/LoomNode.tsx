@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import type { ComponentType, CSSProperties } from "react";
 import { ErrorBoundary, NodeErrorFallback } from "./ErrorBoundary";
+import styles from "./LoomNode.module.css";
+import { moduleClassNames as cx } from "./moduleClassNames";
 import type { FieldDefinition, LoomNode, LoomNodeData } from "./types";
 
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -135,11 +137,14 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
 
   return (
     <article
-      className={`loom-node category-${categoryClass(data.definition.category)} ${
-        selected ? "is-selected" : ""
-      } status-${data.runStatus} ${
-        data.executionScopeRole ? `execution-scope-${data.executionScopeRole}` : ""
-      }`}
+      className={cx(
+        styles,
+        "loom-node",
+        `category-${categoryClass(data.definition.category)}`,
+        selected && "is-selected",
+        `status-${data.runStatus}`,
+        data.executionScopeRole && `execution-scope-${data.executionScopeRole}`,
+      )}
       style={nodeStyle}
     >
       <NodeResizer
@@ -148,27 +153,31 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
         minHeight={minimumHeight}
         maxWidth={520}
         maxHeight={520}
-        handleClassName="loom-resize-handle"
-        lineClassName="loom-resize-line"
+        handleClassName={cx(styles, "loom-resize-handle")}
+        lineClassName={cx(styles, "loom-resize-line")}
       />
-      <div className="node-thread" aria-hidden="true" />
-      <header className="node-header">
-        <span className="node-icon" aria-hidden="true">
+      <div className={cx(styles, "node-thread")} aria-hidden="true" />
+      <header className={cx(styles, "node-header")}>
+        <span className={cx(styles, "node-icon")} aria-hidden="true">
           <Icon size={16} strokeWidth={1.8} />
         </span>
-        <div className="node-heading-copy">
+        <div className={cx(styles, "node-heading-copy")}>
           <span>{data.definition.category}</span>
           <strong>{data.title}</strong>
         </div>
-        <span className="node-status" role="status" aria-label={`Run status: ${data.runStatus}`}>
+        <span
+          className={cx(styles, "node-status")}
+          role="status"
+          aria-label={`Run status: ${data.runStatus}`}
+        >
           <i aria-hidden="true" />
           <b>{data.runStatus === "completed" ? "done" : data.runStatus}</b>
         </span>
       </header>
-      {hasSummary && <p className="node-summary">{summaryText}</p>}
+      {hasSummary && <p className={cx(styles, "node-summary")}>{summaryText}</p>}
       {inlineFields.length > 0 && (
         <section
-          className="node-inline-fields nodrag nowheel"
+          className={cx(styles, "node-inline-fields nodrag nowheel")}
           aria-label={`Controls for ${data.title}`}
         >
           {inlineFields.map((field) => {
@@ -182,9 +191,13 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
               // Biome cannot see that every conditional branch renders a nested form control.
               // biome-ignore lint/a11y/noLabelWithoutControl: the input, select, or textarea is nested below
               <label
-                className={`node-inline-field ${wide ? "is-wide" : ""} ${
-                  field.control === "textarea" ? "is-textarea" : ""
-                } ${field.control === "checkbox" ? "is-checkbox" : ""}`}
+                className={cx(
+                  styles,
+                  "node-inline-field",
+                  wide && "is-wide",
+                  field.control === "textarea" && "is-textarea",
+                  field.control === "checkbox" && "is-checkbox",
+                )}
                 key={field.name}
                 title={disabled ? `${field.label} is supplied by an input wire.` : field.help}
               >
@@ -248,28 +261,38 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
         </section>
       )}
 
-      <div className="node-inputs">
+      <div className={cx(styles, "node-inputs")}>
         {data.definition.inputs.map((port) => (
           <div
-            className={`node-port node-port-input ${port.control ? "is-control-port" : ""}`}
+            className={cx(
+              styles,
+              "node-port",
+              "node-port-input",
+              port.control && "is-control-port",
+            )}
             key={port.name}
             title={port.control ? `${port.label} control input` : undefined}
           >
             <Handle id={port.name} type="target" position={Position.Left} />
-            <span className="port-label">{port.label}</span>
+            <span className={cx(styles, "port-label")}>{port.label}</span>
             <em>{port.type}</em>
           </div>
         ))}
       </div>
-      <div className="node-outputs">
+      <div className={cx(styles, "node-outputs")}>
         {data.definition.outputs.map((port) => (
           <div
-            className={`node-port node-port-output ${port.control ? "is-control-port" : ""}`}
+            className={cx(
+              styles,
+              "node-port",
+              "node-port-output",
+              port.control && "is-control-port",
+            )}
             key={port.name}
             title={port.control ? `${port.label} control output` : undefined}
           >
             <em>{port.type}</em>
-            <span className="port-label">{port.label}</span>
+            <span className={cx(styles, "port-label")}>{port.label}</span>
             <Handle id={port.name} type="source" position={Position.Right} />
           </div>
         ))}
