@@ -56,6 +56,22 @@ describe("graph document store", () => {
     expect(state.isDirty).toBe(true);
   });
 
+  it("updates a field and clears all prior run statuses atomically", () => {
+    useGraphDocumentStore.setState({ nodes: [node("one"), node("two")] });
+    let updates = 0;
+    const unsubscribe = useGraphDocumentStore.subscribe(() => {
+      updates += 1;
+    });
+
+    useGraphDocumentStore.getState().updateNodeField("one", "value", "after");
+    unsubscribe();
+
+    const state = useGraphDocumentStore.getState();
+    expect(updates).toBe(1);
+    expect(state.nodes.map((item) => item.data.runStatus)).toEqual(["idle", "idle"]);
+    expect(state.nodes[0]?.data.config.value).toBe("after");
+  });
+
   it("removes nodes and their incident edges as one mutation", () => {
     useGraphDocumentStore.setState({
       nodes: [node("one"), node("two")],

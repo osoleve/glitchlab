@@ -751,18 +751,18 @@ export function GlitchloomWorkbench() {
 
   const updateSelected = (updater: (node: LoomNode) => LoomNode, semantic = true) => {
     if (!selectedId) return;
-    if (semantic) markSemanticDirty();
     updateDocument(
       ({ nodes: current }) => ({
         nodes: current.map((node) => (node.id === selectedId ? updater(node) : node)),
       }),
       semantic,
     );
+    if (semantic) markSemanticDirty();
   };
   const updateNodeField = useCallback(
     (nodeId: string, field: string, value: unknown) => {
-      markSemanticDirty();
       updateGraphNodeField(nodeId, field, value);
+      markSemanticDirty();
     },
     [markSemanticDirty, updateGraphNodeField],
   );

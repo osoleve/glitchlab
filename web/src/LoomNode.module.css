@@ -359,6 +359,36 @@
   line-height: 1.35;
 }
 
+.loom-node.has-inline-textarea .node-inline-fields {
+  position: absolute;
+  top: 52px;
+  right: 14px;
+  bottom: calc(10px + var(--port-area-height));
+  left: 16px;
+  height: auto;
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+  margin-top: 0;
+}
+
+.loom-node.has-inline-textarea .node-inline-field.is-textarea {
+  height: 100%;
+  min-height: 0;
+  align-content: stretch;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.loom-node.has-inline-textarea .node-inline-field textarea {
+  height: 100%;
+  min-height: 48px;
+}
+
+.loom-node.has-inline-textarea .node-inputs,
+.loom-node.has-inline-textarea .node-outputs {
+  top: auto;
+  height: var(--port-area-height);
+}
+
 .node-inline-field input:focus,
 .node-inline-field select:focus,
 .node-inline-field textarea:focus {

@@ -24,7 +24,7 @@ import {
   WandSparkles,
   Workflow,
 } from "lucide-react";
-import type { ComponentType, CSSProperties } from "react";
+import { type ComponentType, type CSSProperties, useEffect, useState } from "react";
 import { ErrorBoundary, NodeErrorFallback } from "./ErrorBoundary";
 import styles from "./LoomNode.module.css";
 import { moduleClassNames as cx } from "./moduleClassNames";
@@ -122,9 +122,41 @@ function inlineControlHeight(fields: FieldDefinition[]): number {
   return wideHeight + Math.ceil(compactCount / 3) * 40 + 4;
 }
 
+interface InlineTextareaProps {
+  ariaLabel: string;
+  disabled: boolean;
+  placeholder: string;
+  update: (value: string) => void;
+  value: string;
+}
+
+function InlineTextarea({ ariaLabel, disabled, placeholder, update, value }: InlineTextareaProps) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <textarea
+      value={draft}
+      placeholder={placeholder}
+      disabled={disabled}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setDraft(nextValue);
+        update(nextValue);
+      }}
+      aria-label={ariaLabel}
+      rows={2}
+    />
+  );
+}
+
 export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
   const Icon = data.kind.startsWith("workflow:") ? Workflow : (ICONS[data.kind] ?? Box);
   const inlineFields = data.definition.fields.filter((field) => field.inline);
+  const hasInlineTextarea = inlineFields.some((field) => field.control === "textarea");
   const summaryText = summary(data);
   const hasSummary = inlineFields.length === 0 && summaryText.length > 0;
   const inlineHeight = inlineFields.length > 0 ? inlineControlHeight(inlineFields) : 0;
@@ -137,6 +169,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
     "--port-top": `${52 + contentHeight}px`,
     "--port-rows": portRows,
     "--inline-controls-height": `${inlineHeight}px`,
+    "--port-area-height": `${portRows * 28 + 12}px`,
   } as CSSProperties;
 
   return (
@@ -146,6 +179,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
         "loom-node",
         `category-${categoryClass(data.definition.category)}`,
         selected && "is-selected",
+        hasInlineTextarea && "has-inline-textarea",
         `status-${data.runStatus}`,
         data.executionScopeRole && `execution-scope-${data.executionScopeRole}`,
       )}
@@ -181,7 +215,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
       {hasSummary && <p className={cx(styles, "node-summary")}>{summaryText}</p>}
       {inlineFields.length > 0 && (
         <section
-          className={cx(styles, "node-inline-fields nodrag nowheel")}
+          className={cx(styles, "node-inline-fields nodrag nowheel nopan")}
           aria-label={`Controls for ${data.title}`}
         >
           {inlineFields.map((field) => {
@@ -227,13 +261,12 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
                     ))}
                   </select>
                 ) : field.control === "textarea" ? (
-                  <textarea
+                  <InlineTextarea
                     value={String(value ?? "")}
                     placeholder={field.placeholder}
                     disabled={disabled}
-                    onChange={(event) => update(event.target.value)}
-                    aria-label={`${field.label} for ${data.title}`}
-                    rows={2}
+                    update={update}
+                    ariaLabel={`${field.label} for ${data.title}`}
                   />
                 ) : (
                   <input

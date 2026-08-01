@@ -162,21 +162,23 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       nodes: resetRunStatuses(state.nodes),
     })),
   updateNodeField: (nodeId, field, value) =>
-    set((state) => ({
-      isDirty: true,
-      nodes: state.nodes.map((node) =>
+    set((state) => {
+      const nodes = state.nodes.map((node) =>
         node.id === nodeId
           ? {
               ...node,
               data: {
                 ...node.data,
                 config: { ...node.data.config, [field]: value },
-                runStatus: "idle" as const,
               },
             }
           : node,
-      ),
-    })),
+      );
+      return {
+        isDirty: true,
+        nodes: resetRunStatuses(nodes),
+      };
+    }),
   updateControlPort: (nodeId, fieldName, mode) =>
     set((state) => {
       const selectedNode = state.nodes.find((node) => node.id === nodeId);

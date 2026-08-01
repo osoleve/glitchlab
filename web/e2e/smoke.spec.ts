@@ -159,6 +159,50 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
   expect(errors).toEqual([]);
 });
 
+test("inline textareas preserve caret edits and grow with their node", async ({ page }) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  const promptNode = page.locator('.react-flow__node[data-id="prompt"]');
+  const promptTextarea = promptNode.locator("textarea");
+  await expect(promptTextarea).toBeVisible();
+
+  await promptTextarea.evaluate((element: HTMLTextAreaElement) => {
+    element.focus();
+    element.setSelectionRange(4, 4);
+  });
+  await page.keyboard.type(" nimble ");
+
+  await expect(promptTextarea).toHaveValue("The  nimble atomic age will bring");
+  expect(
+    await promptTextarea.evaluate((element: HTMLTextAreaElement) => element.selectionStart),
+  ).toBe(12);
+
+  await promptNode.locator("header").click();
+  const resizeHandle = promptNode.locator(".react-flow__resize-control.handle.bottom.right");
+  await expect(resizeHandle).toBeVisible();
+  const handleBox = await resizeHandle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  const textareaHeightBefore = await promptTextarea.evaluate(
+    (element: HTMLTextAreaElement) => element.getBoundingClientRect().height,
+  );
+  if (handleBox) {
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      handleBox.x + handleBox.width / 2 + 120,
+      handleBox.y + handleBox.height / 2 + 140,
+      { steps: 8 },
+    );
+    await page.mouse.up();
+  }
+  const textareaHeightAfter = await promptTextarea.evaluate(
+    (element: HTMLTextAreaElement) => element.getBoundingClientRect().height,
+  );
+  expect(textareaHeightAfter).toBeGreaterThan(textareaHeightBefore + 70);
+  expect(errors).toEqual([]);
+});
+
 test("canvas context menu adds a node with the mouse", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.goto("/");
