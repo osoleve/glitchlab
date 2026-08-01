@@ -262,6 +262,121 @@ async def test_passthrough_preserves_any_value(tmp_path: Path) -> None:
     assert response.manifest.scope.executed_node_ids == ["source", "pass"]
 
 
+@pytest.mark.asyncio
+async def test_trim_removes_only_leading_and_trailing_whitespace(tmp_path: Path) -> None:
+    graph = GraphSpec(
+        name="trim whitespace",
+        nodes=[
+            node("source", "text_input", text=" \t\n  keep  internal\tspace  \r\n "),
+            node("trim", "trim"),
+        ],
+        edges=[edge("source", "text", "trim", "text")],
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph)
+
+    assert response.terminal_outputs["trim"]["text"] == "keep  internal\tspace"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source", "start_marker", "end_marker", "expected"),
+    [
+        ("prefix <FILL>  Ada Lovelace  </FILL> suffix", "<FILL>", "</FILL>", "  Ada Lovelace  "),
+        ("label: selected value", "label: ", "", "selected value"),
+        ("selected value END trailing", "", " END", "selected value"),
+    ],
+)
+async def test_extract_text_supports_bounded_and_one_sided_markers(
+    tmp_path: Path,
+    source: str,
+    start_marker: str,
+    end_marker: str,
+    expected: str,
+) -> None:
+    graph = GraphSpec(
+        name="extract delimited text",
+        nodes=[
+            node("source", "text_input", text=source),
+            node(
+                "extract",
+                "extract_text",
+                start_marker=start_marker,
+                end_marker=end_marker,
+                require_match=True,
+            ),
+        ],
+        edges=[edge("source", "text", "extract", "value")],
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph)
+
+    assert response.terminal_outputs["extract"] == {
+        "text": expected,
+        "matched": True,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source", "expected_marker_kind"),
+    [
+        ("unstructured answer", "start"),
+        ("<FILL>partial answer", "end"),
+    ],
+)
+async def test_extract_text_reports_or_requires_missing_markers(
+    tmp_path: Path,
+    source: str,
+    expected_marker_kind: str,
+) -> None:
+    def graph(*, require_match: bool) -> GraphSpec:
+        return GraphSpec(
+            nodes=[
+                node("source", "text_input", text=source),
+                node(
+                    "extract",
+                    "extract_text",
+                    start_marker="<FILL>",
+                    end_marker="</FILL>",
+                    require_match=require_match,
+                ),
+            ],
+            edges=[edge("source", "text", "extract", "value")],
+        )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph(require_match=False))
+    assert response.terminal_outputs["extract"] == {"text": "", "matched": False}
+
+    with pytest.raises(
+        GraphRunFailure,
+        match=rf"could not find {expected_marker_kind} marker",
+    ) as error:
+        await GraphEngine(workspace=tmp_path).run(graph(require_match=True))
+    assert error.value.node_id == "extract"
+
+
+@pytest.mark.asyncio
+async def test_extract_text_requires_at_least_one_marker(tmp_path: Path) -> None:
+    graph = GraphSpec(
+        nodes=[
+            node("source", "text_input", text="answer"),
+            node(
+                "extract",
+                "extract_text",
+                start_marker="",
+                end_marker="",
+                require_match=False,
+            ),
+        ],
+        edges=[edge("source", "text", "extract", "value")],
+    )
+
+    with pytest.raises(GraphRunFailure, match="requires at least one marker") as error:
+        await GraphEngine(workspace=tmp_path).run(graph)
+    assert error.value.node_id == "extract"
+
+
 def test_saved_loom_pins_workflow_version_and_blocks_its_deletion(
     tmp_path: Path,
 ) -> None:
@@ -627,7 +742,7 @@ async def test_openai_compatible_completion_preserves_provenance(tmp_path: Path)
                 "model_revision": "b7c9768",
                 "choices": [
                     {
-                        "text": ", there was a machine.",
+                        "text": "<FILL>  Ada Lovelace  </FILL> trailing text",
                         "finish_reason": "length",
                         "logprobs": None,
                     }
@@ -659,22 +774,35 @@ async def test_openai_compatible_completion_preserves_provenance(tmp_path: Path)
                     logprobs=None,
                     extra_body={},
                 ),
+                node("extract", "extract_text", start_marker="<FILL>", end_marker="</FILL>"),
+                node("trim", "trim"),
+                node("template", "template_input", template="?person built a machine."),
+                node("fill", "fill_hole", name="person", value="unused"),
             ],
             edges=[
                 edge("prompt", "text", "complete", "prompt"),
                 edge("endpoint", "endpoint", "complete", "endpoint"),
                 edge("model", "model", "complete", "model"),
+                edge("complete", "result", "extract", "value"),
+                edge("extract", "text", "trim", "text"),
+                edge("template", "template", "fill", "template"),
+                edge("trim", "text", "fill", "value"),
             ],
         )
 
         response = await GraphEngine(workspace=tmp_path, http_client=client).run(graph)
 
-    result = response.terminal_outputs["complete"]["result"]
+    result = next(
+        node_result.outputs["result"]
+        for node_result in response.nodes
+        if node_result.node_id == "complete"
+    )
     assert result["kind"] == "completion_result"
-    assert result["text"] == ", there was a machine."
+    assert result["text"] == "<FILL>  Ada Lovelace  </FILL> trailing text"
     assert result["request_id"] == "cmpl-test"
     assert result["model_revision"] == "b7c9768"
     assert result["parameters"]["seed"] == 23
+    assert response.terminal_outputs["fill"]["text"] == "Ada Lovelace built a machine."
 
 
 @pytest.mark.asyncio

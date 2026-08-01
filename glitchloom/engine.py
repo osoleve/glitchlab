@@ -694,6 +694,40 @@ class GraphEngine:
                 find, replacement
             )
             return {"text": output}
+        if kind == "trim":
+            return {"text": _coerce_text(inputs["text"]).strip()}
+        if kind == "extract_text":
+            text = _coerce_text(inputs["value"])
+            start_marker = str(config.get("start_marker", "<FILL>"))
+            end_marker = str(config.get("end_marker", "</FILL>"))
+            if not start_marker and not end_marker:
+                raise ValueError("Extract delimited text requires at least one marker.")
+
+            content_start = 0
+            missing_marker: tuple[str, str] | None = None
+            if start_marker:
+                marker_start = text.find(start_marker)
+                if marker_start < 0:
+                    missing_marker = ("start", start_marker)
+                else:
+                    content_start = marker_start + len(start_marker)
+
+            content_end = len(text)
+            if missing_marker is None and end_marker:
+                marker_end = text.find(end_marker, content_start)
+                if marker_end < 0:
+                    missing_marker = ("end", end_marker)
+                else:
+                    content_end = marker_end
+
+            if missing_marker is not None:
+                marker_kind, marker = missing_marker
+                if config.get("require_match", True):
+                    raise ValueError(
+                        f"Extract delimited text could not find {marker_kind} marker {marker!r}."
+                    )
+                return {"text": "", "matched": False}
+            return {"text": text[content_start:content_end], "matched": True}
         if kind == "join":
             separator = _decode_escapes(str(config.get("separator", "\\n")))
             return {"text": separator.join(_coerce_text(item) for item in inputs["items"])}

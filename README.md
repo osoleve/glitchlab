@@ -39,6 +39,19 @@ and the primary completion knobs can be edited without opening the inspector.
 The catalog explicitly chooses these inline controls; the inspector remains the
 complete configuration and control-port surface.
 
+The **Trim whitespace** text node removes leading and trailing whitespace while
+preserving whitespace inside the text, avoiding a regular expression for this
+common completion-cleanup step.
+
+The **Extract delimited text** node accepts either plain text or a normalized
+completion result. It selects the first span between literal start and end
+markers, with either marker optionally left empty for one-sided extraction. By
+default a missing configured marker fails the node; disabling **Require match**
+instead emits empty text and `matched: false`. A typical structured fill path is
+**Generate completion → Extract delimited text → Trim whitespace → Fill hole**.
+Do not reuse the closing marker as the completion stop string when the extractor
+must verify it, because completion providers commonly omit matched stop text.
+
 ## Partial execution and run freshness
 
 The topbar and `Ctrl+Enter` still run the complete loom. Right-click a node and

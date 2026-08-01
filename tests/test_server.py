@@ -22,6 +22,8 @@ async def test_health_and_catalog_contract() -> None:
     assert {
         "text_input",
         "number_input",
+        "trim",
+        "extract_text",
         "endpoint",
         "model",
         "completion",
@@ -72,6 +74,23 @@ async def test_health_and_catalog_contract() -> None:
     )
     assert passthrough["inputs"][0]["type"] == "any"
     assert passthrough["outputs"][0]["type"] == "any"
+    trim = next(node for node in catalog.json()["nodes"] if node["kind"] == "trim")
+    assert trim["inputs"][0]["type"] == "text"
+    assert trim["outputs"][0]["type"] == "text"
+    assert trim["fields"] == []
+    extract = next(
+        node for node in catalog.json()["nodes"] if node["kind"] == "extract_text"
+    )
+    assert extract["inputs"][0]["type"] == "any"
+    assert [(output["name"], output["type"]) for output in extract["outputs"]] == [
+        ("text", "text"),
+        ("matched", "boolean"),
+    ]
+    assert {field["name"] for field in extract["fields"]} == {
+        "start_marker",
+        "end_marker",
+        "require_match",
+    }
 
 
 @pytest.mark.asyncio
