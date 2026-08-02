@@ -1,6 +1,7 @@
 import { serializeGraph } from "./graph";
 import type {
   LoomEdge,
+  LoomFrame,
   LoomNode,
   PortDefinition,
   WorkflowDraft,
@@ -45,6 +46,7 @@ export function inferWorkflowDraft(
   description: string,
   selectedNodes: LoomNode[],
   edges: LoomEdge[],
+  frames: LoomFrame[] = [],
 ): WorkflowDraft {
   if (selectedNodes.length === 0) {
     throw new Error("Select at least one node to save a workflow.");
@@ -124,14 +126,25 @@ export function inferWorkflowDraft(
     );
   }
 
-  const minimumX = Math.min(...selectedNodes.map((node) => node.position.x));
-  const minimumY = Math.min(...selectedNodes.map((node) => node.position.y));
-  const normalizedNodes = selectedNodes.map((node) => ({
+  const framePositions = new Map(frames.map((frame) => [frame.id, frame.position]));
+  const semanticNodes = selectedNodes.map((node) => {
+    const parentPosition = node.parentId ? framePositions.get(node.parentId) : undefined;
+    return {
+      ...node,
+      parentId: undefined,
+      extent: undefined,
+      expandParent: undefined,
+      position: {
+        x: node.position.x + (parentPosition?.x ?? 0),
+        y: node.position.y + (parentPosition?.y ?? 0),
+      },
+    };
+  });
+  const minimumX = Math.min(...semanticNodes.map((node) => node.position.x));
+  const minimumY = Math.min(...semanticNodes.map((node) => node.position.y));
+  const normalizedNodes = semanticNodes.map((node) => ({
     ...node,
-    position: {
-      x: node.position.x - minimumX,
-      y: node.position.y - minimumY,
-    },
+    position: { x: node.position.x - minimumX, y: node.position.y - minimumY },
   }));
   return {
     name: name.trim(),
@@ -164,8 +177,9 @@ export function reviseWorkflowDraft(
   nodes: LoomNode[],
   edges: LoomEdge[],
   original: WorkflowSpec,
+  frames: LoomFrame[] = [],
 ): WorkflowDraft {
-  const inferred = inferWorkflowDraft(name, description, nodes, edges);
+  const inferred = inferWorkflowDraft(name, description, nodes, edges, frames);
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
   const internallyConnected = new Set(
     edges

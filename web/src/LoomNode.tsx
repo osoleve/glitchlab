@@ -5,7 +5,9 @@ import {
   Box,
   Braces,
   Bug,
+  Cloud,
   Combine,
+  Database,
   Eraser,
   Eye,
   FileInput,
@@ -46,11 +48,13 @@ const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number 
   cartesian: GitFork,
   select_field: Box,
   endpoint: PlugZap,
+  openrouter_endpoint: Cloud,
   model: Box,
   completion: Sparkles,
   glitchling: Bug,
   gaggle: Users,
   corrupt: WandSparkles,
+  huggingface_dataset: Database,
   read_file: FileInput,
   write_file: FileOutput,
   preview: Eye,
@@ -79,6 +83,12 @@ function summary(data: LoomNodeData): string {
       return suppliedByPort("base_url")
         ? "endpoint supplied by input"
         : String(config.base_url ?? "");
+    case "openrouter_endpoint":
+      return `OpenRouter · ${String(config.api_key_env ?? "OPENROUTER_API_KEY")}`;
+    case "huggingface_dataset":
+      return `${String(config.dataset_id ?? "")} · ${String(config.split ?? "train")} · ${String(
+        config.limit ?? 100,
+      )} rows`;
     case "completion":
       return `${
         suppliedByPort("max_tokens") ? "wired tokens" : `${String(config.max_tokens ?? 96)} tokens`

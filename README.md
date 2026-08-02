@@ -4,13 +4,15 @@ Glitchloom is a local-first inference workbench: a typed node canvas for composi
 base-model calls, deterministic text transformations, collection operations, and
 self-describing experiment outputs.
 
-The spike ships with a live vertical slice for:
+The 0.8 version-zero milestone ships with a live vertical slice for:
 
 - `talkie-1930-13b-base`
 - `talkie-web-13b-base`
 - the native base-completion service on `elsie-1`
 - the local `osoleve/glitchlings` checkout
 - generic OpenAI-compatible `/v1/completions` endpoints
+- OpenRouter's raw `/api/v1/completions` transport
+- commit-pinned, bounded Hugging Face Hub dataset slices
 
 The starter loom expresses the experiment entirely with generic nodes: one
 OpenAI-compatible endpoint, two model references, and four completion branches
@@ -73,6 +75,14 @@ configuration, promoted controls, and topology. Editing those semantics marks a
 completed response as a visibly stale prior run; moving, resizing, renaming, or
 rearranging nodes does not.
 
+Runs use a companion NDJSON progress stream when the browser supports it. The
+original JSON run endpoint remains available for compatibility. Node badges now
+advance at the executor's real topological boundaries, and a wire pulses only
+after its value has actually been gathered by the downstream node. The stream
+never carries prompt or output values in progress events. A dropped stream is
+reported as an unknown outcome and is not silently retried, because file writes
+or provider calls may already have happened.
+
 ## Saved looms and templates
 
 Top-level looms are editable documents, deliberately separate from immutable
@@ -98,14 +108,52 @@ extraction, and deletion. **Tidy selection** and **Tidy graph** apply a
 deterministic left-to-right DAG layout using the nodes' measured sizes, preserve
 the arranged region's visual center, and persist the resulting positions without
 invalidating run freshness. A full-graph tidy also refits the completed layout;
-selection tidy leaves the surrounding spatial context in place. Selecting nodes
+selection tidy leaves the surrounding spatial context in place. A multi-node
+selection can also be grouped into a collapsible frame. Frames have editable
+titles and five color choices; membership, bounds, collapse state, and the graph's
+wire-routing preference persist with the loom while remaining presentation-only
+for run freshness. Collapsed frames retain their external connectivity through
+non-editable boundary wires. Selecting nodes
 emphasizes their complete upstream and downstream wire paths; unrelated wires
 recede while a selected wire remains fully visible. Wires use smooth stepped
-routing to keep parallel branches legible. A wire can be disconnected or split
+routing by default, with Bezier routing available from the canvas menu. Connection
+ports use enlarged proximity targets and explicit valid/invalid hover feedback.
+A wire can be disconnected or split
 by inserting the one-input, one-output **Passthrough** node. Dragging a new
 output wire onto empty canvas opens a searchable node picker filtered to
 type-compatible input ports. Choosing an entry creates the node at the drop
 point and connects the wire to the exact input named in the picker.
+
+## OpenRouter and Hugging Face datasets
+
+The **OpenRouter endpoint** node is a safe preset for
+`https://openrouter.ai/api/v1`. It emits the same typed endpoint reference used by
+the generic completion node and always calls raw `/completions`; it does not apply
+a chat template or trim prompt whitespace. Set `OPENROUTER_API_KEY` in the process
+environment, then connect **OpenRouter endpoint → Model → Generate completion**.
+Optional site URL and application-name fields become OpenRouter attribution
+headers. Cached results include every request-affecting provider field and are
+separated when the credential rotates without writing the credential itself.
+
+OpenRouter's model catalog is dynamic. The checked-in
+`examples/openrouter-huggingface.json` loom uses a model slug that was live when
+the example was updated; verify or replace it before a long experiment. The node
+does not hard-code a model list.
+
+The **Hugging Face dataset** node streams an explicitly bounded Hub slice and
+materializes only `limit` rows (maximum 10,000). Before loading, it resolves a
+branch, tag, or commit request to the exact Hub commit SHA and loads that SHA;
+the result records both references, the configuration, split, offset/limit,
+features, and library version. Private datasets can name an environment variable
+such as `HF_TOKEN`, but tokens never enter graphs or results. Media decoding is
+disabled so image/audio cells remain portable paths or base64 bytes instead of
+requiring UI-host media runtimes. Array-like values and non-finite numbers are
+normalized to strict JSON-safe representations.
+
+The dataset node exposes both its complete self-describing result and a plain
+`rows` collection. A common text path is **Hugging Face dataset → Select field**
+with `path=text`, followed by a Glitchling corruption or a completion node. The
+completion node maps a collection of prompts deterministically in order.
 
 ## Promoted control ports
 
@@ -205,11 +253,14 @@ secret itself.
 
 ## Execution contract
 
-- Graphs are validated for missing ports, incompatible types, duplicate
-  single-input connections, and cycles before execution.
+- Graphs are validated for unique node and edge identities, missing ports,
+  incompatible types, duplicate single-input connections, and cycles before
+  execution.
 - Every run freezes the submitted graph and records a SHA-256 graph digest,
   engine and Glitchlings versions, timestamps, workspace, node durations, and
   typed outputs.
+- Protocol-v1 progress events report the authoritative run plan, current node,
+  completed nodes, and transferred edge IDs without duplicating data values.
 - `CompletionResult` retains the raw prompt, output text, model and exact
   revision, endpoint, request parameters, request ID, provider payload, and
   latency.
@@ -263,10 +314,11 @@ The Playwright suite launches isolated backend and Vite processes, uses
 deterministic run responses, and exercises both supported viewport sizes. Vite
 proxies `/api` to the backend on port 8788 during normal development.
 
-## Spike boundaries
+## Version-zero boundaries
 
 This version intentionally does not yet implement arbitrary Python `Apply func`,
-model-server lifecycle management, streaming tokens, or bounded iteration.
+model-server lifecycle management, streaming model tokens, cancellation with
+side-effect rollback, or bounded iteration.
 Reusable workflows are the abstraction for named
 bundles such as “run both Talkies”; they do not become model-specific native
 nodes. The plugin boundary should become a versioned, typed operation manifest

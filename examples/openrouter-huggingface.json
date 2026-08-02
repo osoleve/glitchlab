@@ -1,0 +1,181 @@
+{
+  "name": "Hugging Face prompts through OpenRouter",
+  "nodes": [
+    {
+      "id": "dataset",
+      "kind": "huggingface_dataset",
+      "title": "Two WikiText prompts",
+      "config": {
+        "dataset_id": "Salesforce/wikitext",
+        "config_name": "wikitext-2-raw-v1",
+        "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+        "split": "test",
+        "offset": 11,
+        "limit": 2,
+        "token_env": ""
+      },
+      "position": {
+        "x": 0,
+        "y": 20
+      }
+    },
+    {
+      "id": "prompts",
+      "kind": "select_field",
+      "title": "Select text column",
+      "config": {
+        "path": "text"
+      },
+      "position": {
+        "x": 300,
+        "y": 20
+      }
+    },
+    {
+      "id": "openrouter",
+      "kind": "openrouter_endpoint",
+      "title": "OpenRouter raw completions",
+      "config": {
+        "api_key_env": "OPENROUTER_API_KEY",
+        "site_url": "",
+        "app_name": "Glitchloom",
+        "timeout_seconds": 120
+      },
+      "position": {
+        "x": 640,
+        "y": 20
+      }
+    },
+    {
+      "id": "model",
+      "kind": "model",
+      "title": "OpenRouter model",
+      "config": {
+        "model_id": "arcee-ai/trinity-large-thinking"
+      },
+      "position": {
+        "x": 640,
+        "y": 220
+      }
+    },
+    {
+      "id": "complete",
+      "kind": "completion",
+      "title": "Complete both rows",
+      "config": {
+        "temperature": 0.8,
+        "top_p": 0.95,
+        "max_tokens": 32,
+        "seed": 151,
+        "stop": "",
+        "logprobs": null,
+        "extra_body": {},
+        "cache_mode": "use"
+      },
+      "position": {
+        "x": 980,
+        "y": 120
+      }
+    },
+    {
+      "id": "preview",
+      "kind": "preview",
+      "title": "Completion results",
+      "config": {},
+      "position": {
+        "x": 1360,
+        "y": 120
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "dataset-prompts",
+      "source": "dataset",
+      "source_port": "rows",
+      "target": "prompts",
+      "target_port": "value"
+    },
+    {
+      "id": "prompts-complete",
+      "source": "prompts",
+      "source_port": "value",
+      "target": "complete",
+      "target_port": "prompt"
+    },
+    {
+      "id": "openrouter-complete",
+      "source": "openrouter",
+      "source_port": "endpoint",
+      "target": "complete",
+      "target_port": "endpoint"
+    },
+    {
+      "id": "model-complete",
+      "source": "model",
+      "source_port": "model",
+      "target": "complete",
+      "target_port": "model"
+    },
+    {
+      "id": "complete-preview",
+      "source": "complete",
+      "source_port": "result",
+      "target": "preview",
+      "target_port": "value"
+    }
+  ],
+  "presentation": {
+    "edge_routing": "bezier",
+    "frames": [
+      {
+        "id": "frame-data",
+        "title": "Dataset preparation",
+        "color": "teal",
+        "position": {
+          "x": -40,
+          "y": -40
+        },
+        "width": 580,
+        "height": 300,
+        "collapsed": false,
+        "node_ids": [
+          "dataset",
+          "prompts"
+        ]
+      },
+      {
+        "id": "frame-model",
+        "title": "OpenRouter batch completion",
+        "color": "violet",
+        "position": {
+          "x": 600,
+          "y": -40
+        },
+        "width": 680,
+        "height": 500,
+        "collapsed": false,
+        "node_ids": [
+          "openrouter",
+          "model",
+          "complete"
+        ]
+      },
+      {
+        "id": "frame-output",
+        "title": "Inspect results",
+        "color": "amber",
+        "position": {
+          "x": 1320,
+          "y": 60
+        },
+        "width": 320,
+        "height": 280,
+        "collapsed": false,
+        "node_ids": [
+          "preview"
+        ]
+      }
+    ]
+  }
+}

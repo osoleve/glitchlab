@@ -46,6 +46,22 @@ Cancellation and durable failed-run manifests remain separate follow-ups. The
 historical evidence and line references below describe the original audit
 snapshot.
 
+## 0.8.0 version-zero follow-up
+
+The 2026-08-02 tranche closes two more parts of the original trust gap:
+
+- completion cache identity now includes provider, timeout, non-secret headers,
+  request body, and a one-way credential fingerprint; and
+- a typed protocol-v1 NDJSON companion endpoint reports the backend's effective
+  plan, node lifecycle, and edge-transfer boundaries without exposing values.
+
+The frontend does not replay a run after a stream has been accepted, so an
+unknown transport outcome cannot silently duplicate provider or filesystem side
+effects. This is live observability, not durable provenance: TD-05 still needs
+persisted success and failure envelopes plus a run-bundle export. Disconnect
+cancellation is also best-effort for work already inside a thread or remote
+request, and there is not yet a user-facing cancel control.
+
 ## Executive summary
 
 There is no P0 defect in the default, loopback-only development setup. The most

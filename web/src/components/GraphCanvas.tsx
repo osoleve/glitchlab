@@ -2,6 +2,7 @@ import {
   Background,
   BackgroundVariant,
   type Connection,
+  type ConnectionLineType,
   Controls,
   type EdgeChange,
   MiniMap,
@@ -12,23 +13,27 @@ import {
 import { Focus, PanelLeftOpen, PanelRightOpen, X } from "lucide-react";
 import type { DragEvent, ReactNode, RefObject } from "react";
 import styles from "../App.module.css";
+import { LoomFrameNode } from "../FrameNode";
 import { LoomNodeCardWithBoundary } from "../LoomNode";
 import { moduleClassNames as cx } from "../moduleClassNames";
 import { useGraphDocumentStore } from "../stores/graphDocumentStore";
+import type { RunActivity } from "../stores/runControllerStore";
 import type { ExecutionScopeState } from "../stores/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
-import type { LoomEdge, LoomNode } from "../types";
+import type { CanvasNode, EdgeRouting, LoomEdge, LoomNode } from "../types";
 import type { ContextMenuState } from "./CanvasContextMenu";
 
-const nodeTypes = { loomNode: LoomNodeCardWithBoundary };
+const nodeTypes = { loomNode: LoomNodeCardWithBoundary, loomFrame: LoomFrameNode };
 
 interface GraphCanvasProps {
   canvasRef: RefObject<HTMLElement | null>;
   children?: ReactNode;
   edges: LoomEdge[];
+  edgeRouting: EdgeRouting;
   executionScope?: ExecutionScopeState;
-  nodes: LoomNode[];
+  nodes: CanvasNode[];
   runElapsed: number;
+  runActivity?: RunActivity;
   runError?: string;
   running: boolean;
   savingLoom: boolean;
@@ -39,7 +44,7 @@ interface GraphCanvasProps {
   onEdgesChange: (changes: EdgeChange<LoomEdge>[]) => void;
   onFitExecutionScope: () => void;
   onNodeDragStop: () => void;
-  onNodesChange: (changes: NodeChange<LoomNode>[]) => void;
+  onNodesChange: (changes: NodeChange<CanvasNode>[]) => void;
   onOpenContextMenu: (contextMenu?: ContextMenuState) => void;
   onReconnect: (edge: LoomEdge, connection: Connection) => void;
   onReconnectEnd: (
@@ -72,9 +77,11 @@ export function GraphCanvas({
   canvasRef,
   children,
   edges,
+  edgeRouting,
   executionScope,
   nodes,
   runElapsed,
+  runActivity,
   runError,
   running,
   savingLoom,
@@ -96,8 +103,9 @@ export function GraphCanvas({
   const { screenToFlowPosition } = useReactFlow();
   const documentNodes = useGraphDocumentStore((state) => state.nodes);
   const clearSelection = useGraphDocumentStore((state) => state.clearSelection);
-  const selectNode = useGraphDocumentStore((state) => state.selectNode);
+  const setFrames = useGraphDocumentStore((state) => state.setFrames);
   const selectNodes = useGraphDocumentStore((state) => state.selectNodes);
+  const setSelectionAnchor = useGraphDocumentStore((state) => state.setSelectionAnchor);
   const paletteOpen = useWorkspaceStore((state) => state.paletteOpen);
   const inspectorOpen = useWorkspaceStore((state) => state.inspectorOpen);
   const setPaletteOpen = useWorkspaceStore((state) => state.setPaletteOpen);
@@ -205,20 +213,44 @@ export function GraphCanvas({
         onReconnectStart={onReconnectStart}
         onReconnectEnd={onReconnectEnd}
         edgesReconnectable
-        reconnectRadius={18}
+        reconnectRadius={28}
+        connectionRadius={32}
         multiSelectionKeyCode={["Control", "Meta"]}
-        onNodeClick={(event, node) => {
-          const anchor = selectNode(node.id, event.ctrlKey || event.metaKey);
+        onNodeClick={(_event, node) => {
+          if (node.type === "loomFrame") {
+            setInspectorOpen(false);
+            onOpenContextMenu(undefined);
+            return;
+          }
+          // React Flow applies Ctrl/Cmd selection before dispatching this click.
+          // Only move the inspector anchor here; toggling again would undo the
+          // native multi-selection that `onNodesChange` already persisted.
+          const anchor = setSelectionAnchor(node.id);
           setInspectorOpen(Boolean(anchor));
           onOpenContextMenu(undefined);
         }}
         onPaneClick={() => {
           clearSelection();
+          setFrames((current) => current.map((frame) => ({ ...frame, selected: false })));
           setInspectorOpen(false);
           onOpenContextMenu(undefined);
         }}
         onNodeContextMenu={(event, node) => {
           event.preventDefault();
+          if (node.type === "loomFrame") {
+            clearSelection();
+            setFrames((current) =>
+              current.map((frame) => ({ ...frame, selected: frame.id === node.id })),
+            );
+            setInspectorOpen(false);
+            onOpenContextMenu({
+              x: event.clientX,
+              y: event.clientY,
+              scope: "frame",
+              frameId: node.id,
+            });
+            return;
+          }
           const nodeIds =
             node.selected && selectedNodes.length > 0
               ? selectedNodes.map((item) => item.id)
@@ -244,6 +276,7 @@ export function GraphCanvas({
         }}
         onEdgeContextMenu={(event, edge) => {
           event.preventDefault();
+          if (edge.data?.presentationProxy) return;
           onOpenContextMenu({
             x: event.clientX,
             y: event.clientY,
@@ -269,11 +302,13 @@ export function GraphCanvas({
         deleteKeyCode={savingLoom ? null : ["Backspace", "Delete"]}
         colorMode="dark"
         connectionLineStyle={{ stroke: "#b8a4e6", strokeWidth: 2 }}
+        connectionLineType={edgeRouting as ConnectionLineType}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Lines} gap={32} size={0.7} color="#292633" />
         <MiniMap
           nodeColor={(node) => {
+            if (node.type === "loomFrame") return "rgba(169, 139, 244, 0.24)";
             const category = (node.data as LoomNode["data"]).definition.category;
             return category === "Glitchlings"
               ? "#e2767f"
@@ -333,10 +368,19 @@ export function GraphCanvas({
         </div>
       )}
       {running && (
-        <div className={cx(styles, "run-overlay")}>
+        <div className={cx(styles, "run-overlay")} role="status" aria-live="polite">
           <span className={cx(styles, "shuttle")} />
-          <strong>Throwing the shuttle</strong>
-          <small>{formatElapsed(runElapsed)} · model endpoints may lazily load weights</small>
+          <strong>
+            {runActivity?.activeNodeTitle
+              ? `Running ${runActivity.activeNodeTitle}`
+              : executionScope?.nodeIds.length
+                ? "Preparing next node"
+                : "Planning workflow"}
+          </strong>
+          <small>
+            {runActivity?.completedNodeIds.length ?? 0}/{executionScope?.nodeIds.length ?? "?"}{" "}
+            nodes complete · {formatElapsed(runElapsed)}
+          </small>
         </div>
       )}
       {runError && !running && (

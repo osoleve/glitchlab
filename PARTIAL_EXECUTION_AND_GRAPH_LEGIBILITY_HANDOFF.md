@@ -4,6 +4,30 @@
 **Baseline:** Glitchloom 0.6.0, after saved looms, document tabs, expanded
 context menus, and Passthrough wire insertion.
 
+## 2026-08-02 version-zero update
+
+Glitchloom 0.8.0 turns the earlier partial-execution and graph-legibility work
+into a broader version-zero milestone:
+
+- a typed OpenRouter endpoint preset that preserves raw `/v1/completions`
+  semantics and separates cached requests across provider settings and key
+  rotation without persisting secrets;
+- a bounded Hugging Face Hub dataset node, routed through Glitchlings' public
+  datasets compatibility gate when available, with exact resolved-commit
+  provenance and strict JSON-safe media/value normalization;
+- persisted colored frames, multi-selection grouping, collapse/expand behavior,
+  collapsed-boundary proxy wires, and smooth-step or Bezier routing;
+- larger connection targets plus explicit valid/invalid drop feedback; and
+- a companion protocol-v1 NDJSON run stream whose backend-authored plan and
+  node/edge boundaries drive transient canvas activity, accessibility status,
+  and reduced-motion-safe signals without streaming values.
+
+The ordinary JSON run endpoint remains compatible. A broken progress stream is
+never replayed automatically because provider calls or file writes may already
+have happened. Browser disconnect cancellation is cooperative: it prevents
+downstream execution, but cannot undo completed effects or forcibly stop work
+already handed to a worker thread or remote provider.
+
 ## 2026-07-29 implementation update
 
 The partial-execution tranche described below is now implemented as Glitchloom
@@ -39,10 +63,11 @@ The recommended auto-layout tranche is now implemented:
 - pure Vitest coverage for determinism, non-overlap, center preservation,
   out-of-scope edge filtering, and cyclic draft tolerance.
 
-The next recommended direction is a small durable run-provenance tranche:
-versioned success/failure envelopes and an explicit run-bundle download, as
-described by `TECH_DEBT_REPORT.md:TD-05`. General resume, cancellation,
-streaming status, and intermediate-node caching remain deliberately deferred.
+The next recommended direction remains a small durable run-provenance tranche:
+persisted success/failure envelopes and an explicit run-bundle download, as
+described by `TECH_DEBT_REPORT.md:TD-05`. Live progress is now implemented, but
+general resume, user-initiated cancellation, rollback, and intermediate-node
+caching remain deliberately deferred.
 
 This is the starting context for the next implementation session. The two
 workstreams should be designed together: the graph traversal that determines a

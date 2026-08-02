@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import itertools
 import json
@@ -11,6 +12,7 @@ import re
 import time
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,20 +27,44 @@ from .catalog import (
     with_control_ports,
 )
 from .glitchlings_adapter import corrupt_text, plugin_status
+from .huggingface_adapter import load_huggingface_dataset
 from .models import (
+    EdgesTransferredEvent,
     GraphEdge,
     GraphNode,
     GraphRunFailure,
     GraphSpec,
+    NodeCompletedEvent,
+    NodeFailedEvent,
     NodeRunResult,
+    NodeStartedEvent,
+    RunCompletedEvent,
+    RunErrorDetail,
+    RunEvent,
+    RunFailedEvent,
     RunManifest,
     RunManifestScope,
+    RunPlan,
+    RunPlannedEvent,
     RunResponse,
     RunScope,
+    RunStartedEvent,
 )
 from .workflows import WORKFLOW_KIND_PREFIX, WorkflowStore
 
 HOLE_PATTERN = re.compile(r"(?<!\?)\?([A-Za-z_][A-Za-z0-9_]*)")
+ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+RunEventSink = Callable[[RunEvent], Awaitable[None]]
+type RunEventType = (
+    type[RunStartedEvent]
+    | type[RunPlannedEvent]
+    | type[NodeStartedEvent]
+    | type[EdgesTransferredEvent]
+    | type[NodeCompletedEvent]
+    | type[NodeFailedEvent]
+    | type[RunCompletedEvent]
+    | type[RunFailedEvent]
+)
 
 
 def _utc_now() -> str:
@@ -147,6 +173,15 @@ class ExecutionScope:
     mode: str
     graph: GraphSpec
     target_node_ids: tuple[str, ...]
+
+
+class RunEventSinkError(RuntimeError):
+    """An event observer failed while the DAG itself remained authoritative."""
+
+    def __init__(self, event: RunEvent, cause: Exception) -> None:
+        super().__init__(f"Run event sink failed while delivering {event.event!r}: {cause}")
+        self.event = event
+        self.cause = cause
 
 
 def compute_execution_scope(
@@ -322,6 +357,14 @@ class GraphEngine:
     ) -> tuple[list[GraphNode], dict[str, list[GraphEdge]], set[str]]:
         if not graph.nodes:
             raise GraphRunFailure("The graph has no nodes.")
+
+        edge_ids: set[str] = set()
+        for edge in graph.edges:
+            if edge.id in edge_ids:
+                raise GraphRunFailure(
+                    f"Edge IDs must be unique; duplicate {edge.id!r}."
+                )
+            edge_ids.add(edge.id)
 
         nodes = {node.id: node for node in graph.nodes}
         if len(nodes) != len(graph.nodes):
@@ -526,9 +569,38 @@ class GraphEngine:
             raise ValueError("extra_body must be a JSON object.")
         request_body.update(extra_body)
         cache_mode = str(config.get("cache_mode", "use"))
+
+        headers = {
+            str(name): str(value)
+            for name, value in (endpoint.get("headers") or {}).items()
+        }
+        api_key_env = str(endpoint.get("api_key_env", "")).strip()
+        credential_fingerprint: str | None = None
+        if api_key_env:
+            if not ENV_NAME_PATTERN.fullmatch(api_key_env):
+                raise ValueError(
+                    "api_key_env must name an environment variable, not contain a key."
+                )
+            api_key = os.getenv(api_key_env)
+            if not api_key:
+                raise ValueError(f"Endpoint expects API key environment variable {api_key_env!r}.")
+            headers["Authorization"] = f"Bearer {api_key}"
+            credential_fingerprint = hashlib.sha256(api_key.encode()).hexdigest()
+
+        timeout = float(endpoint.get("timeout_seconds", 120))
         cache_payload = {
-            "endpoint": base_url,
-            "api_key_env": str(endpoint.get("api_key_env", "")),
+            "endpoint": {
+                "base_url": base_url,
+                "provider": str(endpoint.get("provider", "openai-compatible")),
+                "api_key_env": api_key_env,
+                "credential_fingerprint": credential_fingerprint,
+                "headers": {
+                    name: value
+                    for name, value in headers.items()
+                    if name.lower() != "authorization"
+                },
+                "timeout_seconds": timeout,
+            },
             "request": request_body,
         }
         cache_key, cached = self._cached_result(
@@ -539,15 +611,6 @@ class GraphEngine:
         if cached is not None:
             return cached
 
-        headers: dict[str, str] = {}
-        api_key_env = str(endpoint.get("api_key_env", "")).strip()
-        if api_key_env:
-            api_key = os.getenv(api_key_env)
-            if not api_key:
-                raise ValueError(f"Endpoint expects API key environment variable {api_key_env!r}.")
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        timeout = float(endpoint.get("timeout_seconds", 120))
         started = time.perf_counter()
         if self.http_client is None:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -568,6 +631,7 @@ class GraphEngine:
             "model": model["model_id"],
             "model_revision": payload.get("model_revision"),
             "endpoint": base_url,
+            "provider": str(endpoint.get("provider", "openai-compatible")),
             "parameters": request_body,
             "finish_reason": first.get("finish_reason"),
             "logprobs": first.get("logprobs"),
@@ -768,9 +832,31 @@ class GraphEngine:
             return {
                 "endpoint": {
                     "kind": "endpoint_ref",
+                    "provider": "openai-compatible",
                     "base_url": str(config.get("base_url", "")).rstrip("/"),
                     "api_key_env": str(config.get("api_key_env", "")),
                     "timeout_seconds": float(config.get("timeout_seconds", 120)),
+                    "headers": {},
+                }
+            }
+        if kind == "openrouter_endpoint":
+            headers: dict[str, str] = {}
+            site_url = str(config.get("site_url", "")).strip()
+            app_name = str(config.get("app_name", "Glitchloom")).strip()
+            if site_url:
+                headers["HTTP-Referer"] = site_url
+            if app_name:
+                headers["X-OpenRouter-Title"] = app_name
+            return {
+                "endpoint": {
+                    "kind": "endpoint_ref",
+                    "provider": "openrouter",
+                    "base_url": "https://openrouter.ai/api/v1",
+                    "api_key_env": str(
+                        config.get("api_key_env", "OPENROUTER_API_KEY")
+                    ),
+                    "timeout_seconds": float(config.get("timeout_seconds", 120)),
+                    "headers": headers,
                 }
             }
         if kind == "model":
@@ -822,6 +908,9 @@ class GraphEngine:
             else:
                 texts = _coerce_text(value)
             return {"result": corrupt_text(texts, inputs["corruptor"])}
+        if kind == "huggingface_dataset":
+            dataset = await asyncio.to_thread(load_huggingface_dataset, config)
+            return {"dataset": dataset, "rows": dataset["rows"]}
         if kind == "read_file":
             path = self._resolve_workspace_path(str(config.get("path", "")))
             return {"text": path.read_text(encoding="utf-8")}
@@ -837,106 +926,223 @@ class GraphEngine:
         *,
         injected_inputs: dict[str, dict[str, Any]] | None = None,
         scope: RunScope | None = None,
+        event_sink: RunEventSink | None = None,
     ) -> RunResponse:
         """Execute a validated graph and return results plus a frozen manifest."""
 
         started_at = _utc_now()
         run_id = str(uuid.uuid4())
-        execution_scope = compute_execution_scope(graph, scope)
-        scoped_node_ids = {node.id for node in execution_scope.graph.nodes}
-        scoped_inputs = {
-            node_id: values
-            for node_id, values in (injected_inputs or {}).items()
-            if node_id in scoped_node_ids
-        }
-        ordered, incoming, terminal_nodes = self._validate_and_order(
-            execution_scope.graph,
-            scoped_inputs,
-        )
-        if execution_scope.mode == "targets":
-            terminal_nodes = set(execution_scope.target_node_ids)
-        outputs: dict[str, dict[str, Any]] = {}
+        requested_scope = scope or RunScope()
+        sequence = 0
         results: list[NodeRunResult] = []
-        for node in ordered:
-            started = time.perf_counter()
+
+        async def emit(
+            event_type: RunEventType,
+            *,
+            event: str,
+            **payload: Any,
+        ) -> None:
+            nonlocal sequence
+            if event_sink is None:
+                return
+            sequence += 1
+            emitted = event_type(
+                protocol_version=1,
+                event=event,
+                sequence=sequence,
+                at=_utc_now(),
+                run_id=run_id,
+                **payload,
+            )
             try:
-                inputs = self._gather_inputs(
-                    node,
-                    incoming,
-                    outputs,
-                    scoped_inputs,
+                await event_sink(emitted)
+            except Exception as exc:  # noqa: BLE001 - isolate observer delivery failure
+                raise RunEventSinkError(emitted, exc) from exc
+
+        try:
+            await emit(
+                RunStartedEvent,
+                event="run_started",
+                requested_scope=requested_scope,
+            )
+            execution_scope = compute_execution_scope(graph, requested_scope)
+            scoped_node_ids = {node.id for node in execution_scope.graph.nodes}
+            scoped_inputs = {
+                node_id: values
+                for node_id, values in (injected_inputs or {}).items()
+                if node_id in scoped_node_ids
+            }
+            ordered, incoming, terminal_nodes = self._validate_and_order(
+                execution_scope.graph,
+                scoped_inputs,
+            )
+            await emit(
+                RunPlannedEvent,
+                event="run_planned",
+                plan=RunPlan(
+                    mode=execution_scope.mode,
+                    target_node_ids=list(execution_scope.target_node_ids),
+                    node_ids=[node.id for node in ordered],
+                    edge_ids=[edge.id for edge in execution_scope.graph.edges],
+                ),
+            )
+            if execution_scope.mode == "targets":
+                terminal_nodes = set(execution_scope.target_node_ids)
+            outputs: dict[str, dict[str, Any]] = {}
+            for node in ordered:
+                await emit(
+                    NodeStartedEvent,
+                    event="node_started",
+                    node_id=node.id,
+                    kind=node.kind,
                 )
-                effective_node, native_inputs = self._apply_control_inputs(
-                    node,
-                    inputs,
+                started = time.perf_counter()
+                event_wait_seconds = 0.0
+                try:
+                    inputs = self._gather_inputs(
+                        node,
+                        incoming,
+                        outputs,
+                        scoped_inputs,
+                    )
+                    transferred_edge_ids = [edge.id for edge in incoming[node.id]]
+                    if transferred_edge_ids:
+                        event_wait_started = time.perf_counter()
+                        await emit(
+                            EdgesTransferredEvent,
+                            event="edges_transferred",
+                            node_id=node.id,
+                            edge_ids=transferred_edge_ids,
+                        )
+                        event_wait_seconds += time.perf_counter() - event_wait_started
+                    effective_node, native_inputs = self._apply_control_inputs(
+                        node,
+                        inputs,
+                    )
+                    node_outputs = await self._execute_node(
+                        effective_node,
+                        native_inputs,
+                    )
+                    node_outputs = self._append_control_outputs(
+                        effective_node,
+                        node_outputs,
+                    )
+                except RunEventSinkError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - report node boundary failures
+                    duration_ms = round(
+                        (time.perf_counter() - started - event_wait_seconds) * 1000,
+                        3,
+                    )
+                    failed_result = NodeRunResult(
+                        node_id=node.id,
+                        kind=node.kind,
+                        status="failed",
+                        duration_ms=duration_ms,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                    results.append(failed_result)
+                    await emit(
+                        NodeFailedEvent,
+                        event="node_failed",
+                        node_id=node.id,
+                        kind=node.kind,
+                        duration_ms=duration_ms,
+                        error=failed_result.error or str(exc),
+                    )
+                    raise GraphRunFailure(
+                        f"{self._definition(node.kind)['label']} failed: {exc}",
+                        node_id=node.id,
+                        results=results,
+                    ) from exc
+                duration_ms = round(
+                    (time.perf_counter() - started - event_wait_seconds) * 1000,
+                    3,
                 )
-                node_outputs = await self._execute_node(
-                    effective_node,
-                    native_inputs,
-                )
-                node_outputs = self._append_control_outputs(
-                    effective_node,
-                    node_outputs,
-                )
-            except Exception as exc:  # noqa: BLE001 - report node boundary failures
-                duration_ms = (time.perf_counter() - started) * 1000
+                outputs[node.id] = node_outputs
                 results.append(
                     NodeRunResult(
                         node_id=node.id,
                         kind=node.kind,
-                        status="failed",
-                        duration_ms=round(duration_ms, 3),
-                        error=f"{type(exc).__name__}: {exc}",
+                        status="completed",
+                        duration_ms=duration_ms,
+                        outputs=node_outputs,
                     )
                 )
-                raise GraphRunFailure(
-                    f"{self._definition(node.kind)['label']} failed: {exc}",
-                    node_id=node.id,
-                    results=results,
-                ) from exc
-            duration_ms = (time.perf_counter() - started) * 1000
-            outputs[node.id] = node_outputs
-            results.append(
-                NodeRunResult(
+                await emit(
+                    NodeCompletedEvent,
+                    event="node_completed",
                     node_id=node.id,
                     kind=node.kind,
-                    status="completed",
-                    duration_ms=round(duration_ms, 3),
-                    outputs=node_outputs,
+                    duration_ms=duration_ms,
                 )
-            )
 
-        status = plugin_status()
-        finished_at = _utc_now()
-        manifest = RunManifest(
-            run_id=run_id,
-            graph_name=graph.name,
-            graph_digest=_canonical_digest(graph.model_dump(mode="json")),
-            engine_version=__version__,
-            started_at=started_at,
-            finished_at=finished_at,
-            python_version=platform.python_version(),
-            workspace=str(self.workspace),
-            glitchlings_version=status.get("version") if status.get("available") else None,
-            scope=RunManifestScope(
-                mode=execution_scope.mode,
-                target_node_ids=list(execution_scope.target_node_ids),
-                executed_node_ids=[node.id for node in ordered],
-            ),
-            graph=graph,
-        )
-        return RunResponse(
-            status="completed",
-            manifest=manifest,
-            nodes=results,
-            terminal_outputs={node_id: outputs[node_id] for node_id in terminal_nodes},
-        )
+            status = plugin_status()
+            finished_at = _utc_now()
+            manifest = RunManifest(
+                run_id=run_id,
+                graph_name=graph.name,
+                graph_digest=_canonical_digest(graph.model_dump(mode="json")),
+                engine_version=__version__,
+                started_at=started_at,
+                finished_at=finished_at,
+                python_version=platform.python_version(),
+                workspace=str(self.workspace),
+                glitchlings_version=(
+                    status.get("version") if status.get("available") else None
+                ),
+                scope=RunManifestScope(
+                    mode=execution_scope.mode,
+                    target_node_ids=list(execution_scope.target_node_ids),
+                    executed_node_ids=[node.id for node in ordered],
+                ),
+                graph=graph,
+            )
+            response = RunResponse(
+                status="completed",
+                manifest=manifest,
+                nodes=results,
+                terminal_outputs={
+                    node_id: outputs[node_id] for node_id in terminal_nodes
+                },
+            )
+            await emit(
+                RunCompletedEvent,
+                event="run_completed",
+                response=response,
+            )
+            return response
+        except RunEventSinkError:
+            raise
+        except GraphRunFailure as exc:
+            await emit(
+                RunFailedEvent,
+                event="run_failed",
+                detail=RunErrorDetail(
+                    message=str(exc),
+                    node_id=exc.node_id,
+                    nodes=exc.results,
+                ),
+            )
+            raise
+        except Exception as exc:
+            await emit(
+                RunFailedEvent,
+                event="run_failed",
+                detail=RunErrorDetail(
+                    message=f"Unexpected run failure: {type(exc).__name__}: {exc}",
+                    nodes=results,
+                ),
+            )
+            raise
 
 
 __all__ = [
     "ExecutionScope",
     "GraphEngine",
     "HOLE_PATTERN",
+    "RunEventSinkError",
+    "RunEventSink",
     "compute_execution_scope",
     "_render_template",
     "_stringify_template",

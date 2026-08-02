@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel, model_validator
 
 ValueType = Literal[
     "any",
@@ -16,6 +16,7 @@ ValueType = Literal[
     "endpoint",
     "model",
     "completion",
+    "dataset",
     "glitchling",
     "gaggle",
     "corruption",
@@ -147,6 +148,26 @@ class Position(BaseModel):
     y: float = 0
 
 
+class FramePresentation(BaseModel):
+    """One visual-only frame used to organize nodes on the canvas."""
+
+    id: str
+    title: str
+    color: Literal["violet", "teal", "amber", "rose", "slate"]
+    position: Position
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    collapsed: bool = False
+    node_ids: list[str] = Field(default_factory=list)
+
+
+class GraphPresentation(BaseModel):
+    """Visual graph preferences that do not change execution semantics."""
+
+    edge_routing: Literal["smoothstep", "bezier"] = "smoothstep"
+    frames: list[FramePresentation] = Field(default_factory=list)
+
+
 class GraphNode(BaseModel):
     """A configured node in a Glitchloom graph."""
 
@@ -174,6 +195,34 @@ class GraphSpec(BaseModel):
     name: str = "Untitled loom"
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+    presentation: GraphPresentation = Field(default_factory=GraphPresentation)
+
+    @model_validator(mode="after")
+    def validate_frame_membership(self) -> GraphSpec:
+        """Keep visual frame identity and node membership unambiguous."""
+
+        semantic_node_ids = {node.id for node in self.nodes}
+        frame_ids: set[str] = set()
+        framed_node_ids: set[str] = set()
+        for frame in self.presentation.frames:
+            if frame.id in frame_ids:
+                raise ValueError(f"Frame IDs must be unique; duplicate {frame.id!r}.")
+            frame_ids.add(frame.id)
+            if frame.id in semantic_node_ids:
+                raise ValueError(
+                    f"Frame ID {frame.id!r} collides with a semantic node ID."
+                )
+            for node_id in frame.node_ids:
+                if node_id not in semantic_node_ids:
+                    raise ValueError(
+                        f"Frame {frame.id!r} references unknown node {node_id!r}."
+                    )
+                if node_id in framed_node_ids:
+                    raise ValueError(
+                        f"Node {node_id!r} cannot belong to more than one frame."
+                    )
+                framed_node_ids.add(node_id)
+        return self
 
 
 class RunScope(BaseModel):
@@ -412,6 +461,104 @@ class RunErrorDetail(BaseModel):
     message: str
     node_id: str | None = None
     nodes: list[NodeRunResult] = Field(default_factory=list)
+
+
+class RunPlan(BaseModel):
+    """Backend-authoritative graph slice and order for one run."""
+
+    mode: Literal["full", "targets"]
+    target_node_ids: list[str] = Field(default_factory=list)
+    node_ids: list[str] = Field(default_factory=list)
+    edge_ids: list[str] = Field(default_factory=list)
+
+
+class RunEventBase(BaseModel):
+    """Common identity and ordering metadata for protocol-v1 run events."""
+
+    protocol_version: Literal[1]
+    sequence: int = Field(ge=1)
+    at: str
+    run_id: str
+
+
+class RunStartedEvent(RunEventBase):
+    """A run request has been accepted but has not necessarily passed preflight."""
+
+    event: Literal["run_started"]
+    requested_scope: RunScope
+
+
+class RunPlannedEvent(RunEventBase):
+    """Preflight succeeded and the effective execution slice is frozen."""
+
+    event: Literal["run_planned"]
+    plan: RunPlan
+
+
+class NodeStartedEvent(RunEventBase):
+    """A node has begun gathering its inputs and executing."""
+
+    event: Literal["node_started"]
+    node_id: str
+    kind: str
+
+
+class EdgesTransferredEvent(RunEventBase):
+    """Named graph edges supplied values to one node without exposing the values."""
+
+    event: Literal["edges_transferred"]
+    node_id: str
+    edge_ids: list[str]
+
+
+class NodeCompletedEvent(RunEventBase):
+    """A node completed successfully."""
+
+    event: Literal["node_completed"]
+    node_id: str
+    kind: str
+    duration_ms: float
+
+
+class NodeFailedEvent(RunEventBase):
+    """A node stopped the run with an error."""
+
+    event: Literal["node_failed"]
+    node_id: str
+    kind: str
+    duration_ms: float
+    error: str
+
+
+class RunCompletedEvent(RunEventBase):
+    """Terminal successful event containing the ordinary run response."""
+
+    event: Literal["run_completed"]
+    response: RunResponse
+
+
+class RunFailedEvent(RunEventBase):
+    """Terminal failed event containing the ordinary structured error detail."""
+
+    event: Literal["run_failed"]
+    detail: RunErrorDetail
+
+
+type RunEvent = Annotated[
+    RunStartedEvent
+    | RunPlannedEvent
+    | NodeStartedEvent
+    | EdgesTransferredEvent
+    | NodeCompletedEvent
+    | NodeFailedEvent
+    | RunCompletedEvent
+    | RunFailedEvent,
+    Field(discriminator="event"),
+]
+
+
+class RunStreamEvent(RootModel[RunEvent]):
+    """Discriminated protocol-v1 event union used by the NDJSON stream."""
 
 
 class ValidationIssue(BaseModel):

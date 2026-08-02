@@ -1,11 +1,13 @@
 [project]
 name = "glitchloom"
-version = "0.7.0"
+version = "0.8.0"
 description = "A local-first typed inference loom for base-model experiments."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "datasets>=4,<5",
   "fastapi>=0.116,<1",
+  "huggingface-hub>=0.25,<2",
   "httpx>=0.28,<1",
   "pydantic>=2.11,<3",
   "uvicorn[standard]>=0.35,<1",

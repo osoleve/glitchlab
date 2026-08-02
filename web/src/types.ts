@@ -34,6 +34,40 @@ export interface LoomNodeData extends Record<string, unknown> {
 export type LoomNode = Node<LoomNodeData, "loomNode">;
 export type LoomEdge = Edge;
 
+export type FrameColor = "violet" | "teal" | "amber" | "rose" | "slate";
+export type EdgeRouting = "smoothstep" | "bezier";
+
+export interface LoomFrameData extends Record<string, unknown> {
+  title: string;
+  color: FrameColor;
+  collapsed: boolean;
+  aggregateStatus?: "active" | "completed" | "failed" | "partial" | "target";
+  aggregateCompletedCount?: number;
+  aggregateTotalCount?: number;
+  activeChildTitle?: string;
+  onToggleCollapsed?: () => void;
+  onUpdate?: (update: Partial<Pick<LoomFrameData, "title" | "color">>) => void;
+}
+
+export type LoomFrame = Node<LoomFrameData, "loomFrame">;
+export type CanvasNode = LoomFrame | LoomNode;
+
+export interface GraphFrameSpec {
+  id: string;
+  title: string;
+  color: FrameColor;
+  position: { x: number; y: number };
+  width: number;
+  height: number;
+  collapsed: boolean;
+  node_ids: string[];
+}
+
+export interface GraphPresentation {
+  edge_routing: EdgeRouting;
+  frames: GraphFrameSpec[];
+}
+
 export type NodeRunResult = Omit<ApiSchemas["NodeRunResult"], "outputs"> & {
   outputs: NonNullable<ApiSchemas["NodeRunResult"]["outputs"]>;
 };
@@ -72,8 +106,9 @@ export type GraphNodeSpec = Omit<GeneratedGraphNode, "config" | "control_ports" 
   position: NonNullable<GeneratedGraphNode["position"]>;
 };
 export type GraphEdgeSpec = ApiSchemas["GraphEdge"];
-export type GraphSpec = Omit<ApiSchemas["GraphSpec"], "nodes"> & {
+export type GraphSpec = Omit<ApiSchemas["GraphSpec"], "nodes" | "presentation"> & {
   nodes: GraphNodeSpec[];
+  presentation?: GraphPresentation;
 };
 export type LoomDraft = Omit<ApiSchemas["LoomDraft"], "graph"> & {
   graph: GraphSpec;

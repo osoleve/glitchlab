@@ -39,6 +39,8 @@ describe("graph document store", () => {
     useGraphDocumentStore.setState({
       nodes: [node("one")],
       edges: [],
+      frames: [],
+      edgeRouting: "smoothstep",
       selectedId: "one",
       loomName: "Test graph",
       isDirty: false,
@@ -54,6 +56,83 @@ describe("graph document store", () => {
     expect(state.nodes[0]?.data.config.value).toBe("after");
     expect(state.nodes[0]?.data.runStatus).toBe("idle");
     expect(state.isDirty).toBe(true);
+  });
+
+  it("keeps native React Flow selection and moves only the inspector anchor", () => {
+    useGraphDocumentStore.setState({
+      nodes: [
+        { ...node("one"), selected: true },
+        { ...node("two"), selected: false },
+      ],
+      selectedId: "one",
+    });
+
+    useGraphDocumentStore
+      .getState()
+      .applyNodeChanges([{ id: "two", type: "select", selected: true }]);
+
+    expect(
+      useGraphDocumentStore
+        .getState()
+        .nodes.filter((item) => item.selected)
+        .map((item) => item.id),
+    ).toEqual(["one", "two"]);
+    expect(useGraphDocumentStore.getState().setSelectionAnchor("two")).toBe("two");
+    expect(useGraphDocumentStore.getState().selectedId).toBe("two");
+
+    useGraphDocumentStore
+      .getState()
+      .applyNodeChanges([{ id: "two", type: "select", selected: false }]);
+    expect(useGraphDocumentStore.getState().selectedId).toBe("one");
+  });
+
+  it("groups nodes in a presentation-only parent without changing run status", () => {
+    useGraphDocumentStore.setState({
+      nodes: [
+        { ...node("one"), position: { x: 100, y: 140 }, measured: { width: 220, height: 120 } },
+        { ...node("two"), position: { x: 440, y: 260 }, measured: { width: 240, height: 150 } },
+      ],
+    });
+
+    const frameId = useGraphDocumentStore.getState().groupNodes(["one", "two"], () => "fixed-id");
+    const state = useGraphDocumentStore.getState();
+
+    expect(frameId).toBe("frame-fixed-id");
+    expect(state.frames).toHaveLength(1);
+    expect(state.frames[0]?.position).toEqual({ x: 72, y: 78 });
+    expect(state.nodes.map((item) => item.parentId)).toEqual([frameId, frameId]);
+    expect(state.nodes.map((item) => item.data.runStatus)).toEqual(["completed", "completed"]);
+    expect(state.isDirty).toBe(true);
+  });
+
+  it("removing a frame preserves child absolute positions", () => {
+    useGraphDocumentStore.setState({
+      nodes: [
+        {
+          ...node("one"),
+          parentId: "frame-one",
+          extent: "parent",
+          position: { x: 32, y: 74 },
+        },
+      ],
+      frames: [
+        {
+          id: "frame-one",
+          type: "loomFrame",
+          position: { x: 100, y: 200 },
+          width: 400,
+          height: 260,
+          data: { title: "Section", color: "teal", collapsed: false },
+        },
+      ],
+    });
+
+    useGraphDocumentStore.getState().removeFrames(["frame-one"]);
+
+    expect(useGraphDocumentStore.getState().nodes[0]).toMatchObject({
+      parentId: undefined,
+      position: { x: 132, y: 274 },
+    });
   });
 
   it("updates a field and clears all prior run statuses atomically", () => {

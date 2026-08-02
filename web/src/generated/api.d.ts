@@ -156,6 +156,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stream Graph
+         * @description Execute a graph while streaming truthful node and edge activity.
+         */
+        post: operations["stream_graph_api_runs_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workflows": {
         parameters: {
             query?: never;
@@ -300,6 +320,32 @@ export interface components {
             versions: number;
         };
         /**
+         * EdgesTransferredEvent
+         * @description Named graph edges supplied values to one node without exposing the values.
+         */
+        EdgesTransferredEvent: {
+            /** At */
+            at: string;
+            /** Edge Ids */
+            edge_ids: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "edges_transferred";
+            /** Node Id */
+            node_id: string;
+            /**
+             * Protocol Version
+             * @constant
+             */
+            protocol_version: 1;
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence: number;
+        };
+        /**
          * FieldDefinition
          * @description One catalog-driven node configuration control.
          */
@@ -327,7 +373,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "any" | "boolean" | "number" | "text" | "template" | "collection" | "endpoint" | "model" | "completion" | "glitchling" | "gaggle" | "corruption" | "file";
+            type: "any" | "boolean" | "number" | "text" | "template" | "collection" | "endpoint" | "model" | "completion" | "dataset" | "glitchling" | "gaggle" | "corruption" | "file";
         };
         /**
          * FieldOption
@@ -338,6 +384,33 @@ export interface components {
             label: string;
             /** Value */
             value: string;
+        };
+        /**
+         * FramePresentation
+         * @description One visual-only frame used to organize nodes on the canvas.
+         */
+        FramePresentation: {
+            /**
+             * Collapsed
+             * @default false
+             */
+            collapsed: boolean;
+            /**
+             * Color
+             * @enum {string}
+             */
+            color: "violet" | "teal" | "amber" | "rose" | "slate";
+            /** Height */
+            height: number;
+            /** Id */
+            id: string;
+            /** Node Ids */
+            node_ids?: string[];
+            position: components["schemas"]["Position"];
+            /** Title */
+            title: string;
+            /** Width */
+            width: number;
         };
         /**
          * GlitchlingDescriptor
@@ -407,6 +480,20 @@ export interface components {
             title?: string | null;
         };
         /**
+         * GraphPresentation
+         * @description Visual graph preferences that do not change execution semantics.
+         */
+        GraphPresentation: {
+            /**
+             * Edge Routing
+             * @default smoothstep
+             * @enum {string}
+             */
+            edge_routing: "smoothstep" | "bezier";
+            /** Frames */
+            frames?: components["schemas"]["FramePresentation"][];
+        };
+        /**
          * GraphSpec
          * @description Serializable graph submitted for execution.
          */
@@ -420,6 +507,7 @@ export interface components {
             name: string;
             /** Nodes */
             nodes: components["schemas"]["GraphNode"][];
+            presentation?: components["schemas"]["GraphPresentation"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -567,6 +655,34 @@ export interface components {
             graph: components["schemas"]["GraphSpec"];
         };
         /**
+         * NodeCompletedEvent
+         * @description A node completed successfully.
+         */
+        NodeCompletedEvent: {
+            /** At */
+            at: string;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "node_completed";
+            /** Kind */
+            kind: string;
+            /** Node Id */
+            node_id: string;
+            /**
+             * Protocol Version
+             * @constant
+             */
+            protocol_version: 1;
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence: number;
+        };
+        /**
          * NodeDefinition
          * @description Catalog contract used to render and validate one node kind.
          */
@@ -586,6 +702,36 @@ export interface components {
             /** Outputs */
             outputs: components["schemas"]["PortDefinition"][];
             workflow?: components["schemas"]["WorkflowReference"] | null;
+        };
+        /**
+         * NodeFailedEvent
+         * @description A node stopped the run with an error.
+         */
+        NodeFailedEvent: {
+            /** At */
+            at: string;
+            /** Duration Ms */
+            duration_ms: number;
+            /** Error */
+            error: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "node_failed";
+            /** Kind */
+            kind: string;
+            /** Node Id */
+            node_id: string;
+            /**
+             * Protocol Version
+             * @constant
+             */
+            protocol_version: 1;
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence: number;
         };
         /**
          * NodeRunResult
@@ -609,6 +755,32 @@ export interface components {
              * @enum {string}
              */
             status: "completed" | "failed";
+        };
+        /**
+         * NodeStartedEvent
+         * @description A node has begun gathering its inputs and executing.
+         */
+        NodeStartedEvent: {
+            /** At */
+            at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "node_started";
+            /** Kind */
+            kind: string;
+            /** Node Id */
+            node_id: string;
+            /**
+             * Protocol Version
+             * @constant
+             */
+            protocol_version: 1;
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence: number;
         };
         /**
          * PluginStatus
@@ -643,7 +815,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "any" | "boolean" | "number" | "text" | "template" | "collection" | "endpoint" | "model" | "completion" | "glitchling" | "gaggle" | "corruption" | "file";
+            type: "any" | "boolean" | "number" | "text" | "template" | "collection" | "endpoint" | "model" | "completion" | "dataset" | "glitchling" | "gaggle" | "corruption" | "file";
         };
         /**
          * Position
@@ -660,6 +832,29 @@ export interface components {
              * @default 0
              */
             y: number;
+        };
+        /**
+         * RunCompletedEvent
+         * @description Terminal successful event containing the ordinary run response.
+         */
+        RunCompletedEvent: {
+            /** At */
+            at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "run_completed";
+            /**
+             * Protocol Version
+             * @constant
+             */
+            protocol_version: 1;
+            response: components["schemas"]["RunResponse"];
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence: number;
         };
         /**
          * RunErrorDetail
@@ -680,6 +875,30 @@ export interface components {
         RunErrorResponse: {
             /** Detail */
             detail: components["schemas"]["RunErrorDetail"] | components["schemas"]["ValidationIssue"][];
+        };
+        RunEvent: components["schemas"]["RunStartedEvent"] | components["schemas"]["RunPlannedEvent"] | components["schemas"]["NodeStartedEvent"] | components["schemas"]["EdgesTransferredEvent"] | components["schemas"]["NodeCompletedEvent"] | components["schemas"]["NodeFailedEvent"] | components["schemas"]["RunCompletedEvent"] | components["schemas"]["RunFailedEvent"];
+        /**
+         * RunFailedEvent
+         * @description Terminal failed event containing the ordinary structured error detail.
+         */
+        RunFailedEvent: {
+            /** At */
+            at: string;
+            detail: components["schemas"]["RunErrorDetail"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "run_failed";
+            /**
+             * Protocol Version
+             * @constant
+             */
+            protocol_version: 1;
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence: number;
         };
         /**
          * RunManifest
@@ -723,6 +942,46 @@ export interface components {
             target_node_ids?: string[];
         };
         /**
+         * RunPlan
+         * @description Backend-authoritative graph slice and order for one run.
+         */
+        RunPlan: {
+            /** Edge Ids */
+            edge_ids?: string[];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "full" | "targets";
+            /** Node Ids */
+            node_ids?: string[];
+            /** Target Node Ids */
+            target_node_ids?: string[];
+        };
+        /**
+         * RunPlannedEvent
+         * @description Preflight succeeded and the effective execution slice is frozen.
+         */
+        RunPlannedEvent: {
+            /** At */
+            at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "run_planned";
+            plan: components["schemas"]["RunPlan"];
+            /**
+             * Protocol Version
+             * @constant
+             */
+            protocol_version: 1;
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence: number;
+        };
+        /**
          * RunRequest
          * @description Graph execution request with an explicit scope envelope.
          */
@@ -764,6 +1023,34 @@ export interface components {
             /** Target Node Ids */
             target_node_ids?: string[];
         };
+        /**
+         * RunStartedEvent
+         * @description A run request has been accepted but has not necessarily passed preflight.
+         */
+        RunStartedEvent: {
+            /** At */
+            at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "run_started";
+            /**
+             * Protocol Version
+             * @constant
+             */
+            protocol_version: 1;
+            requested_scope: components["schemas"]["RunScope"];
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence: number;
+        };
+        /**
+         * RunStreamEvent
+         * @description Discriminated protocol-v1 event union used by the NDJSON stream.
+         */
+        RunStreamEvent: components["schemas"]["RunEvent"];
         /**
          * SaveWorkflowResponse
          * @description A saved workflow and its catalog node definition.
@@ -848,7 +1135,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "any" | "boolean" | "number" | "text" | "template" | "collection" | "endpoint" | "model" | "completion" | "glitchling" | "gaggle" | "corruption" | "file";
+            type: "any" | "boolean" | "number" | "text" | "template" | "collection" | "endpoint" | "model" | "completion" | "dataset" | "glitchling" | "gaggle" | "corruption" | "file";
         };
         /**
          * WorkflowListResponse
@@ -875,7 +1162,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "any" | "boolean" | "number" | "text" | "template" | "collection" | "endpoint" | "model" | "completion" | "glitchling" | "gaggle" | "corruption" | "file";
+            type: "any" | "boolean" | "number" | "text" | "template" | "collection" | "endpoint" | "model" | "completion" | "dataset" | "glitchling" | "gaggle" | "corruption" | "file";
         };
         /**
          * WorkflowReference
@@ -1188,6 +1475,39 @@ export interface operations {
                 };
             };
             /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunErrorResponse"];
+                };
+            };
+        };
+    };
+    stream_graph_api_runs_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRequest"];
+            };
+        };
+        responses: {
+            /** @description Protocol-v1 run events, one JSON object per line. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": components["schemas"]["RunStreamEvent"];
+                };
+            };
+            /** @description Request validation error. */
             422: {
                 headers: {
                     [name: string]: unknown;

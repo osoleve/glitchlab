@@ -1,4 +1,5 @@
 import type { paths } from "./generated/api";
+import { parseRunEventStream, type RunStreamEvent } from "./runStream";
 import type {
   CatalogResponse,
   DeleteLoomResponse,
@@ -326,6 +327,39 @@ export async function runGraph(graph: GraphSpec, scope: RunScope): Promise<RunRe
     throw new ApiError(runErrorDetail(await readOptionalJson(response), response.status));
   }
   return decodeJson(response, "Run request", isRunPayload);
+}
+
+export async function runGraphStreaming(
+  graph: GraphSpec,
+  scope: RunScope,
+  onEvent: (event: RunStreamEvent) => void | Promise<void>,
+): Promise<RunResponse> {
+  if (typeof ReadableStream === "undefined" || typeof TextDecoder === "undefined") {
+    return runGraph(graph, scope);
+  }
+  const body = { graph, scope } satisfies RunRequestPayload;
+  const response = await fetch("/api/runs/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+    body: JSON.stringify(body),
+  });
+  if (response.status === 404 || response.status === 405) {
+    return runGraph(graph, scope);
+  }
+  if (!response.ok) {
+    throw new ApiError(runErrorDetail(await readOptionalJson(response), response.status));
+  }
+  if (!response.body) {
+    throw new Error(
+      "Run stream succeeded without a readable response body; the run was not replayed.",
+    );
+  }
+  const terminal = await parseRunEventStream(response.body, onEvent);
+  if (terminal.event === "run_failed") throw new ApiError(terminal.detail);
+  if (!isRunPayload(terminal.response)) {
+    throw new Error("Run stream returned an unexpected terminal response shape.");
+  }
+  return terminal.response;
 }
 
 async function documentResponseError(response: Response, fallback: string): Promise<Error> {

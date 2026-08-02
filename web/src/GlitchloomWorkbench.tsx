@@ -34,7 +34,7 @@ import {
   fetchLoomTemplate,
   fetchLoomTemplates,
   fetchWorkflow,
-  runGraph,
+  runGraphStreaming,
   saveWorkflow,
   updateLoom,
   updateWorkflow,
@@ -53,6 +53,8 @@ import {
   type WorkflowMenuState,
 } from "./components/WorkflowDefinitionMenu";
 import { isGraphConnectionValid } from "./connectionValidation";
+import { frameAggregate } from "./frameActivity";
+import { collapseFrameEdges } from "./frameEdges";
 import { hydrateGraph, serializeGraph } from "./graph";
 import { tidyNodeLayout } from "./graphLayout";
 import {
@@ -80,10 +82,12 @@ import { useRunControllerStore } from "./stores/runControllerStore";
 import type { ExecutionScopeState, GraphSnapshot, GraphTab } from "./stores/types";
 import { MAIN_TAB_ID, useWorkspaceStore } from "./stores/workspaceStore";
 import type {
+  CanvasNode,
   CatalogResponse,
   ControlPortMode,
   GraphSpec,
   LoomEdge,
+  LoomFrame,
   LoomNode,
   LoomSpec,
   LoomSummary,
@@ -214,16 +218,20 @@ export function GlitchloomWorkbench() {
   const {
     nodes,
     edges,
+    frames,
+    edgeRouting,
     selectedId,
     loomName,
     isDirty,
     setNodes,
+    setEdgeRouting,
     setSelectedId,
     setLoomName,
     setIsDirty,
     renameLoom,
     updateDocument,
     applyNodeChanges,
+    applyFrameChanges,
     applyEdgeChanges,
     connect: connectGraph,
     updateNodeField: updateGraphNodeField,
@@ -231,6 +239,10 @@ export function GlitchloomWorkbench() {
     removeNodes,
     removeEdge,
     duplicateNodes,
+    groupNodes,
+    addFrame,
+    updateFrame,
+    removeFrames,
     selectAllNodes: selectAllGraphNodes,
     selectRelatedNodes,
     replaceGraph,
@@ -241,12 +253,15 @@ export function GlitchloomWorkbench() {
     runError,
     executionScope,
     runElapsed,
+    activity,
     setRun,
     setRunError,
     setExecutionScope,
     setRunElapsed,
     markSemanticEdit,
     beginRun,
+    applyRunEvent,
+    clearEdgePulse,
     finishRun,
     failRun,
   } = useRunControllerStore();
@@ -302,6 +317,7 @@ export function GlitchloomWorkbench() {
   const runStartedAt = useRef(0);
   const nodeDragHistoryPaused = useRef(false);
   const reconnectSuccessful = useRef(false);
+  const edgePulseTimers = useRef(new Map<number, number>());
   const hasOpenedGraph = useRef(false);
   const canvasRef = useRef<HTMLElement>(null);
   const paletteRef = useRef<HTMLElement>(null);
@@ -322,6 +338,8 @@ export function GlitchloomWorkbench() {
     (): GraphSnapshot => ({
       nodes,
       edges,
+      frames,
+      edgeRouting,
       run,
       runError,
       selectedId,
@@ -329,12 +347,30 @@ export function GlitchloomWorkbench() {
       isDirty,
       executionScope,
     }),
-    [edges, executionScope, isDirty, loomName, nodes, run, runError, selectedId],
+    [
+      edgeRouting,
+      edges,
+      executionScope,
+      frames,
+      isDirty,
+      loomName,
+      nodes,
+      run,
+      runError,
+      selectedId,
+    ],
   );
 
   const applySnapshot = useCallback(
     (snapshot: GraphSnapshot) => {
-      replaceGraph(snapshot.nodes, snapshot.edges, snapshot.loomName, snapshot.isDirty);
+      replaceGraph(
+        snapshot.nodes,
+        snapshot.edges,
+        snapshot.loomName,
+        snapshot.isDirty,
+        snapshot.frames,
+        snapshot.edgeRouting,
+      );
       setRun(snapshot.run);
       setRunError(snapshot.runError);
       setExecutionScope(snapshot.executionScope);
@@ -567,10 +603,30 @@ export function GlitchloomWorkbench() {
   }, [quickAddEntries.length]);
 
   const onNodesChange = useCallback(
-    (changes: NodeChange<LoomNode>[]) => {
-      const semantic = changes.some((change) => change.type === "add" || change.type === "remove");
+    (changes: NodeChange<CanvasNode>[]) => {
+      const frameIds = new Set(frames.map((frame) => frame.id));
+      const isFrameChange = (change: NodeChange<CanvasNode>) => {
+        if (change.type === "add" || change.type === "replace") {
+          return change.item.type === "loomFrame";
+        }
+        return frameIds.has(change.id);
+      };
+      const collapsedIds = new Set(
+        frames.filter((frame) => frame.data.collapsed).map((frame) => frame.id),
+      );
+      const frameChanges = changes.filter(
+        (change) =>
+          isFrameChange(change) && !(change.type === "dimensions" && collapsedIds.has(change.id)),
+      ) as NodeChange<LoomFrame>[];
+      const nodeChanges = changes.filter(
+        (change) => !isFrameChange(change),
+      ) as NodeChange<LoomNode>[];
+      const semantic = nodeChanges.some(
+        (change) => change.type === "add" || change.type === "remove",
+      );
       if (semantic) markSemanticDirty();
-      applyNodeChanges(changes);
+      if (nodeChanges.length > 0) applyNodeChanges(nodeChanges);
+      if (frameChanges.length > 0) applyFrameChanges(frameChanges);
       const dragging = changes.some(
         (change) => change.type === "position" && change.dragging === true,
       );
@@ -586,7 +642,7 @@ export function GlitchloomWorkbench() {
         nodeDragHistoryPaused.current = false;
       }
     },
-    [applyNodeChanges, markSemanticDirty],
+    [applyFrameChanges, applyNodeChanges, frames, markSemanticDirty],
   );
   const finishNodeDragHistory = useCallback(() => {
     if (!nodeDragHistoryPaused.current) return;
@@ -596,17 +652,30 @@ export function GlitchloomWorkbench() {
   useEffect(
     () => () => {
       if (nodeDragHistoryPaused.current) resumeGraphHistory();
+      for (const timer of edgePulseTimers.current.values()) window.clearTimeout(timer);
+      edgePulseTimers.current.clear();
     },
     [],
   );
+  useEffect(() => {
+    if (activity !== undefined) return;
+    for (const timer of edgePulseTimers.current.values()) window.clearTimeout(timer);
+    edgePulseTimers.current.clear();
+  }, [activity]);
   const onEdgesChange = useCallback(
     (changes: EdgeChange<LoomEdge>[]) => {
-      if (changes.some((change) => change.type !== "select")) {
+      const semanticIds = new Set(edges.map((edge) => edge.id));
+      const semanticChanges = changes.filter((change) =>
+        semanticIds.has(
+          change.type === "add" || change.type === "replace" ? change.item.id : change.id,
+        ),
+      );
+      if (semanticChanges.some((change) => change.type !== "select")) {
         markSemanticDirty();
       }
-      applyEdgeChanges(changes);
+      if (semanticChanges.length > 0) applyEdgeChanges(semanticChanges);
     },
-    [applyEdgeChanges, markSemanticDirty],
+    [applyEdgeChanges, edges, markSemanticDirty],
   );
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -816,6 +885,10 @@ export function GlitchloomWorkbench() {
     const selectedSet = new Set(nodeIds);
     const targets = nodes.filter((node) => selectedSet.has(node.id));
     if (targets.length < 2) return;
+    if (new Set(targets.map((node) => node.parentId ?? "")).size > 1) {
+      setContextMenu(undefined);
+      return;
+    }
     const positions = new Map<string, { x: number; y: number }>();
     if (action === "align-left") {
       const left = Math.min(...targets.map((node) => node.position.x));
@@ -871,8 +944,14 @@ export function GlitchloomWorkbench() {
 
   const tidyNodes = (nodeIds?: string[]) => {
     const included = nodeIds ? new Set(nodeIds) : undefined;
-    const targets = included ? nodes.filter((node) => included.has(node.id)) : nodes;
+    const targets = included
+      ? nodes.filter((node) => included.has(node.id))
+      : nodes.filter((node) => !node.parentId);
     if (targets.length < 2) {
+      setContextMenu(undefined);
+      return;
+    }
+    if (new Set(targets.map((node) => node.parentId ?? "")).size > 1) {
       setContextMenu(undefined);
       return;
     }
@@ -1009,6 +1088,8 @@ export function GlitchloomWorkbench() {
       const snapshot: GraphSnapshot = {
         nodes: hydrated.nodes,
         edges: hydrated.edges,
+        frames: hydrated.frames,
+        edgeRouting: hydrated.edgeRouting,
         loomName: response.workflow.name,
         isDirty: false,
       };
@@ -1060,6 +1141,8 @@ export function GlitchloomWorkbench() {
     const snapshot: GraphSnapshot = {
       nodes: hydrated.nodes,
       edges: hydrated.edges,
+      frames: hydrated.frames,
+      edgeRouting: hydrated.edgeRouting,
       loomName: graph.name,
       isDirty: true,
     };
@@ -1111,6 +1194,8 @@ export function GlitchloomWorkbench() {
       const snapshot: GraphSnapshot = {
         nodes: hydrated.nodes,
         edges: hydrated.edges,
+        frames: hydrated.frames,
+        edgeRouting: hydrated.edgeRouting,
         loomName: response.loom.graph.name,
         isDirty: false,
       };
@@ -1174,7 +1259,7 @@ export function GlitchloomWorkbench() {
     setContextMenu(undefined);
     setLoomSaveError(undefined);
     try {
-      const graph = serializeGraph(trimmedName, nodes, edges);
+      const graph = serializeGraph(trimmedName, nodes, edges, frames, edgeRouting);
       const saved =
         activeLoom && !options.createNew
           ? await updateLoom(activeLoom.id, activeLoom.revision, graph)
@@ -1326,9 +1411,16 @@ export function GlitchloomWorkbench() {
           nodes,
           edges,
           activeWorkflow,
+          frames,
         );
       } else {
-        inferred = inferWorkflowDraft(workflowName, workflowDescription, selectedNodes, edges);
+        inferred = inferWorkflowDraft(
+          workflowName,
+          workflowDescription,
+          selectedNodes,
+          edges,
+          frames,
+        );
       }
       return applyWorkflowBoundaryLabels(inferred, workflowBoundaryLabels);
     } catch {
@@ -1337,6 +1429,7 @@ export function GlitchloomWorkbench() {
   }, [
     edges,
     activeWorkflow,
+    frames,
     nodes,
     saveDialogOpen,
     saveDialogPurpose,
@@ -1510,7 +1603,7 @@ export function GlitchloomWorkbench() {
   };
 
   const execute = async (requestedTargetIds: string[] = []) => {
-    const graph = serializeGraph(loomName, nodes, edges);
+    const graph = serializeGraph(loomName, nodes, edges, frames, edgeRouting);
     const submittedFingerprint = semanticExecutionFingerprint(graph);
     const targetNodeIds = [
       ...new Set(requestedTargetIds.filter((nodeId) => nodes.some((node) => node.id === nodeId))),
@@ -1534,22 +1627,72 @@ export function GlitchloomWorkbench() {
       edgeIds: inducedEdgeIds(edges, scopedNodeIds),
       status: "running",
     };
-    const scopedNodeIdSet = new Set(scopedNodeIds);
     const selectedBeforeRun = selectedId;
+    let authoritativeScope = submittedScope;
     runStartedAt.current = Date.now();
+    for (const timer of edgePulseTimers.current.values()) window.clearTimeout(timer);
+    edgePulseTimers.current.clear();
     beginRun(submittedScope, submittedFingerprint);
     setContextMenu(undefined);
     setNodes((current) =>
-      current.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          runStatus: scopedNodeIdSet.has(node.id) ? "running" : "idle",
-        },
-      })),
+      current.map((node) => ({ ...node, data: { ...node.data, runStatus: "idle" } })),
     );
     try {
-      const response = await runGraph(graph, scope);
+      const response = await runGraphStreaming(graph, scope, (event) => {
+        const controller = useRunControllerStore.getState();
+        if (controller.activeRun?.semanticRevision !== controller.semanticRevision) return;
+        const eventNodeId = "node_id" in event ? event.node_id : undefined;
+        const eventNode = eventNodeId ? nodes.find((node) => node.id === eventNodeId) : undefined;
+        applyRunEvent(event, eventNode?.data.title);
+        if (event.event === "run_planned") {
+          authoritativeScope = {
+            mode: event.plan.mode,
+            targetNodeIds: event.plan.target_node_ids,
+            nodeIds: event.plan.node_ids,
+            edgeIds: event.plan.edge_ids,
+            status: "running",
+          };
+        } else if (event.event === "node_started") {
+          setNodes((current) =>
+            current.map((node) => ({
+              ...node,
+              data: {
+                ...node.data,
+                runStatus:
+                  node.id === event.node_id
+                    ? "running"
+                    : node.data.runStatus === "running"
+                      ? "idle"
+                      : node.data.runStatus,
+              },
+            })),
+          );
+        } else if (event.event === "node_completed") {
+          setNodes((current) =>
+            current.map((node) =>
+              node.id === event.node_id
+                ? { ...node, data: { ...node.data, runStatus: "completed" } }
+                : node,
+            ),
+          );
+        } else if (event.event === "node_failed") {
+          setNodes((current) =>
+            current.map((node) =>
+              node.id === event.node_id
+                ? { ...node, data: { ...node.data, runStatus: "failed" } }
+                : node,
+            ),
+          );
+        } else if (event.event === "edges_transferred") {
+          const sequence = event.sequence;
+          const runId = event.run_id;
+          const timer = window.setTimeout(() => {
+            clearEdgePulse(runId, sequence);
+            edgePulseTimers.current.delete(sequence);
+          }, 600);
+          edgePulseTimers.current.set(sequence, timer);
+        }
+      });
       const completedNodeIds = response.manifest.scope.executed_node_ids;
       const completed = new Set(completedNodeIds);
       const stale = finishRun(
@@ -1586,7 +1729,7 @@ export function GlitchloomWorkbench() {
         error instanceof ApiError
           ? error.detail
           : { message: error instanceof Error ? error.message : String(error) };
-      const stale = failRun(detail.message, submittedScope, submittedFingerprint);
+      const stale = failRun(detail.message, authoritativeScope, submittedFingerprint);
       setNodes((current) =>
         current.map((node) => ({
           ...node,
@@ -1855,37 +1998,74 @@ export function GlitchloomWorkbench() {
     ...inducedEdgeIds(edges, selectedDownstreamIds),
   ]);
   const showSelectedPaths = executionScope === undefined && selectedNodeIds.length > 0;
-  const flowNodes = nodes.map((node) => ({
-    ...node,
-    data: {
-      ...node.data,
-      onUpdateField: (field: string, value: unknown) => updateNodeField(node.id, field, value),
-      executionScopeRole:
-        executionScope?.mode !== "targets"
-          ? undefined
-          : targetNodeIdSet.has(node.id)
-            ? ("target" as const)
-            : scopedNodeIdSet.has(node.id)
-              ? ("required" as const)
-              : ("unrelated" as const),
-    },
-  }));
-  const flowEdges = edges.map((edge) => {
-    const inScope = !executionScope || scopedEdgeIdSet.has(edge.id);
-    const className = executionScope
+  const collapsedFrameIds = new Set(
+    frames.filter((frame) => frame.data.collapsed).map((frame) => frame.id),
+  );
+  const flowNodes: CanvasNode[] = [
+    ...frames.map((frame) => {
+      const children = nodes.filter((node) => node.parentId === frame.id);
+      const aggregate = frameAggregate(
+        children,
+        scopedNodeIdSet,
+        targetNodeIdSet,
+        activity?.activeNodeId,
+      );
+      return {
+        ...frame,
+        height: frame.data.collapsed ? 46 : frame.height,
+        style: frame.data.collapsed ? { ...frame.style, height: 46 } : frame.style,
+        data: {
+          ...frame.data,
+          aggregateStatus: aggregate.status,
+          aggregateCompletedCount: aggregate.completedCount,
+          aggregateTotalCount: aggregate.totalCount,
+          activeChildTitle: aggregate.activeChildTitle,
+          onToggleCollapsed: () => updateFrame(frame.id, { collapsed: !frame.data.collapsed }),
+          onUpdate: (update: Partial<Pick<LoomFrame["data"], "title" | "color">>) =>
+            updateFrame(frame.id, update),
+        },
+      };
+    }),
+    ...nodes.map((node) => ({
+      ...node,
+      hidden: Boolean(node.parentId && collapsedFrameIds.has(node.parentId)),
+      data: {
+        ...node.data,
+        onUpdateField: (field: string, value: unknown) => updateNodeField(node.id, field, value),
+        executionScopeRole:
+          executionScope?.mode !== "targets"
+            ? undefined
+            : targetNodeIdSet.has(node.id)
+              ? ("target" as const)
+              : scopedNodeIdSet.has(node.id)
+                ? ("required" as const)
+                : ("unrelated" as const),
+      },
+    })),
+  ];
+  const presentationEdges = collapseFrameEdges(edges, nodes, collapsedFrameIds);
+  const flowEdges = presentationEdges.map((edge) => {
+    const semanticIds = edge.data?.presentationProxy
+      ? ((edge.data.semanticEdgeIds as string[] | undefined) ?? [edge.id])
+      : [edge.id];
+    const inScope = !executionScope || semanticIds.some((id) => scopedEdgeIdSet.has(id));
+    const scopeClassName = executionScope
       ? inScope
         ? styles["execution-scope-edge"]
         : styles["execution-unrelated-edge"]
       : showSelectedPaths
-        ? selectedPathEdgeIdSet.has(edge.id)
+        ? semanticIds.some((id) => selectedPathEdgeIdSet.has(id))
           ? styles["selection-path-edge"]
           : styles["selection-unrelated-edge"]
         : undefined;
+    const transferring = activity?.recentEdgeIds.some((id) => semanticIds.includes(id)) ?? false;
     return {
       ...edge,
-      type: "smoothstep",
-      className,
-      animated: running && inScope,
+      type: edgeRouting,
+      className: [scopeClassName, transferring ? styles["edge-transfer-pulse"] : undefined]
+        .filter(Boolean)
+        .join(" "),
+      animated: transferring,
       markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
     };
   });
@@ -1991,9 +2171,11 @@ export function GlitchloomWorkbench() {
         <GraphCanvas
           canvasRef={canvasRef}
           edges={flowEdges}
+          edgeRouting={edgeRouting}
           executionScope={executionScope}
           nodes={flowNodes}
           runElapsed={runElapsed}
+          runActivity={activity}
           runError={runError}
           running={running}
           savingLoom={savingLoom}
@@ -2027,9 +2209,18 @@ export function GlitchloomWorkbench() {
               quickAddIndex={quickAddIndex}
               quickAddQuery={quickAddQuery}
               running={running}
+              edgeRouting={edgeRouting}
               onAddQuickNode={addQuickNode}
+              onAddFrame={(position) => {
+                addFrame(position);
+                setContextMenu(undefined);
+              }}
               onArrangeSelection={arrangeSelection}
               onDeleteNodes={deleteSelected}
+              onDeleteFrame={(frameId) => {
+                removeFrames([frameId]);
+                setContextMenu(undefined);
+              }}
               onDeleteWorkflow={requestDeleteWorkflow}
               onDisconnectEdge={(edgeId) => {
                 markSemanticDirty();
@@ -2048,6 +2239,11 @@ export function GlitchloomWorkbench() {
                 });
                 setContextMenu(undefined);
               }}
+              onGroupNodes={(nodeIds) => {
+                groupNodes(nodeIds);
+                setInspectorOpen(false);
+                setContextMenu(undefined);
+              }}
               onInsertPassthrough={insertPassthrough}
               onOpenSaveWorkflow={openSaveWorkflow}
               onOpenWorkflowEditor={(definition) => void openWorkflowEditor(definition)}
@@ -2055,6 +2251,10 @@ export function GlitchloomWorkbench() {
               onQuickAddQueryChange={setQuickAddQuery}
               onSelectAllNodes={selectAllNodes}
               onSelectRelated={selectRelated}
+              onEdgeRoutingChange={(routing) => {
+                setEdgeRouting(routing);
+                setContextMenu(undefined);
+              }}
               onTidyNodes={tidyNodes}
             />
           )}

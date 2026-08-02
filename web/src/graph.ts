@@ -1,8 +1,49 @@
 import { MarkerType } from "@xyflow/react";
 import { withControlPorts } from "./controlPorts";
-import type { GraphSpec, LoomEdge, LoomNode, NodeDefinition } from "./types";
+import type {
+  EdgeRouting,
+  GraphPresentation,
+  GraphSpec,
+  LoomEdge,
+  LoomFrame,
+  LoomNode,
+  NodeDefinition,
+} from "./types";
 
-export function serializeGraph(name: string, nodes: LoomNode[], edges: LoomEdge[]): GraphSpec {
+function frameSize(frame: LoomFrame): { width: number; height: number } {
+  return {
+    width: frame.measured?.width ?? frame.width ?? 420,
+    height: frame.measured?.height ?? frame.height ?? 260,
+  };
+}
+
+export function serializePresentation(
+  nodes: LoomNode[],
+  frames: LoomFrame[],
+  edgeRouting: EdgeRouting,
+): GraphPresentation {
+  return {
+    edge_routing: edgeRouting,
+    frames: frames.map((frame) => ({
+      id: frame.id,
+      title: frame.data.title,
+      color: frame.data.color,
+      position: frame.position,
+      ...frameSize(frame),
+      collapsed: frame.data.collapsed,
+      node_ids: nodes.filter((node) => node.parentId === frame.id).map((node) => node.id),
+    })),
+  };
+}
+
+export function serializeGraph(
+  name: string,
+  nodes: LoomNode[],
+  edges: LoomEdge[],
+  frames: LoomFrame[] = [],
+  edgeRouting: EdgeRouting = "smoothstep",
+): GraphSpec {
+  const frameMap = new Map(frames.map((frame) => [frame.id, frame]));
   return {
     name,
     nodes: nodes.map((node) => ({
@@ -11,7 +52,12 @@ export function serializeGraph(name: string, nodes: LoomNode[], edges: LoomEdge[
       title: node.data.title,
       config: node.data.config,
       control_ports: node.data.controlPorts,
-      position: node.position,
+      position: node.parentId
+        ? {
+            x: node.position.x + (frameMap.get(node.parentId)?.position.x ?? 0),
+            y: node.position.y + (frameMap.get(node.parentId)?.position.y ?? 0),
+          }
+        : node.position,
     })),
     edges: edges.map((edge) => ({
       id: edge.id,
@@ -20,6 +66,7 @@ export function serializeGraph(name: string, nodes: LoomNode[], edges: LoomEdge[
       target: edge.target,
       target_port: edge.targetHandle!,
     })),
+    presentation: serializePresentation(nodes, frames, edgeRouting),
   };
 }
 
@@ -27,12 +74,32 @@ export function hydrateGraph(
   graph: GraphSpec,
   catalogDefinitions: NodeDefinition[],
   exactDefinitions: NodeDefinition[] = [],
-): { nodes: LoomNode[]; edges: LoomEdge[] } {
+): { nodes: LoomNode[]; edges: LoomEdge[]; frames: LoomFrame[]; edgeRouting: EdgeRouting } {
   const definitions = new Map(
     catalogDefinitions.map((definition) => [definition.kind, definition]),
   );
   for (const definition of exactDefinitions) {
     definitions.set(definition.kind, definition);
+  }
+  const presentation = graph.presentation;
+  const frames: LoomFrame[] = (presentation?.frames ?? []).map((frame) => ({
+    id: frame.id,
+    type: "loomFrame",
+    position: frame.position,
+    width: frame.width,
+    height: frame.height,
+    data: {
+      title: frame.title,
+      color: frame.color,
+      collapsed: frame.collapsed,
+    },
+  }));
+  const memberships = new Map<string, LoomFrame>();
+  for (const frame of frames) {
+    const spec = presentation?.frames.find((item) => item.id === frame.id);
+    for (const nodeId of spec?.node_ids ?? []) {
+      if (!memberships.has(nodeId)) memberships.set(nodeId, frame);
+    }
   }
   const nodes: LoomNode[] = graph.nodes.map((node) => {
     const definition = definitions.get(node.kind);
@@ -40,10 +107,16 @@ export function hydrateGraph(
       throw new Error(`No definition is available for ${node.kind}.`);
     }
     const controlPorts = node.control_ports ?? {};
+    const parent = memberships.get(node.id);
     return {
       id: node.id,
       type: "loomNode",
-      position: node.position,
+      position: parent
+        ? { x: node.position.x - parent.position.x, y: node.position.y - parent.position.y }
+        : node.position,
+      parentId: parent?.id,
+      extent: parent ? "parent" : undefined,
+      expandParent: Boolean(parent),
       data: {
         kind: node.kind,
         title: node.title || definition.label,
@@ -66,5 +139,10 @@ export function hydrateGraph(
       height: 18,
     },
   }));
-  return { nodes, edges };
+  return {
+    nodes,
+    edges,
+    frames,
+    edgeRouting: presentation?.edge_routing ?? "smoothstep",
+  };
 }

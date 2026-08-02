@@ -122,6 +122,56 @@
         "title": "DeletedWorkflow",
         "type": "object"
       },
+      "EdgesTransferredEvent": {
+        "description": "Named graph edges supplied values to one node without exposing the values.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "edge_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Edge Ids",
+            "type": "array"
+          },
+          "event": {
+            "const": "edges_transferred",
+            "title": "Event",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "protocol_version": {
+            "const": 1,
+            "title": "Protocol Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "sequence",
+          "at",
+          "run_id",
+          "event",
+          "node_id",
+          "edge_ids"
+        ],
+        "title": "EdgesTransferredEvent",
+        "type": "object"
+      },
       "FieldDefinition": {
         "description": "One catalog-driven node configuration control.",
         "properties": {
@@ -179,6 +229,7 @@
               "endpoint",
               "model",
               "completion",
+              "dataset",
               "glitchling",
               "gaggle",
               "corruption",
@@ -218,6 +269,65 @@
           "value"
         ],
         "title": "FieldOption",
+        "type": "object"
+      },
+      "FramePresentation": {
+        "description": "One visual-only frame used to organize nodes on the canvas.",
+        "properties": {
+          "collapsed": {
+            "default": false,
+            "title": "Collapsed",
+            "type": "boolean"
+          },
+          "color": {
+            "enum": [
+              "violet",
+              "teal",
+              "amber",
+              "rose",
+              "slate"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "height": {
+            "exclusiveMinimum": 0.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "width": {
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "color",
+          "position",
+          "width",
+          "height"
+        ],
+        "title": "FramePresentation",
         "type": "object"
       },
       "GlitchlingDescriptor": {
@@ -376,6 +486,29 @@
         "title": "GraphNode",
         "type": "object"
       },
+      "GraphPresentation": {
+        "description": "Visual graph preferences that do not change execution semantics.",
+        "properties": {
+          "edge_routing": {
+            "default": "smoothstep",
+            "enum": [
+              "smoothstep",
+              "bezier"
+            ],
+            "title": "Edge Routing",
+            "type": "string"
+          },
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/FramePresentation"
+            },
+            "title": "Frames",
+            "type": "array"
+          }
+        },
+        "title": "GraphPresentation",
+        "type": "object"
+      },
       "GraphSpec": {
         "description": "Serializable graph submitted for execution.",
         "properties": {
@@ -397,6 +530,9 @@
             },
             "title": "Nodes",
             "type": "array"
+          },
+          "presentation": {
+            "$ref": "#/components/schemas/GraphPresentation"
           }
         },
         "required": [
@@ -714,6 +850,58 @@
         "title": "LoomUpdate",
         "type": "object"
       },
+      "NodeCompletedEvent": {
+        "description": "A node completed successfully.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "number"
+          },
+          "event": {
+            "const": "node_completed",
+            "title": "Event",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "protocol_version": {
+            "const": 1,
+            "title": "Protocol Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "sequence",
+          "at",
+          "run_id",
+          "event",
+          "node_id",
+          "kind",
+          "duration_ms"
+        ],
+        "title": "NodeCompletedEvent",
+        "type": "object"
+      },
       "NodeDefinition": {
         "description": "Catalog contract used to render and validate one node kind.",
         "properties": {
@@ -777,6 +965,63 @@
         "title": "NodeDefinition",
         "type": "object"
       },
+      "NodeFailedEvent": {
+        "description": "A node stopped the run with an error.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "number"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "event": {
+            "const": "node_failed",
+            "title": "Event",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "protocol_version": {
+            "const": 1,
+            "title": "Protocol Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "sequence",
+          "at",
+          "run_id",
+          "event",
+          "node_id",
+          "kind",
+          "duration_ms",
+          "error"
+        ],
+        "title": "NodeFailedEvent",
+        "type": "object"
+      },
       "NodeRunResult": {
         "description": "One node's execution outcome.",
         "properties": {
@@ -824,6 +1069,53 @@
           "duration_ms"
         ],
         "title": "NodeRunResult",
+        "type": "object"
+      },
+      "NodeStartedEvent": {
+        "description": "A node has begun gathering its inputs and executing.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "event": {
+            "const": "node_started",
+            "title": "Event",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "protocol_version": {
+            "const": 1,
+            "title": "Protocol Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "sequence",
+          "at",
+          "run_id",
+          "event",
+          "node_id",
+          "kind"
+        ],
+        "title": "NodeStartedEvent",
         "type": "object"
       },
       "PluginStatus": {
@@ -915,6 +1207,7 @@
               "endpoint",
               "model",
               "completion",
+              "dataset",
               "glitchling",
               "gaggle",
               "corruption",
@@ -949,6 +1242,47 @@
           }
         },
         "title": "Position",
+        "type": "object"
+      },
+      "RunCompletedEvent": {
+        "description": "Terminal successful event containing the ordinary run response.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "event": {
+            "const": "run_completed",
+            "title": "Event",
+            "type": "string"
+          },
+          "protocol_version": {
+            "const": 1,
+            "title": "Protocol Version",
+            "type": "integer"
+          },
+          "response": {
+            "$ref": "#/components/schemas/RunResponse"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "sequence",
+          "at",
+          "run_id",
+          "event",
+          "response"
+        ],
+        "title": "RunCompletedEvent",
         "type": "object"
       },
       "RunErrorDetail": {
@@ -1005,6 +1339,88 @@
           "detail"
         ],
         "title": "RunErrorResponse",
+        "type": "object"
+      },
+      "RunEvent": {
+        "discriminator": {
+          "mapping": {
+            "edges_transferred": "#/components/schemas/EdgesTransferredEvent",
+            "node_completed": "#/components/schemas/NodeCompletedEvent",
+            "node_failed": "#/components/schemas/NodeFailedEvent",
+            "node_started": "#/components/schemas/NodeStartedEvent",
+            "run_completed": "#/components/schemas/RunCompletedEvent",
+            "run_failed": "#/components/schemas/RunFailedEvent",
+            "run_planned": "#/components/schemas/RunPlannedEvent",
+            "run_started": "#/components/schemas/RunStartedEvent"
+          },
+          "propertyName": "event"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RunStartedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/RunPlannedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/NodeStartedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/EdgesTransferredEvent"
+          },
+          {
+            "$ref": "#/components/schemas/NodeCompletedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/NodeFailedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/RunCompletedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/RunFailedEvent"
+          }
+        ]
+      },
+      "RunFailedEvent": {
+        "description": "Terminal failed event containing the ordinary structured error detail.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/RunErrorDetail"
+          },
+          "event": {
+            "const": "run_failed",
+            "title": "Event",
+            "type": "string"
+          },
+          "protocol_version": {
+            "const": 1,
+            "title": "Protocol Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "sequence",
+          "at",
+          "run_id",
+          "event",
+          "detail"
+        ],
+        "title": "RunFailedEvent",
         "type": "object"
       },
       "RunManifest": {
@@ -1107,6 +1523,86 @@
         "title": "RunManifestScope",
         "type": "object"
       },
+      "RunPlan": {
+        "description": "Backend-authoritative graph slice and order for one run.",
+        "properties": {
+          "edge_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Edge Ids",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "full",
+              "targets"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          },
+          "target_node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Node Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "RunPlan",
+        "type": "object"
+      },
+      "RunPlannedEvent": {
+        "description": "Preflight succeeded and the effective execution slice is frozen.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "event": {
+            "const": "run_planned",
+            "title": "Event",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/RunPlan"
+          },
+          "protocol_version": {
+            "const": 1,
+            "title": "Protocol Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "sequence",
+          "at",
+          "run_id",
+          "event",
+          "plan"
+        ],
+        "title": "RunPlannedEvent",
+        "type": "object"
+      },
       "RunRequest": {
         "description": "Graph execution request with an explicit scope envelope.",
         "properties": {
@@ -1181,6 +1677,52 @@
         },
         "title": "RunScope",
         "type": "object"
+      },
+      "RunStartedEvent": {
+        "description": "A run request has been accepted but has not necessarily passed preflight.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "event": {
+            "const": "run_started",
+            "title": "Event",
+            "type": "string"
+          },
+          "protocol_version": {
+            "const": 1,
+            "title": "Protocol Version",
+            "type": "integer"
+          },
+          "requested_scope": {
+            "$ref": "#/components/schemas/RunScope"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol_version",
+          "sequence",
+          "at",
+          "run_id",
+          "event",
+          "requested_scope"
+        ],
+        "title": "RunStartedEvent",
+        "type": "object"
+      },
+      "RunStreamEvent": {
+        "$ref": "#/components/schemas/RunEvent",
+        "description": "Discriminated protocol-v1 event union used by the NDJSON stream.",
+        "title": "RunStreamEvent"
       },
       "SaveWorkflowResponse": {
         "description": "A saved workflow and its catalog node definition.",
@@ -1365,6 +1907,7 @@
               "endpoint",
               "model",
               "completion",
+              "dataset",
               "glitchling",
               "gaggle",
               "corruption",
@@ -1431,6 +1974,7 @@
               "endpoint",
               "model",
               "completion",
+              "dataset",
               "glitchling",
               "gaggle",
               "corruption",
@@ -1535,7 +2079,7 @@
   },
   "info": {
     "title": "Glitchloom",
-    "version": "0.7.0"
+    "version": "0.8.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1855,6 +2399,45 @@
           }
         },
         "summary": "Run Graph"
+      }
+    },
+    "/api/runs/stream": {
+      "post": {
+        "description": "Execute a graph while streaming truthful node and edge activity.",
+        "operationId": "stream_graph_api_runs_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStreamEvent"
+                }
+              }
+            },
+            "description": "Protocol-v1 run events, one JSON object per line."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunErrorResponse"
+                }
+              }
+            },
+            "description": "Request validation error."
+          }
+        },
+        "summary": "Stream Graph"
       }
     },
     "/api/workflows": {

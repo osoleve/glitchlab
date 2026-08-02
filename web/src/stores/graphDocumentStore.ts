@@ -10,10 +10,20 @@ import { temporal } from "zundo";
 import { create, type StateCreator } from "zustand";
 import { withControlPorts } from "../controlPorts";
 import { downstreamClosure, upstreamClosure } from "../graphTraversal";
-import type { ControlPortMode, LoomEdge, LoomNode } from "../types";
+import type {
+  ControlPortMode,
+  EdgeRouting,
+  FrameColor,
+  LoomEdge,
+  LoomFrame,
+  LoomNode,
+} from "../types";
 
 type Updater<T> = T | ((current: T) => T);
-type GraphDocumentFields = Pick<GraphDocumentState, "nodes" | "edges" | "loomName" | "isDirty">;
+type GraphDocumentFields = Pick<
+  GraphDocumentState,
+  "nodes" | "edges" | "frames" | "edgeRouting" | "loomName" | "isDirty"
+>;
 type GraphDocumentUpdate = Partial<GraphDocumentFields>;
 
 export interface GraphHistoryState extends GraphDocumentFields {}
@@ -21,11 +31,15 @@ export interface GraphHistoryState extends GraphDocumentFields {}
 export interface GraphDocumentState {
   nodes: LoomNode[];
   edges: LoomEdge[];
+  frames: LoomFrame[];
+  edgeRouting: EdgeRouting;
   selectedId?: string;
   loomName: string;
   isDirty: boolean;
   setNodes: (nodes: Updater<LoomNode[]>) => void;
   setEdges: (edges: Updater<LoomEdge[]>) => void;
+  setFrames: (frames: Updater<LoomFrame[]>) => void;
+  setEdgeRouting: (edgeRouting: EdgeRouting) => void;
   setSelectedId: (selectedId?: string) => void;
   setLoomName: (loomName: string) => void;
   setIsDirty: (isDirty: boolean) => void;
@@ -37,6 +51,7 @@ export interface GraphDocumentState {
     semantic?: boolean,
   ) => void;
   applyNodeChanges: (changes: NodeChange<LoomNode>[]) => void;
+  applyFrameChanges: (changes: NodeChange<LoomFrame>[]) => void;
   applyEdgeChanges: (changes: EdgeChange<LoomEdge>[]) => void;
   connect: (connection: Connection | LoomEdge) => void;
   updateNodeField: (nodeId: string, field: string, value: unknown) => void;
@@ -45,6 +60,7 @@ export interface GraphDocumentState {
   removeEdge: (edgeId: string) => void;
   selectNode: (nodeId: string, additive?: boolean) => string | undefined;
   selectNodes: (nodeIds: string[], anchorId?: string) => string | undefined;
+  setSelectionAnchor: (preferredId?: string) => string | undefined;
   selectAllNodes: () => string | undefined;
   selectRelatedNodes: (
     startIds: string[],
@@ -52,7 +68,21 @@ export interface GraphDocumentState {
   ) => string | undefined;
   clearSelection: () => void;
   duplicateNodes: (nodeIds?: string[], createId?: () => string) => string[];
-  replaceGraph: (nodes: LoomNode[], edges: LoomEdge[], loomName: string, isDirty: boolean) => void;
+  groupNodes: (nodeIds: string[], createId?: () => string) => string | undefined;
+  addFrame: (position: { x: number; y: number }, createId?: () => string) => string;
+  updateFrame: (
+    frameId: string,
+    update: Partial<{ title: string; color: FrameColor; collapsed: boolean }>,
+  ) => void;
+  removeFrames: (frameIds: string[]) => void;
+  replaceGraph: (
+    nodes: LoomNode[],
+    edges: LoomEdge[],
+    loomName: string,
+    isDirty: boolean,
+    frames?: LoomFrame[],
+    edgeRouting?: EdgeRouting,
+  ) => void;
 }
 
 function resetRunStatuses(nodes: LoomNode[]): LoomNode[] {
@@ -86,10 +116,27 @@ function historyEdge(edge: LoomEdge): LoomEdge {
   };
 }
 
+function historyFrame(frame: LoomFrame): LoomFrame {
+  return {
+    ...frame,
+    measured: undefined,
+    selected: false,
+    dragging: false,
+    resizing: false,
+    data: {
+      ...frame.data,
+      onToggleCollapsed: undefined,
+      onUpdate: undefined,
+    },
+  };
+}
+
 function graphHistoryState(state: GraphDocumentState): GraphHistoryState {
   return {
     nodes: state.nodes.map(historyNode),
     edges: state.edges.map(historyEdge),
+    frames: state.frames.map(historyFrame),
+    edgeRouting: state.edgeRouting,
     loomName: state.loomName,
     isDirty: state.isDirty,
   };
@@ -102,12 +149,17 @@ function graphHistoryEqual(left: GraphHistoryState, right: GraphHistoryState): b
 const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
   nodes: [],
   edges: [],
+  frames: [],
+  edgeRouting: "smoothstep",
   loomName: "Talkie perturbation pair",
   isDirty: false,
   setNodes: (nodes) =>
     set((state) => ({ nodes: typeof nodes === "function" ? nodes(state.nodes) : nodes })),
   setEdges: (edges) =>
     set((state) => ({ edges: typeof edges === "function" ? edges(state.edges) : edges })),
+  setFrames: (frames) =>
+    set((state) => ({ frames: typeof frames === "function" ? frames(state.frames) : frames })),
+  setEdgeRouting: (edgeRouting) => set({ edgeRouting, isDirty: true }),
   setSelectedId: (selectedId) => set({ selectedId }),
   setLoomName: (loomName) => set({ loomName }),
   setIsDirty: (isDirty) => set({ isDirty }),
@@ -123,6 +175,8 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       const update = updater({
         nodes: state.nodes,
         edges: state.edges,
+        frames: state.frames,
+        edgeRouting: state.edgeRouting,
         loomName: state.loomName,
         isDirty: state.isDirty,
       });
@@ -141,9 +195,51 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
           change.type === "position" || (change.type === "dimensions" && Boolean(change.resizing)),
       );
       const nodes = applyNodeChanges(changes, state.nodes);
+      const selectionChanged = changes.some((change) => change.type === "select");
+      const selectedIds = selectionChanged
+        ? nodes.filter((node) => node.selected).map((node) => node.id)
+        : [];
+      const selectedId = selectionChanged
+        ? state.selectedId && selectedIds.includes(state.selectedId)
+          ? state.selectedId
+          : selectedIds.at(-1)
+        : state.selectedId;
       return {
         nodes: semantic ? resetRunStatuses(nodes) : nodes,
+        selectedId,
         isDirty: state.isDirty || semantic || layout,
+      };
+    }),
+  applyFrameChanges: (changes) =>
+    set((state) => {
+      const removedIds = new Set(
+        changes.filter((change) => change.type === "remove").map((change) => change.id),
+      );
+      const removedFrames = new Map(
+        state.frames.filter((frame) => removedIds.has(frame.id)).map((frame) => [frame.id, frame]),
+      );
+      const nodes = state.nodes.map((node) => {
+        if (!node.parentId || !removedFrames.has(node.parentId)) return node;
+        const parent = removedFrames.get(node.parentId)!;
+        return {
+          ...node,
+          parentId: undefined,
+          extent: undefined,
+          expandParent: undefined,
+          position: {
+            x: parent.position.x + node.position.x,
+            y: parent.position.y + node.position.y,
+          },
+        };
+      });
+      const layout = changes.some(
+        (change) =>
+          change.type === "position" || change.type === "remove" || change.type === "dimensions",
+      );
+      return {
+        nodes,
+        frames: applyNodeChanges(changes, state.frames),
+        isDirty: state.isDirty || layout,
       };
     }),
   applyEdgeChanges: (changes) =>
@@ -259,6 +355,20 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     }));
     return selectedId;
   },
+  setSelectionAnchor: (preferredId) => {
+    let selectedId: string | undefined;
+    set((state) => {
+      const selectedIds = state.nodes.filter((node) => node.selected).map((node) => node.id);
+      selectedId =
+        preferredId && selectedIds.includes(preferredId)
+          ? preferredId
+          : state.selectedId && selectedIds.includes(state.selectedId)
+            ? state.selectedId
+            : selectedIds.at(-1);
+      return { selectedId };
+    });
+    return selectedId;
+  },
   selectAllNodes: () => {
     let selectedId: string | undefined;
     set((state) => {
@@ -347,8 +457,114 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     });
     return duplicatedIds;
   },
-  replaceGraph: (nodes, edges, loomName, isDirty) =>
-    set({ nodes, edges, selectedId: undefined, loomName, isDirty }),
+  groupNodes: (nodeIds, createId = () => crypto.randomUUID()) => {
+    let createdId: string | undefined;
+    set((state) => {
+      const ids = new Set(nodeIds);
+      const targets = state.nodes.filter((node) => ids.has(node.id));
+      if (targets.length < 2) return state;
+      const frameMap = new Map(state.frames.map((frame) => [frame.id, frame]));
+      const absolute = targets.map((node) => {
+        const parent = node.parentId ? frameMap.get(node.parentId) : undefined;
+        return {
+          node,
+          x: node.position.x + (parent?.position.x ?? 0),
+          y: node.position.y + (parent?.position.y ?? 0),
+          width: node.measured?.width ?? node.width ?? 236,
+          height: node.measured?.height ?? node.height ?? 180,
+        };
+      });
+      const left = Math.min(...absolute.map((item) => item.x));
+      const top = Math.min(...absolute.map((item) => item.y));
+      const right = Math.max(...absolute.map((item) => item.x + item.width));
+      const bottom = Math.max(...absolute.map((item) => item.y + item.height));
+      createdId = `frame-${createId().slice(0, 8)}`;
+      const framePosition = { x: left - 28, y: top - 62 };
+      const frame: LoomFrame = {
+        id: createdId,
+        type: "loomFrame",
+        position: framePosition,
+        width: Math.max(320, right - left + 56),
+        height: Math.max(190, bottom - top + 90),
+        selected: true,
+        data: { title: "Workflow section", color: "violet", collapsed: false },
+      };
+      const positions = new Map(absolute.map((item) => [item.node.id, item]));
+      return {
+        frames: [...state.frames.map((item) => ({ ...item, selected: false })), frame],
+        nodes: state.nodes.map((node) => {
+          const item = positions.get(node.id);
+          if (!item) return { ...node, selected: false };
+          return {
+            ...node,
+            parentId: createdId,
+            extent: "parent" as const,
+            expandParent: true,
+            selected: false,
+            position: { x: item.x - framePosition.x, y: item.y - framePosition.y },
+          };
+        }),
+        selectedId: undefined,
+        isDirty: true,
+      };
+    });
+    return createdId;
+  },
+  addFrame: (position, createId = () => crypto.randomUUID()) => {
+    const id = `frame-${createId().slice(0, 8)}`;
+    set((state) => ({
+      frames: [
+        ...state.frames.map((frame) => ({ ...frame, selected: false })),
+        {
+          id,
+          type: "loomFrame" as const,
+          position,
+          width: 420,
+          height: 260,
+          selected: true,
+          data: { title: "Workflow section", color: "teal" as const, collapsed: false },
+        },
+      ],
+      nodes: state.nodes.map((node) => ({ ...node, selected: false })),
+      selectedId: undefined,
+      isDirty: true,
+    }));
+    return id;
+  },
+  updateFrame: (frameId, update) =>
+    set((state) => ({
+      frames: state.frames.map((frame) =>
+        frame.id === frameId ? { ...frame, data: { ...frame.data, ...update } } : frame,
+      ),
+      isDirty: true,
+    })),
+  removeFrames: (frameIds) =>
+    set((state) => {
+      const ids = new Set(frameIds);
+      const removed = new Map(
+        state.frames.filter((frame) => ids.has(frame.id)).map((frame) => [frame.id, frame]),
+      );
+      return {
+        frames: state.frames.filter((frame) => !ids.has(frame.id)),
+        nodes: state.nodes.map((node) => {
+          const parent = node.parentId ? removed.get(node.parentId) : undefined;
+          if (!parent) return node;
+          return {
+            ...node,
+            parentId: undefined,
+            extent: undefined,
+            expandParent: undefined,
+            position: {
+              x: parent.position.x + node.position.x,
+              y: parent.position.y + node.position.y,
+            },
+          };
+        }),
+        isDirty: true,
+      };
+    }),
+  replaceGraph: (nodes, edges, loomName, isDirty, frames = [], edgeRouting = "smoothstep") =>
+    set({ nodes, edges, frames, edgeRouting, selectedId: undefined, loomName, isDirty }),
 });
 
 export const useGraphDocumentStore = create<GraphDocumentState>()(

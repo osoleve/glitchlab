@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
+from collections.abc import AsyncIterator
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -31,8 +36,10 @@ from .models import (
     LoomTemplateListResponse,
     LoomUpdate,
     RunErrorResponse,
+    RunEvent,
     RunRequest,
     RunResponse,
+    RunStreamEvent,
     SaveWorkflowResponse,
     WorkflowDraft,
     WorkflowListResponse,
@@ -50,6 +57,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class NDJSONOpenAPIResponse(JSONResponse):
+    """Teach FastAPI that each streamed line follows a JSON response model."""
+
+    media_type = "application/x-ndjson"
+
+
+class NDJSONStreamingResponse(StreamingResponse):
+    """Stream newline-delimited JSON without response buffering."""
+
+    media_type = "application/x-ndjson"
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -337,6 +356,71 @@ async def run_graph(request: RunRequest) -> dict[str, Any]:
             },
         ) from exc
     return response.model_dump(mode="json")
+
+
+async def _run_event_lines(request: RunRequest) -> AsyncIterator[bytes]:
+    """Encode bounded NDJSON; disconnect cancellation cannot stop worker threads."""
+
+    events: asyncio.Queue[RunEvent] = asyncio.Queue(maxsize=256)
+
+    async def publish(event: RunEvent) -> None:
+        await events.put(event)
+
+    async def execute() -> None:
+        try:
+            await GraphEngine().run(
+                request.graph,
+                scope=request.scope,
+                event_sink=publish,
+            )
+        except Exception:  # noqa: BLE001 - the engine emits the terminal failure event
+            return
+
+    task = asyncio.create_task(execute())
+    try:
+        while not task.done() or not events.empty():
+            try:
+                event = await asyncio.wait_for(events.get(), timeout=0.1)
+            except TimeoutError:
+                continue
+            payload = event.model_dump(mode="json")
+            yield (json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+        await task
+    finally:
+        if not task.done():
+            task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+@app.post(
+    "/api/runs/stream",
+    response_class=NDJSONOpenAPIResponse,
+    responses={
+        200: {
+            "model": RunStreamEvent,
+            "description": "Protocol-v1 run events, one JSON object per line.",
+        },
+        422: {
+            "description": "Request validation error.",
+            "content": {
+                "application/json": {
+                    "schema": {"$ref": "#/components/schemas/RunErrorResponse"}
+                }
+            },
+        },
+    },
+)
+async def stream_graph(request: RunRequest) -> NDJSONStreamingResponse:
+    """Execute a graph while streaming truthful node and edge activity."""
+
+    return NDJSONStreamingResponse(
+        _run_event_lines(request),
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _mount_frontend() -> None:

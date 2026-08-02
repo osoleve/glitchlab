@@ -1,4 +1,12 @@
-import type { LoomEdge, LoomNode, LoomSpec, RunResponse, WorkflowSpec } from "../types";
+import type {
+  EdgeRouting,
+  LoomEdge,
+  LoomFrame,
+  LoomNode,
+  LoomSpec,
+  RunResponse,
+  WorkflowSpec,
+} from "../types";
 
 export interface ExecutionScopeState {
   mode: "full" | "targets";
@@ -11,6 +19,8 @@ export interface ExecutionScopeState {
 export interface GraphSnapshot {
   nodes: LoomNode[];
   edges: LoomEdge[];
+  frames?: LoomFrame[];
+  edgeRouting?: EdgeRouting;
   run?: RunResponse;
   runError?: string;
   selectedId?: string;

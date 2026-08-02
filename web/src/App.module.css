@@ -968,6 +968,12 @@
     filter 140ms ease;
 }
 
+:global(.react-flow__connection-path) {
+  stroke: #cdb5f0;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 6px rgba(184, 148, 224, 0.5));
+}
+
 :global(.react-flow__edge) {
   transition: opacity 140ms ease;
 }
@@ -979,6 +985,38 @@
 
 :global(.react-flow__edge.animated) :global(.react-flow__edge-path) {
   stroke: #c9b4e9;
+}
+
+:global(.react-flow__edge).edge-transfer-pulse :global(.react-flow__edge-path) {
+  stroke: #f0dbff;
+  stroke-width: 3.4;
+  stroke-dasharray: 8 5;
+  filter: drop-shadow(0 0 7px rgba(220, 179, 255, 0.8));
+  animation: edge-transfer 600ms linear both;
+}
+
+@keyframes edge-transfer {
+  from {
+    stroke-dashoffset: 26;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.react-flow__edge).edge-transfer-pulse :global(.react-flow__edge-path) {
+    stroke: #fff2ff;
+    stroke-width: 4;
+    stroke-dasharray: none;
+    animation: none;
+  }
+
+  .shuttle::after {
+    width: 22px;
+    animation: none;
+  }
 }
 
 :global(.react-flow__edge).execution-scope-edge :global(.react-flow__edge-path) {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchCatalog, runGraph } from "./api";
+import { fetchCatalog, runGraph, runGraphStreaming } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -51,5 +51,53 @@ describe("API response boundaries", () => {
         nodes: [],
       },
     });
+  });
+
+  it("falls back to the legacy route only when streaming is unavailable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(undefined, { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: { message: "legacy failure", nodes: [] } }), {
+          status: 422,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      runGraphStreaming(
+        { name: "Fallback", nodes: [], edges: [] },
+        { mode: "full", target_node_ids: [] },
+        () => undefined,
+      ),
+    ).rejects.toMatchObject({ detail: { message: "legacy failure" } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("never replays a successful request after a stream protocol error", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        `${JSON.stringify({
+          protocol_version: 1,
+          sequence: 1,
+          at: "2026-08-02T00:00:00Z",
+          run_id: "run",
+          event: "run_started",
+          requested_scope: { mode: "full", target_node_ids: [] },
+        })}\n`,
+        { status: 200, headers: { "Content-Type": "application/x-ndjson" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      runGraphStreaming(
+        { name: "No replay", nodes: [], edges: [] },
+        { mode: "full", target_node_ids: [] },
+        () => undefined,
+      ),
+    ).rejects.toThrow("before a terminal event");
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

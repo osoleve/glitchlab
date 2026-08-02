@@ -2,6 +2,7 @@ import {
   Columns3,
   Copy,
   Focus,
+  Frame,
   GitMerge,
   Network,
   Pencil,
@@ -10,12 +11,13 @@ import {
   Rows3,
   Save,
   Search,
+  Spline,
   Trash2,
   Unplug,
 } from "lucide-react";
 import styles from "../App.module.css";
 import { moduleClassNames as cx } from "../moduleClassNames";
-import type { NodeDefinition, PortDefinition, ValueType } from "../types";
+import type { EdgeRouting, NodeDefinition, PortDefinition, ValueType } from "../types";
 
 export type ContextMenuState =
   | {
@@ -26,6 +28,7 @@ export type ContextMenuState =
       nodeIds: string[];
     }
   | { x: number; y: number; scope: "selection"; nodeIds: string[] }
+  | { x: number; y: number; scope: "frame"; frameId: string }
   | {
       x: number;
       y: number;
@@ -62,14 +65,17 @@ interface CanvasContextMenuProps {
   quickAddQuery: string;
   running: boolean;
   onAddQuickNode: (definition: NodeDefinition, input?: PortDefinition) => void;
+  onAddFrame: (position: { x: number; y: number }) => void;
   onArrangeSelection: (nodeIds: string[], mode: Arrangement) => void;
   onDeleteNodes: (nodeIds: string[]) => void;
+  onDeleteFrame: (frameId: string) => void;
   onDeleteWorkflow: (definition: NodeDefinition) => void;
   onDisconnectEdge: (edgeId: string) => void;
   onDismiss: () => void;
   onDuplicateNodes: (nodeIds: string[]) => void;
   onExecute: (nodeIds: string[]) => void;
   onFitGraph: () => void;
+  onGroupNodes: (nodeIds: string[]) => void;
   onInsertPassthrough: (edgeId: string, position: { x: number; y: number }) => void;
   onOpenSaveWorkflow: () => void;
   onOpenWorkflowEditor: (definition: NodeDefinition) => void;
@@ -77,6 +83,8 @@ interface CanvasContextMenuProps {
   onQuickAddQueryChange: (query: string) => void;
   onSelectAllNodes: () => void;
   onSelectRelated: (nodeIds: string[], direction: "upstream" | "downstream") => void;
+  edgeRouting: EdgeRouting;
+  onEdgeRoutingChange: (routing: EdgeRouting) => void;
   onTidyNodes: (nodeIds?: string[]) => void;
 }
 
@@ -90,14 +98,17 @@ export function CanvasContextMenu({
   quickAddQuery,
   running,
   onAddQuickNode,
+  onAddFrame,
   onArrangeSelection,
   onDeleteNodes,
+  onDeleteFrame,
   onDeleteWorkflow,
   onDisconnectEdge,
   onDismiss,
   onDuplicateNodes,
   onExecute,
   onFitGraph,
+  onGroupNodes,
   onInsertPassthrough,
   onOpenSaveWorkflow,
   onOpenWorkflowEditor,
@@ -105,6 +116,8 @@ export function CanvasContextMenu({
   onQuickAddQueryChange,
   onSelectAllNodes,
   onSelectRelated,
+  edgeRouting,
+  onEdgeRoutingChange,
   onTidyNodes,
 }: CanvasContextMenuProps) {
   return (
@@ -229,6 +242,14 @@ export function CanvasContextMenu({
               <button
                 type="button"
                 role="menuitem"
+                onClick={() => onGroupNodes(contextSelectionIds)}
+              >
+                <Frame size={14} />
+                Group in collapsible frame
+              </button>
+              <button
+                type="button"
+                role="menuitem"
                 onClick={() => onArrangeSelection(contextSelectionIds, "align-left")}
               >
                 <Columns3 size={14} />
@@ -301,6 +322,17 @@ export function CanvasContextMenu({
             Disconnect wire
           </button>
         </>
+      )}
+      {contextMenu.scope === "frame" && (
+        <button
+          type="button"
+          role="menuitem"
+          className={cx(styles, "is-danger")}
+          onClick={() => onDeleteFrame(contextMenu.frameId)}
+        >
+          <Trash2 size={14} />
+          Remove frame
+        </button>
       )}
       {contextMenu.scope === "pane" && (
         <>
@@ -392,6 +424,35 @@ export function CanvasContextMenu({
                 <Focus size={14} />
                 Select all nodes
                 <kbd>Ctrl+A</kbd>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => onAddFrame(contextMenu.flowPosition)}
+              >
+                <Frame size={14} />
+                Add empty frame
+              </button>
+              <span className={cx(styles, "context-menu-separator")} />
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={edgeRouting === "smoothstep"}
+                className={cx(styles, edgeRouting === "smoothstep" && "is-active")}
+                onClick={() => onEdgeRoutingChange("smoothstep")}
+              >
+                <Network size={14} />
+                Right-angle wires
+              </button>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={edgeRouting === "bezier"}
+                className={cx(styles, edgeRouting === "bezier" && "is-active")}
+                onClick={() => onEdgeRoutingChange("bezier")}
+              >
+                <Spline size={14} />
+                Bezier wires
               </button>
               <button
                 type="button"
