@@ -9,6 +9,9 @@ export type FieldOption = ApiSchemas["FieldOption"];
 export type FieldDefinition = ApiSchemas["FieldDefinition"];
 export type ControlPortMode = NonNullable<ApiSchemas["GraphNode"]["control_ports"]>[string];
 export type NodeDefinition = ApiSchemas["NodeDefinition"];
+export type LoomRunReference = ApiSchemas["LoomRunReference"];
+export type LoomEntry = ApiSchemas["LoomEntry"];
+export type LoomState = ApiSchemas["LoomState"];
 export type GlitchlingParameter = ApiSchemas["GlitchlingParameter"];
 export type GlitchlingDescriptor = ApiSchemas["GlitchlingDescriptor"];
 export type PluginStatus = Omit<ApiSchemas["PluginStatus"], "path"> & {
@@ -20,24 +23,27 @@ export type CatalogResponse = Omit<ApiSchemas["CatalogResponse"], "plugin"> & {
 
 export type NodeRunStatus = "idle" | "running" | "completed" | "failed";
 
-export interface LoomNodeData extends Record<string, unknown> {
+export interface WorkflowNodeData extends Record<string, unknown> {
   kind: string;
   title: string;
   definition: NodeDefinition;
   config: Record<string, unknown>;
   controlPorts: Record<string, ControlPortMode>;
+  state?: LoomState;
   runStatus: NodeRunStatus;
   executionScopeRole?: "target" | "required" | "unrelated";
   onUpdateField?: (field: string, value: unknown) => void;
+  onUpdateState?: (state: LoomState) => void;
+  onOpenEditor?: () => void;
 }
 
-export type LoomNode = Node<LoomNodeData, "loomNode">;
-export type LoomEdge = Edge;
+export type WorkflowNode = Node<WorkflowNodeData, "workflowNode">;
+export type WorkflowEdge = Edge;
 
 export type FrameColor = "violet" | "teal" | "amber" | "rose" | "slate";
 export type EdgeRouting = "smoothstep" | "bezier";
 
-export interface LoomFrameData extends Record<string, unknown> {
+export interface WorkflowFrameData extends Record<string, unknown> {
   title: string;
   color: FrameColor;
   collapsed: boolean;
@@ -46,11 +52,11 @@ export interface LoomFrameData extends Record<string, unknown> {
   aggregateTotalCount?: number;
   activeChildTitle?: string;
   onToggleCollapsed?: () => void;
-  onUpdate?: (update: Partial<Pick<LoomFrameData, "title" | "color">>) => void;
+  onUpdate?: (update: Partial<Pick<WorkflowFrameData, "title" | "color">>) => void;
 }
 
-export type LoomFrame = Node<LoomFrameData, "loomFrame">;
-export type CanvasNode = LoomFrame | LoomNode;
+export type WorkflowFrame = Node<WorkflowFrameData, "workflowFrame">;
+export type CanvasNode = WorkflowFrame | WorkflowNode;
 
 export interface GraphFrameSpec {
   id: string;
@@ -100,33 +106,40 @@ export type RunErrorDetail = Omit<ApiSchemas["RunErrorDetail"], "node_id" | "nod
 };
 
 type GeneratedGraphNode = ApiSchemas["GraphNode"];
-export type GraphNodeSpec = Omit<GeneratedGraphNode, "config" | "control_ports" | "position"> & {
+export type GraphNodeSpec = Omit<
+  GeneratedGraphNode,
+  "config" | "control_ports" | "position" | "state"
+> & {
   config: NonNullable<GeneratedGraphNode["config"]>;
   control_ports: NonNullable<GeneratedGraphNode["control_ports"]>;
   position: NonNullable<GeneratedGraphNode["position"]>;
+  state?: LoomState;
 };
 export type GraphEdgeSpec = ApiSchemas["GraphEdge"];
 export type GraphSpec = Omit<ApiSchemas["GraphSpec"], "nodes" | "presentation"> & {
   nodes: GraphNodeSpec[];
   presentation?: GraphPresentation;
 };
-export type LoomDraft = Omit<ApiSchemas["LoomDraft"], "graph"> & {
+export type GraphDocumentDraft = Omit<ApiSchemas["GraphDocumentDraft"], "graph"> & {
   graph: GraphSpec;
 };
-export type LoomSpec = Omit<ApiSchemas["LoomSpec"], "graph"> & {
+export type GraphDocument = Omit<ApiSchemas["GraphDocument"], "graph"> & {
   graph: GraphSpec;
 };
-export type LoomSummary = ApiSchemas["LoomSummary"];
-export type LoomTemplateSummary = ApiSchemas["LoomTemplateSummary"];
-export type LoadLoomResponse = Omit<ApiSchemas["LoadLoomResponse"], "loom"> & {
-  loom: LoomSpec;
+export type GraphDocumentSummary = ApiSchemas["GraphDocumentSummary"];
+export type GraphTemplateSummary = ApiSchemas["GraphTemplateSummary"];
+export type LoadGraphDocumentResponse = Omit<ApiSchemas["LoadGraphDocumentResponse"], "graph"> & {
+  graph: GraphDocument;
 };
-export type LoadLoomTemplateResponse = Omit<ApiSchemas["LoadLoomTemplateResponse"], "template"> & {
-  template: Omit<ApiSchemas["LoomTemplate"], "graph"> & {
+export type LoadGraphTemplateResponse = Omit<
+  ApiSchemas["LoadGraphTemplateResponse"],
+  "template"
+> & {
+  template: Omit<ApiSchemas["GraphTemplate"], "graph"> & {
     graph: GraphSpec;
   };
 };
-export type DeleteLoomResponse = ApiSchemas["DeleteLoomResponse"];
+export type DeleteGraphDocumentResponse = ApiSchemas["DeleteGraphDocumentResponse"];
 export type WorkflowInput = ApiSchemas["WorkflowInput"];
 export type WorkflowOutput = ApiSchemas["WorkflowOutput"];
 type GeneratedWorkflowDraft = ApiSchemas["WorkflowDraft"];

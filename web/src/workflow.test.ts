@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LoomFrame, LoomNode, NodeDefinition } from "./types";
+import type { NodeDefinition, WorkflowFrame, WorkflowNode } from "./types";
 import { inferWorkflowDraft } from "./workflow";
 
 const definition = {
@@ -15,7 +15,7 @@ const definition = {
 const makeNode = (id: string, x: number, parentId?: string) =>
   ({
     id,
-    type: "loomNode",
+    type: "workflowNode",
     parentId,
     position: { x, y: 20 },
     selected: true,
@@ -27,18 +27,18 @@ const makeNode = (id: string, x: number, parentId?: string) =>
       controlPorts: {},
       runStatus: "idle",
     },
-  }) as LoomNode;
+  }) as WorkflowNode;
 
 describe("workflow graph positions", () => {
   it("normalizes grouped children from absolute semantic positions", () => {
     const frame = {
       id: "frame",
-      type: "loomFrame",
+      type: "workflowFrame",
       position: { x: 100, y: 50 },
       width: 300,
       height: 200,
       data: { title: "Frame", color: "violet", collapsed: false },
-    } as LoomFrame;
+    } as WorkflowFrame;
 
     const draft = inferWorkflowDraft(
       "Grouped",

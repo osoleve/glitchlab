@@ -17,7 +17,12 @@ from typing import Any
 
 import torch
 from fastapi import FastAPI, HTTPException
-from happy_life.generation import GenerationConfig, generate
+from happy_life.generation import (
+    GenerationConfig,
+    _filtered_probabilities,
+    _step_seed,
+    generate,
+)
 from pydantic import BaseModel, Field
 from talkie.download import get_model_files
 from talkie_lens_ui.runtime import (
@@ -113,7 +118,7 @@ class CompletionRequest(BaseModel):
 
 app = FastAPI(
     title="Glitchloom Talkie Completions",
-    version="0.1.1",
+    version="0.2.0",
     description="OpenAI-compatible raw completions for vintage and web Talkie.",
 )
 _runtimes: dict[str, TalkieCompletionRuntime] = {}
@@ -183,10 +188,90 @@ def _validate_request(request: CompletionRequest) -> None:
         )
     if request.stream:
         raise HTTPException(status_code=400, detail="streaming is not implemented")
-    if request.logprobs is not None:
-        raise HTTPException(status_code=400, detail="logprobs are not implemented")
     if request.frequency_penalty:
         raise HTTPException(status_code=400, detail="frequency_penalty is not implemented")
+
+
+@torch.inference_mode()
+def _generate_with_logprobs(
+    runtime: TalkieCompletionRuntime,
+    prompt: str,
+    config: GenerationConfig,
+    top_count: int,
+) -> tuple[str, list[int], dict[str, Any]]:
+    """Run native base decoding while retaining the requested raw top-token rows."""
+
+    state = runtime.begin_generation(prompt, chat=False)
+    generated_ids: list[int] = []
+    tokens: list[str] = []
+    token_logprobs: list[float] = []
+    top_logprobs: list[dict[str, float]] = []
+    top_token_ids: list[list[int]] = []
+    text_offset: list[int] = []
+    completion_length = 0
+
+    for step in range(config.max_new_tokens):
+        raw_logprobs = torch.log_softmax(state.next_logits.float(), dim=-1)
+        row_count = min(top_count, raw_logprobs.numel())
+        if row_count:
+            top_values, top_ids = torch.topk(raw_logprobs, row_count)
+            row_ids = [int(token_id) for token_id in top_ids.tolist()]
+            row = {
+                runtime.tokenizer.decode([token_id]): float(logprob)
+                for token_id, logprob in zip(
+                    row_ids,
+                    top_values.tolist(),
+                    strict=True,
+                )
+            }
+        else:
+            row_ids = []
+            row = {}
+
+        probabilities = _filtered_probabilities(
+            state.next_logits,
+            temperature=config.temperature,
+            top_k=config.top_k,
+            top_p=config.top_p,
+            banned_ids=(),
+            presence_ids=generated_ids,
+            presence_penalty=config.presence_penalty,
+        )
+        generator = torch.Generator(device=runtime.device).manual_seed(
+            _step_seed(config.seed, step)
+        )
+        chosen_id = int(
+            torch.multinomial(
+                probabilities,
+                num_samples=1,
+                replacement=True,
+                generator=generator,
+            ).item()
+        )
+        chosen_text = runtime.tokenizer.decode([chosen_id])
+
+        text_offset.append(completion_length)
+        tokens.append(chosen_text)
+        token_logprobs.append(float(raw_logprobs[chosen_id].item()))
+        top_logprobs.append(row)
+        top_token_ids.append(row_ids)
+        completion_length += len(chosen_text)
+        generated_ids.append(chosen_id)
+        runtime.advance_generation(state, chosen_id)
+        if chosen_id in runtime.eos_token_ids:
+            break
+
+    return (
+        runtime.tokenizer.decode(generated_ids, skip_special_tokens=True),
+        generated_ids,
+        {
+            "tokens": tokens,
+            "token_logprobs": token_logprobs,
+            "top_logprobs": top_logprobs,
+            "text_offset": text_offset,
+            "top_token_ids": top_token_ids,
+        },
+    )
 
 
 @app.get("/")
@@ -263,31 +348,40 @@ async def completions(request: CompletionRequest) -> dict[str, Any]:
                     (1 << 63) - 1
                 )
                 config = GenerationConfig(seed=seed, **config_base)
-                result = await asyncio.to_thread(
-                    generate,
-                    runtime,
-                    prompt,
-                    config,
-                    conditioned=False,
-                    chat=False,
-                )
-                completion, hit_stop = _truncate_at_stop(result.text, stops)
-                hit_eos = bool(
-                    result.steps
-                    and result.steps[-1].chosen_token_id in runtime.eos_token_ids
-                )
+                if request.logprobs is None:
+                    result = await asyncio.to_thread(
+                        generate,
+                        runtime,
+                        prompt,
+                        config,
+                        conditioned=False,
+                        chat=False,
+                    )
+                    generated_text = result.text
+                    generated_ids = [step.chosen_token_id for step in result.steps]
+                    choice_logprobs = None
+                else:
+                    generated_text, generated_ids, choice_logprobs = await asyncio.to_thread(
+                        _generate_with_logprobs,
+                        runtime,
+                        prompt,
+                        config,
+                        request.logprobs,
+                    )
+                completion, hit_stop = _truncate_at_stop(generated_text, stops)
+                hit_eos = bool(generated_ids and generated_ids[-1] in runtime.eos_token_ids)
                 choices.append(
                     {
                         "text": f"{prompt}{completion}" if request.echo else completion,
                         "index": len(choices),
-                        "logprobs": None,
+                        "logprobs": choice_logprobs,
                         "finish_reason": "stop" if hit_stop or hit_eos else "length",
                         "prompt_index": prompt_index,
                         "seed": seed,
                     }
                 )
                 prompt_tokens += prompt_token_count
-                completion_tokens += len(result.steps)
+                completion_tokens += len(generated_ids)
 
     return {
         "id": f"cmpl-{uuid.uuid4().hex}",

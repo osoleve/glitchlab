@@ -1,19 +1,6 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
 
-const STARTER_NODE_IDS = [
-  "prompt",
-  "typogre",
-  "corrupt",
-  "endpoint",
-  "vintage_model",
-  "web_model",
-  "original_vintage",
-  "original_web",
-  "corrupted_vintage",
-  "corrupted_web",
-  "collect",
-  "preview",
-];
+const STARTER_NODE_IDS = ["endpoint", "model", "loom", "preview"];
 
 function watchPageErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -96,31 +83,60 @@ async function successfulRunResponse(route: Route, delayMs = 0, poisonPreview = 
   });
 }
 
-async function connect(
-  page: Page,
-  sourceNodeId: string,
-  sourcePort: string,
-  targetNodeId: string,
-  targetPort: string,
-) {
-  const source = page.locator(
-    `.react-flow__node[data-id="${sourceNodeId}"] .react-flow__handle.source[data-handleid="${sourcePort}"]`,
+async function loomProbeResponse(route: Route, callIndex: number) {
+  const request = route.request().postDataJSON() as {
+    graph: { name: string; nodes: { id: string; kind: string }[] };
+    scope: { mode: "full" | "targets"; target_node_ids: string[] };
+  };
+  const choices = Object.fromEntries(
+    Array.from({ length: 10 }, (_, index) => [` token-${callIndex}-${index}`, -0.1 - index]),
   );
-  const target = page.locator(
-    `.react-flow__node[data-id="${targetNodeId}"] .react-flow__handle.target[data-handleid="${targetPort}"]`,
-  );
-  await expect(source, `source handle ${sourceNodeId}.${sourcePort}`).toBeVisible();
-  await expect(target, `target handle ${targetNodeId}.${targetPort}`).toBeVisible();
-  await source.dragTo(target, { force: true });
+  await route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      status: "completed",
+      manifest: {
+        run_id: `loom-probe-${callIndex}`,
+        graph_name: request.graph.name,
+        graph_digest: `loom-probe-digest-${callIndex}`,
+        engine_version: "playwright",
+        started_at: "2026-08-03T00:00:00Z",
+        finished_at: "2026-08-03T00:00:01Z",
+        scope: {
+          mode: request.scope.mode,
+          target_node_ids: request.scope.target_node_ids,
+          executed_node_ids: request.graph.nodes.map((node) => node.id),
+        },
+      },
+      nodes: request.graph.nodes.map((node) => ({
+        node_id: node.id,
+        kind: node.kind,
+        status: "completed",
+        duration_ms: 1,
+        outputs:
+          node.id === "loom"
+            ? {
+                result: {
+                  kind: "completion_result",
+                  text: ` sampled-${callIndex}`,
+                  logprobs: { top_logprobs: [choices] },
+                },
+              }
+            : {},
+      })),
+      terminal_outputs: {},
+    }),
+  });
 }
 
-test("starter loads, fits, edits, connects, and preserves panel controls", async ({ page }) => {
+test("starter loads, fits, opens its Loom, and preserves panel controls", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.goto("/");
 
-  await expect(page.getByRole("button", { name: "Run loom" })).toBeEnabled();
-  await expect(page.locator(".react-flow__node")).toHaveCount(12);
-  await expect(page.locator(".react-flow__edge")).toHaveCount(19);
+  await expect(page.getByRole("button", { name: "Run graph" })).toBeEnabled();
+  await expect(page.locator(".react-flow__node")).toHaveCount(4);
+  await expect(page.locator(".react-flow__edge")).toHaveCount(3);
   await expect(page.locator(".react-flow__minimap")).toBeVisible();
 
   const canvasBox = await page.locator(".react-flow").boundingBox();
@@ -150,18 +166,15 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
     }
   }
 
-  await page.waitForTimeout(350);
-  await connect(page, "typogre", "glitchling", "original_vintage", "model");
-  await expect(page.locator(".react-flow__edge")).toHaveCount(19);
-
-  await connect(page, "prompt", "text", "collect", "item");
-  await expect(page.locator(".react-flow__edge")).toHaveCount(20);
-
-  const promptNode = page.locator('.react-flow__node[data-id="prompt"]');
-  await promptNode.locator("header").click();
+  const loomNode = page.locator('.react-flow__node[data-id="loom"]');
+  await loomNode.locator("header").click();
   await expect(page.getByText("Inspector", { exact: true })).toBeVisible();
-  await page.getByLabel("Text for Seed prompt").fill("A browser-tested prompt");
-  await expect(page.getByLabel("Unsaved graph changes")).toBeVisible();
+  await page
+    .locator('aside[aria-label="Inspector"]')
+    .getByRole("button", { name: "Open loom" })
+    .click();
+  await expect(page.getByRole("dialog", { name: "Branching draft" })).toBeVisible();
+  await page.getByRole("button", { name: "Close loom" }).click();
 
   await page.getByRole("button", { name: "Close inspector" }).click();
   await expect(page.locator('aside[aria-label="Inspector"]')).toBeHidden();
@@ -170,47 +183,84 @@ test("starter loads, fits, edits, connects, and preserves panel controls", async
   expect(errors).toEqual([]);
 });
 
-test("inline textareas preserve caret edits and grow with their node", async ({ page }) => {
+test("the Loom editor preserves whitespace and caret edits", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.goto("/");
 
-  const promptNode = page.locator('.react-flow__node[data-id="prompt"]');
-  const promptTextarea = promptNode.locator("textarea");
-  await expect(promptTextarea).toBeVisible();
+  await page
+    .locator('.react-flow__node[data-id="loom"]')
+    .getByRole("button", { name: "Open loom" })
+    .click();
+  const selectedText = page.getByRole("textbox", { name: "Selected loom segment" });
+  await expect(selectedText).toBeVisible();
 
-  await promptTextarea.evaluate((element: HTMLTextAreaElement) => {
+  await selectedText.evaluate((element: HTMLTextAreaElement) => {
     element.focus();
     element.setSelectionRange(4, 4);
   });
   await page.keyboard.type(" nimble ");
 
-  await expect(promptTextarea).toHaveValue("The  nimble atomic age will bring");
+  await expect(selectedText).toHaveValue("The  nimble atomic age will bring");
   expect(
-    await promptTextarea.evaluate((element: HTMLTextAreaElement) => element.selectionStart),
+    await selectedText.evaluate((element: HTMLTextAreaElement) => element.selectionStart),
   ).toBe(12);
+  await expect(page.getByRole("dialog").locator("pre")).toHaveText(
+    "The  nimble atomic age will bring",
+  );
+  await page.getByRole("button", { name: "Close loom" }).click();
+  await expect(page.getByLabel("Unsaved graph changes")).toBeVisible();
+  expect(errors).toEqual([]);
+});
 
-  await promptNode.locator("header").click();
-  const resizeHandle = promptNode.locator(".react-flow__resize-control.handle.bottom.right");
-  await expect(resizeHandle).toBeVisible();
-  const handleBox = await resizeHandle.boundingBox();
-  expect(handleBox).not.toBeNull();
-  const textareaHeightBefore = await promptTextarea.evaluate(
-    (element: HTMLTextAreaElement) => element.getBoundingClientRect().height,
+test("the Loom steers exact tokens with digit hotkeys and a nested left-to-right branch", async ({
+  page,
+}) => {
+  const errors = watchPageErrors(page);
+  const submitted: unknown[] = [];
+  let callIndex = 0;
+  await useLegacyRunEndpoint(page);
+  await page.route("**/api/runs", async (route) => {
+    submitted.push(route.request().postDataJSON());
+    await loomProbeResponse(route, callIndex);
+    callIndex += 1;
+  });
+  await page.goto("/");
+
+  await page
+    .locator('.react-flow__node[data-id="loom"]')
+    .getByRole("button", { name: "Open loom" })
+    .click();
+  await page.getByRole("button", { name: "Show next tokens" }).click();
+  await expect(
+    page.getByRole("group", { name: "Next token choices" }).getByRole("button"),
+  ).toHaveCount(10);
+
+  const selectedText = page.getByRole("textbox", { name: "Selected loom segment" });
+  const manualText = page.getByRole("textbox", { name: "Manual loom branch text" });
+  await manualText.fill("0");
+  await expect(selectedText).toHaveValue("The atomic age will bring");
+  expect(submitted).toHaveLength(1);
+
+  await page.getByText("Token steering").click();
+  await page.keyboard.press("0");
+  await expect(selectedText).toHaveValue(" token-0-0");
+  await expect.poll(() => submitted.length).toBe(2);
+  await expect(page.getByText("2 entries")).toBeVisible();
+
+  const treeItems = page.getByRole("tree", { name: "Loom branches" }).getByRole("treeitem");
+  await expect(treeItems).toHaveCount(2);
+  const rootBox = await treeItems.nth(0).boundingBox();
+  const childBox = await treeItems.nth(1).boundingBox();
+  expect(rootBox).not.toBeNull();
+  expect(childBox).not.toBeNull();
+  if (rootBox && childBox) expect(childBox.x).toBeGreaterThan(rootBox.x + rootBox.width);
+
+  const secondRequest = submitted[1] as {
+    graph: { nodes: { kind: string; config: Record<string, unknown> }[] };
+  };
+  expect(secondRequest.graph.nodes.find((node) => node.kind === "text_input")?.config.text).toBe(
+    "The atomic age will bring token-0-0",
   );
-  if (handleBox) {
-    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(
-      handleBox.x + handleBox.width / 2 + 120,
-      handleBox.y + handleBox.height / 2 + 140,
-      { steps: 8 },
-    );
-    await page.mouse.up();
-  }
-  const textareaHeightAfter = await promptTextarea.evaluate(
-    (element: HTMLTextAreaElement) => element.getBoundingClientRect().height,
-  );
-  expect(textareaHeightAfter).toBeGreaterThan(textareaHeightBefore + 70);
   expect(errors).toEqual([]);
 });
 
@@ -219,7 +269,7 @@ test("canvas context menu adds a node with the mouse", async ({ page }) => {
   await page.goto("/");
 
   const nodes = page.locator(".react-flow__node");
-  await expect(nodes).toHaveCount(12);
+  await expect(nodes).toHaveCount(4);
 
   await page.locator(".react-flow__pane").click({
     button: "right",
@@ -228,7 +278,7 @@ test("canvas context menu adds a node with the mouse", async ({ page }) => {
   await page.getByRole("searchbox", { name: "Find a node to add" }).fill("Number");
   await page.getByRole("option", { name: "Number Values", exact: true }).click();
 
-  await expect(nodes).toHaveCount(13);
+  await expect(nodes).toHaveCount(5);
   await expect(page.locator('.react-flow__node[data-id^="number_input-"]')).toHaveCount(1);
   await expect(page.getByRole("menu")).toBeHidden();
   expect(errors).toEqual([]);
@@ -238,31 +288,31 @@ test("modifier selection groups two nodes into a collapsible frame", async ({ pa
   const errors = watchPageErrors(page);
   await page.goto("/");
 
-  const prompt = page.locator('.react-flow__node[data-id="prompt"]');
-  const typogre = page.locator('.react-flow__node[data-id="typogre"]');
-  await prompt.locator("header").click();
+  const endpoint = page.locator('.react-flow__node[data-id="endpoint"]');
+  const model = page.locator('.react-flow__node[data-id="model"]');
+  await endpoint.locator("header").click();
   await page.keyboard.down("Control");
-  await typogre.locator("header").click();
+  await model.locator("header").click();
   await page.keyboard.up("Control");
 
-  await expect(prompt).toHaveClass(/selected/);
-  await expect(typogre).toHaveClass(/selected/);
+  await expect(endpoint).toHaveClass(/selected/);
+  await expect(model).toHaveClass(/selected/);
 
-  await prompt.locator("header").click({ button: "right" });
+  await endpoint.locator("header").click({ button: "right" });
   const group = page.getByRole("menuitem", { name: "Group in collapsible frame" });
   await expect(group).toBeVisible();
   await group.click();
 
   const frame = page.locator('.react-flow__node[data-id^="frame-"]');
   await expect(frame).toHaveCount(1);
-  await expect(prompt).toBeVisible();
-  await expect(typogre).toBeVisible();
+  await expect(endpoint).toBeVisible();
+  await expect(model).toBeVisible();
 
   await frame.getByRole("button", { name: "Collapse frame" }).click();
   await expect(frame.getByRole("button", { name: "Expand frame" })).toBeVisible();
-  await expect(prompt).toBeHidden();
-  await expect(typogre).toBeHidden();
-  await expect(page.locator('.react-flow__node[data-id="corrupt"]')).toBeVisible();
+  await expect(endpoint).toBeHidden();
+  await expect(model).toBeHidden();
+  await expect(page.locator('.react-flow__node[data-id="loom"]')).toBeVisible();
   await expect
     .poll(() => page.locator('.react-flow__edge[data-id^="proxy:"]').count())
     .toBeGreaterThan(0);
@@ -278,35 +328,35 @@ test("document edits undo and redo through shortcuts and toolbar controls", asyn
   await expect(undo).toBeDisabled();
   await expect(redo).toBeDisabled();
 
-  await page.locator('.react-flow__node[data-id="prompt"] header').click();
-  const prompt = page.getByLabel("Text for Seed prompt");
-  const originalPrompt = await prompt.inputValue();
-  await prompt.fill("Undo and redo browser test");
+  await page.locator('.react-flow__node[data-id="model"] header').click();
+  const modelId = page.getByLabel("Model Id for Vintage Talkie");
+  const originalModelId = await modelId.inputValue();
+  await modelId.fill("undo-redo-model");
   await page.getByRole("button", { name: "Close inspector" }).click();
 
   await expect(undo).toBeEnabled();
   await page.keyboard.press("Control+z");
   await expect(redo).toBeEnabled();
-  await page.locator('.react-flow__node[data-id="prompt"] header').click();
-  await expect(page.getByLabel("Text for Seed prompt")).toHaveValue(originalPrompt);
+  await page.locator('.react-flow__node[data-id="model"] header').click();
+  await expect(page.getByLabel("Model Id for Vintage Talkie")).toHaveValue(originalModelId);
   await page.getByRole("button", { name: "Close inspector" }).click();
 
   await redo.click();
-  await page.locator('.react-flow__node[data-id="prompt"] header').click();
-  await expect(page.getByLabel("Text for Seed prompt")).toHaveValue("Undo and redo browser test");
+  await page.locator('.react-flow__node[data-id="model"] header').click();
+  await expect(page.getByLabel("Model Id for Vintage Talkie")).toHaveValue("undo-redo-model");
   await page.getByRole("button", { name: "Close inspector" }).click();
 
   await undo.click();
   await page.keyboard.press("Control+Shift+z");
-  await page.locator('.react-flow__node[data-id="prompt"] header').click();
-  await expect(page.getByLabel("Text for Seed prompt")).toHaveValue("Undo and redo browser test");
+  await page.locator('.react-flow__node[data-id="model"] header').click();
+  await expect(page.getByLabel("Model Id for Vintage Talkie")).toHaveValue("undo-redo-model");
   await page.getByRole("button", { name: "Close inspector" }).click();
 
   await page.getByRole("button", { name: "Reset to starter graph" }).click();
   await page.getByRole("button", { name: "Reset graph" }).click();
   await undo.click();
-  await page.locator('.react-flow__node[data-id="prompt"] header').click();
-  await expect(page.getByLabel("Text for Seed prompt")).toHaveValue("Undo and redo browser test");
+  await page.locator('.react-flow__node[data-id="model"] header').click();
+  await expect(page.getByLabel("Model Id for Vintage Talkie")).toHaveValue("undo-redo-model");
   expect(errors).toEqual([]);
 });
 
@@ -316,12 +366,12 @@ test("a successful run selects and renders deterministic output", async ({ page 
   await page.route("**/api/runs", (route) => successfulRunResponse(route));
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Run loom" }).click();
+  await page.getByRole("button", { name: "Run graph" }).click();
 
   await expect(page.getByText("stubbed completion", { exact: true })).toBeVisible();
   await expect(page.getByText("1 completion", { exact: true })).toBeVisible();
-  await expect(page.getByText("Full loom run")).toBeVisible();
-  await expect(page.getByText(/12 nodes · completed/)).toBeVisible();
+  await expect(page.getByText("Full graph run")).toBeVisible();
+  await expect(page.getByText(/4 nodes · completed/)).toBeVisible();
   await expect(page.locator('.react-flow__node[data-id="preview"] article')).toHaveClass(
     /status-completed/,
   );
@@ -350,11 +400,11 @@ test("a staged run stream exposes incremental node and edge activity", async ({ 
       };
       const plan = {
         mode: "targets" as const,
-        target_node_ids: ["original_vintage"],
-        node_ids: ["prompt", "original_vintage"],
-        edge_ids: ["prompt-original-vintage"],
+        target_node_ids: ["loom"],
+        node_ids: ["endpoint", "loom"],
+        edge_ids: ["endpoint-loom"],
       };
-      const nodeResults = ["prompt", "original_vintage"].map((nodeId) => ({
+      const nodeResults = ["endpoint", "loom"].map((nodeId) => ({
         node_id: nodeId,
         kind: request.graph.nodes.find((node) => node.id === nodeId)?.kind ?? "test",
         status: "completed",
@@ -376,20 +426,20 @@ test("a staged run stream exposes incremental node and edge activity", async ({ 
           glitchlings_version: null,
           scope: {
             mode: "targets",
-            target_node_ids: ["original_vintage"],
-            executed_node_ids: ["prompt", "original_vintage"],
+            target_node_ids: ["loom"],
+            executed_node_ids: ["endpoint", "loom"],
           },
           graph: request.graph,
         },
         nodes: nodeResults,
-        terminal_outputs: { original_vintage: {} },
+        terminal_outputs: { loom: {} },
       };
       const staged = [
         [0, { ...base, sequence: 1, event: "run_started", requested_scope: request.scope }],
         [10, { ...base, sequence: 2, event: "run_planned", plan }],
         [
           100,
-          { ...base, sequence: 3, event: "node_started", node_id: "prompt", kind: "text_input" },
+          { ...base, sequence: 3, event: "node_started", node_id: "endpoint", kind: "endpoint" },
         ],
         [
           1_200,
@@ -397,8 +447,8 @@ test("a staged run stream exposes incremental node and edge activity", async ({ 
             ...base,
             sequence: 4,
             event: "node_completed",
-            node_id: "prompt",
-            kind: "text_input",
+            node_id: "endpoint",
+            kind: "endpoint",
             duration_ms: 10,
           },
         ],
@@ -408,8 +458,8 @@ test("a staged run stream exposes incremental node and edge activity", async ({ 
             ...base,
             sequence: 5,
             event: "node_started",
-            node_id: "original_vintage",
-            kind: "completion",
+            node_id: "loom",
+            kind: "loom",
           },
         ],
         [
@@ -418,8 +468,8 @@ test("a staged run stream exposes incremental node and edge activity", async ({ 
             ...base,
             sequence: 6,
             event: "edges_transferred",
-            node_id: "original_vintage",
-            edge_ids: ["prompt-original-vintage"],
+            node_id: "loom",
+            edge_ids: ["endpoint-loom"],
           },
         ],
         [
@@ -428,8 +478,8 @@ test("a staged run stream exposes incremental node and edge activity", async ({ 
             ...base,
             sequence: 7,
             event: "node_completed",
-            node_id: "original_vintage",
-            kind: "completion",
+            node_id: "loom",
+            kind: "loom",
             duration_ms: 10,
           },
         ],
@@ -462,17 +512,15 @@ test("a staged run stream exposes incremental node and edge activity", async ({ 
   });
   await page.goto("/");
 
-  await page
-    .locator('.react-flow__node[data-id="original_vintage"] header')
-    .click({ button: "right" });
+  await page.locator('.react-flow__node[data-id="loom"] header').click({ button: "right" });
   await page.getByRole("menuitem", { name: "Run to here" }).click();
 
-  await expect(page.getByText("Running Seed prompt")).toBeVisible();
-  await expect(page.getByText("Running Vintage · original")).toBeVisible();
-  await expect(page.locator('.react-flow__edge[data-id="prompt-original-vintage"]')).toHaveClass(
+  await expect(page.getByText("Running Elsie completion API")).toBeVisible();
+  await expect(page.getByText("Running Branching draft")).toBeVisible();
+  await expect(page.locator('.react-flow__edge[data-id="endpoint-loom"]')).toHaveClass(
     /edge-transfer-pulse/,
   );
-  await expect(page.locator('.react-flow__node[data-id="original_vintage"] article')).toHaveClass(
+  await expect(page.locator('.react-flow__node[data-id="loom"] article')).toHaveClass(
     /status-completed/,
   );
   await expect(page.getByText(/2 nodes · completed/)).toBeVisible();
@@ -498,11 +546,11 @@ test("a poisoned preview output degrades inline while the canvas stays live", as
     };
   });
 
-  await page.getByRole("button", { name: "Run loom" }).click();
+  await page.getByRole("button", { name: "Run graph" }).click();
 
   await expect(page.getByRole("alert")).toContainText("Output could not be rendered");
-  await expect(page.locator(".react-flow__node")).toHaveCount(12);
-  await expect(page.getByRole("button", { name: "Run loom" })).toBeVisible();
+  await expect(page.locator(".react-flow__node")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "Run graph" })).toBeVisible();
   expect(errors.filter((message) => !message.includes("Synthetic preview render failure"))).toEqual(
     [],
   );
@@ -521,14 +569,11 @@ test("an edit during a delayed run marks the returned result stale", async ({ pa
   });
   await page.goto("/");
 
-  await page.locator('.react-flow__node[data-id="prompt"] header').click();
-  await page.getByRole("button", { name: "Run loom" }).click();
+  await page.locator('.react-flow__node[data-id="model"] header').click();
+  await page.getByRole("button", { name: "Run graph" }).click();
   await expect(page.getByText("Preparing next node")).toBeVisible();
-  await page.getByLabel("Text for Seed prompt").evaluate((element) => {
-    const valueSetter = Object.getOwnPropertyDescriptor(
-      HTMLTextAreaElement.prototype,
-      "value",
-    )?.set;
+  await page.getByLabel("Model Id for Vintage Talkie").evaluate((element) => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     valueSetter?.call(element, "Changed while running");
     element.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -537,7 +582,7 @@ test("an edit during a delayed run marks the returned result stale", async ({ pa
   await expect(
     page.getByText("Prior output — the graph changed after this run was submitted."),
   ).toBeVisible();
-  await expect(page.getByText(/12 nodes · prior result is stale/)).toBeVisible();
+  await expect(page.getByText(/4 nodes · prior result is stale/)).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -551,7 +596,7 @@ test("a failed run exposes the backend error and failed node", async ({ page }) 
       body: JSON.stringify({
         detail: {
           message: "Synthetic completion failure",
-          node_id: "original_vintage",
+          node_id: "loom",
           nodes: [],
         },
       }),
@@ -559,11 +604,11 @@ test("a failed run exposes the backend error and failed node", async ({ page }) 
   });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Run loom" }).click();
+  await page.getByRole("button", { name: "Run graph" }).click();
 
   await expect(page.getByText("Run stopped")).toBeVisible();
   await expect(page.getByText("Synthetic completion failure")).toBeVisible();
-  await expect(page.locator('.react-flow__node[data-id="original_vintage"] article')).toHaveClass(
+  await expect(page.locator('.react-flow__node[data-id="loom"] article')).toHaveClass(
     /status-failed/,
   );
   await expect(page.locator('aside[aria-label="Inspector"]')).toBeVisible();

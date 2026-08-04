@@ -1,5 +1,5 @@
 .app-shell {
-  --loom-node-animation: none;
+  --workflow-node-animation: none;
   display: grid;
   width: 100%;
   height: 100%;
@@ -269,7 +269,7 @@
   animation: after-hours-shuttle 2.8s ease-in-out infinite alternate;
 }
 
-.loom-title {
+.graph-title {
   display: grid;
   width: min(560px, 100%);
   grid-template-columns: auto minmax(0, 1fr) 18px;
@@ -283,13 +283,13 @@
     background 140ms ease;
 }
 
-.loom-title:hover,
-.loom-title:focus-within {
+.graph-title:hover,
+.graph-title:focus-within {
   background: #141117;
   border-color: #4b404d;
 }
 
-.loom-title-label {
+.graph-title-label {
   padding-left: 10px;
   color: var(--brass-soft);
   font-family: var(--mono);
@@ -298,7 +298,7 @@
   text-transform: uppercase;
 }
 
-.loom-title input {
+.graph-title input {
   width: 100%;
   min-width: 0;
   padding: 8px 10px;
@@ -917,7 +917,7 @@
 }
 
 .app-shell.is-after-hours {
-  --loom-node-animation: loom-after-hours-breathe 5.5s ease-in-out infinite;
+  --workflow-node-animation: loom-after-hours-breathe 5.5s ease-in-out infinite;
 }
 
 .is-after-hours :global(.react-flow__edge-path) {
@@ -1500,7 +1500,7 @@
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
 }
 
-.loom-library-dialog {
+.graph-library-dialog {
   display: grid;
   width: min(720px, 100%);
   max-height: min(720px, calc(100vh - 40px));
@@ -1512,26 +1512,26 @@
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
 }
 
-.loom-library-dialog h2 {
+.graph-library-dialog h2 {
   margin: 1px 0 6px;
   color: #eee7ef;
   font-size: 14px;
 }
 
-.loom-library-dialog p {
+.graph-library-dialog p {
   margin: 0;
   color: #9f95a3;
   font-size: 9.5px;
   line-height: 1.5;
 }
 
-.loom-library-dialog .workflow-dialog-heading > span {
+.graph-library-dialog .workflow-dialog-heading > span {
   color: var(--thread-text);
   background: #172523;
   border-color: #365e59;
 }
 
-.loom-library-scroll {
+.graph-library-scroll {
   display: grid;
   min-height: 0;
   gap: 18px;
@@ -1539,36 +1539,36 @@
   padding-right: 5px;
 }
 
-.loom-library-section {
+.graph-library-section {
   display: grid;
   gap: 8px;
 }
 
-.loom-library-section-heading {
+.graph-library-section-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   padding: 0 2px;
 }
 
-.loom-library-section-heading strong {
+.graph-library-section-heading strong {
   color: #cfc7d2;
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.loom-library-section-heading span {
+.graph-library-section-heading span {
   color: #756c7a;
   font-size: 8px;
 }
 
-.loom-library-list {
+.graph-library-list {
   display: grid;
   gap: 5px;
 }
 
-.loom-library-item {
+.graph-library-item {
   display: grid;
   width: 100%;
   min-height: 52px;
@@ -1584,34 +1584,34 @@
   cursor: pointer;
 }
 
-button.loom-library-item:hover,
-.saved-loom-item:hover {
+button.graph-library-item:hover,
+.saved-graph-item:hover {
   color: #efe8f0;
   background: #1d1821;
   border-color: #4c414f;
 }
 
-.loom-library-item strong,
-.loom-library-item small {
+.graph-library-item strong,
+.graph-library-item small {
   display: block;
 }
 
-.loom-library-item strong {
+.graph-library-item strong {
   font-size: 10px;
 }
 
-.loom-library-item small {
+.graph-library-item small {
   margin-top: 4px;
   color: #7f7584;
   font-size: 8px;
 }
 
-.saved-loom-item {
+.saved-graph-item {
   position: relative;
   padding: 0;
 }
 
-.saved-loom-item > button:first-child {
+.saved-graph-item > button:first-child {
   min-width: 0;
   padding: 9px 11px;
   color: inherit;
@@ -1621,7 +1621,7 @@ button.loom-library-item:hover,
   cursor: pointer;
 }
 
-.loom-copy-button {
+.graph-copy-button {
   display: grid;
   width: 34px;
   height: 34px;
@@ -1635,19 +1635,19 @@ button.loom-library-item:hover,
   cursor: pointer;
 }
 
-.loom-copy-button:hover {
+.graph-copy-button:hover {
   color: var(--thread-text);
   border-color: #4d6e69;
 }
 
-.loom-open-spinner {
+.graph-open-spinner {
   position: absolute;
   top: 18px;
   right: 54px;
   color: var(--thread-text);
 }
 
-.loom-library-dialog .workflow-error {
+.graph-library-dialog .workflow-error {
   padding: 8px 9px;
   color: #e6a1a7;
   background: #2b1a20;
@@ -1655,7 +1655,7 @@ button.loom-library-item:hover,
   border-radius: 4px;
 }
 
-.loom-save-dialog {
+.graph-save-dialog {
   width: min(520px, 100%);
 }
 
@@ -1880,7 +1880,7 @@ button.loom-library-item:hover,
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
 }
 
-.loom-toast {
+.graph-toast {
   border-color: #40645f;
 }
 
@@ -1967,7 +1967,7 @@ button.loom-library-item:hover,
     --palette-width: 214px;
   }
 
-  .loom-title {
+  .graph-title {
     width: 100%;
   }
 

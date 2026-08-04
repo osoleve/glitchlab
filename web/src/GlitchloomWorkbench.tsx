@@ -26,17 +26,17 @@ import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import styles from "./App.module.css";
 import {
   ApiError,
-  createLoom,
+  createGraph,
   deleteWorkflow,
   fetchCatalog,
-  fetchLoom,
-  fetchLooms,
-  fetchLoomTemplate,
-  fetchLoomTemplates,
+  fetchGraph,
+  fetchGraphs,
+  fetchGraphTemplate,
+  fetchGraphTemplates,
   fetchWorkflow,
   runGraphStreaming,
   saveWorkflow,
-  updateLoom,
+  updateGraph,
   updateWorkflow,
 } from "./api";
 import {
@@ -64,9 +64,11 @@ import {
   upstreamClosure,
 } from "./graphTraversal";
 import { Inspector } from "./Inspector";
+import { LoomEditor } from "./LoomEditor";
+import { createLoomState } from "./loom";
 import { moduleClassNames as cx } from "./moduleClassNames";
 import { compatibleNodeInputs } from "./nodePicker";
-import { talkieStarter } from "./starter";
+import { createStarterGraph } from "./starter";
 import { useGraphDocumentStore } from "./stores/graphDocumentStore";
 import {
   clearGraphHistory,
@@ -85,16 +87,17 @@ import type {
   CanvasNode,
   CatalogResponse,
   ControlPortMode,
+  GraphDocument,
+  GraphDocumentSummary,
   GraphSpec,
-  LoomEdge,
-  LoomFrame,
-  LoomNode,
-  LoomSpec,
-  LoomSummary,
+  LoomState,
   NodeDefinition,
   PortDefinition,
   RunScope,
   WorkflowDraft,
+  WorkflowEdge,
+  WorkflowFrame,
+  WorkflowNode,
 } from "./types";
 import { inferWorkflowDraft, reviseWorkflowDraft } from "./workflow";
 
@@ -129,7 +132,7 @@ function defaultConfig(definition: NodeDefinition): Record<string, unknown> {
   return Object.fromEntries(definition.fields.map((field) => [field.name, field.default]));
 }
 
-function nodeSize(node: LoomNode): { width: number; height: number } {
+function nodeSize(node: WorkflowNode): { width: number; height: number } {
   return {
     width: node.measured?.width ?? 236,
     height:
@@ -141,7 +144,7 @@ function nodeSize(node: LoomNode): { width: number; height: number } {
 
 function nearestOpenPosition(
   preferred: { x: number; y: number },
-  nodes: LoomNode[],
+  nodes: WorkflowNode[],
 ): { x: number; y: number } {
   const stepX = 260;
   const stepY = 220;
@@ -221,20 +224,21 @@ export function GlitchloomWorkbench() {
     frames,
     edgeRouting,
     selectedId,
-    loomName,
+    graphName,
     isDirty,
     setNodes,
     setEdgeRouting,
     setSelectedId,
-    setLoomName,
+    setGraphName,
     setIsDirty,
-    renameLoom,
+    renameGraph,
     updateDocument,
     applyNodeChanges,
     applyFrameChanges,
     applyEdgeChanges,
     connect: connectGraph,
     updateNodeField: updateGraphNodeField,
+    updateNodeState: updateGraphNodeState,
     updateControlPort: updateGraphControlPort,
     removeNodes,
     removeEdge,
@@ -272,14 +276,14 @@ export function GlitchloomWorkbench() {
     inspectorOpen,
     paletteWidth,
     inspectorWidth,
-    looms,
-    loomTemplates,
+    graphs,
+    graphTemplates,
     setTabs,
     setActiveTabId,
     setPaletteOpen,
     setInspectorOpen,
-    setLooms,
-    setLoomTemplates,
+    setGraphs,
+    setGraphTemplates,
     setPaletteWidth,
     setInspectorWidth,
   } = useWorkspaceStore();
@@ -299,16 +303,17 @@ export function GlitchloomWorkbench() {
   const [workflowError, setWorkflowError] = useState<string>();
   const [savingWorkflow, setSavingWorkflow] = useState(false);
   const [workflowNotice, setWorkflowNotice] = useState<string>();
-  const [loomLibraryOpen, setLoomLibraryOpen] = useState(false);
-  const [loomLibraryError, setLoomLibraryError] = useState<string>();
+  const [graphLibraryOpen, setGraphLibraryOpen] = useState(false);
+  const [graphLibraryError, setGraphLibraryError] = useState<string>();
   const [loadingDocumentId, setLoadingDocumentId] = useState<string>();
-  const [loomSaveDialogOpen, setLoomSaveDialogOpen] = useState(false);
-  const [loomSaveAs, setLoomSaveAs] = useState(false);
-  const [loomSaveName, setLoomSaveName] = useState("");
-  const [savingLoom, setSavingLoom] = useState(false);
-  const [loomSaveError, setLoomSaveError] = useState<string>();
-  const [loomNotice, setLoomNotice] = useState<string>();
+  const [graphSaveDialogOpen, setGraphSaveDialogOpen] = useState(false);
+  const [graphSaveAs, setGraphSaveAs] = useState(false);
+  const [graphSaveName, setGraphSaveName] = useState("");
+  const [savingGraph, setSavingGraph] = useState(false);
+  const [graphSaveError, setGraphSaveError] = useState<string>();
+  const [graphNotice, setGraphNotice] = useState<string>();
   const [afterHours, setAfterHours] = useState(false);
+  const [openLoomNodeId, setOpenLoomNodeId] = useState<string>();
   const [loadingWorkflowId, setLoadingWorkflowId] = useState<string>();
   const [deleteDefinition, setDeleteDefinition] = useState<NodeDefinition>();
   const [deletingWorkflow, setDeletingWorkflow] = useState(false);
@@ -328,9 +333,9 @@ export function GlitchloomWorkbench() {
   const canRedo = useCanRedoGraph();
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const activeWorkflow = activeTab.type === "workflow" ? activeTab.workflow : undefined;
-  const activeLoom = activeTab.type === "loom" ? activeTab.loom : undefined;
+  const activeGraph = activeTab.type === "graph" ? activeTab.graph : undefined;
   const loadingGraph = Boolean(loadingWorkflowId || loadingDocumentId);
-  const graphBusy = loadingGraph || savingLoom;
+  const graphBusy = loadingGraph || savingGraph;
   const hasUnsavedTabs =
     isDirty || tabs.some((tab) => tab.id !== activeTabId && tab.snapshot.isDirty);
 
@@ -343,7 +348,7 @@ export function GlitchloomWorkbench() {
       run,
       runError,
       selectedId,
-      loomName,
+      graphName,
       isDirty,
       executionScope,
     }),
@@ -353,7 +358,7 @@ export function GlitchloomWorkbench() {
       executionScope,
       frames,
       isDirty,
-      loomName,
+      graphName,
       nodes,
       run,
       runError,
@@ -366,7 +371,7 @@ export function GlitchloomWorkbench() {
       replaceGraph(
         snapshot.nodes,
         snapshot.edges,
-        snapshot.loomName,
+        snapshot.graphName,
         snapshot.isDirty,
         snapshot.frames,
         snapshot.edgeRouting,
@@ -415,8 +420,8 @@ export function GlitchloomWorkbench() {
       .then((response) => {
         setCatalog(response);
         if (hasOpenedGraph.current) return;
-        const starter = talkieStarter(response.nodes);
-        replaceGraph(starter.nodes, starter.edges, "Talkie perturbation pair", false);
+        const starter = createStarterGraph(response.nodes);
+        replaceGraph(starter.nodes, starter.edges, "Loom workshop", false);
         clearGraphHistory();
         setTabs((current) =>
           current.map((tab) =>
@@ -426,7 +431,7 @@ export function GlitchloomWorkbench() {
                   snapshot: {
                     nodes: starter.nodes,
                     edges: starter.edges,
-                    loomName: "Talkie perturbation pair",
+                    graphName: "Loom workshop",
                     isDirty: false,
                   },
                 }
@@ -441,15 +446,15 @@ export function GlitchloomWorkbench() {
   }, [replaceGraph, setTabs]);
 
   useEffect(() => {
-    void Promise.all([fetchLooms(), fetchLoomTemplates()])
-      .then(([savedLooms, templates]) => {
-        setLooms(savedLooms);
-        setLoomTemplates(templates);
+    void Promise.all([fetchGraphs(), fetchGraphTemplates()])
+      .then(([savedGraphs, templates]) => {
+        setGraphs(savedGraphs);
+        setGraphTemplates(templates);
       })
       .catch((error: unknown) => {
-        setLoomLibraryError(error instanceof Error ? error.message : String(error));
+        setGraphLibraryError(error instanceof Error ? error.message : String(error));
       });
-  }, [setLooms, setLoomTemplates]);
+  }, [setGraphs, setGraphTemplates]);
 
   useEffect(() => {
     if (!hasUnsavedTabs) return;
@@ -607,7 +612,7 @@ export function GlitchloomWorkbench() {
       const frameIds = new Set(frames.map((frame) => frame.id));
       const isFrameChange = (change: NodeChange<CanvasNode>) => {
         if (change.type === "add" || change.type === "replace") {
-          return change.item.type === "loomFrame";
+          return change.item.type === "workflowFrame";
         }
         return frameIds.has(change.id);
       };
@@ -617,10 +622,10 @@ export function GlitchloomWorkbench() {
       const frameChanges = changes.filter(
         (change) =>
           isFrameChange(change) && !(change.type === "dimensions" && collapsedIds.has(change.id)),
-      ) as NodeChange<LoomFrame>[];
+      ) as NodeChange<WorkflowFrame>[];
       const nodeChanges = changes.filter(
         (change) => !isFrameChange(change),
-      ) as NodeChange<LoomNode>[];
+      ) as NodeChange<WorkflowNode>[];
       const semantic = nodeChanges.some(
         (change) => change.type === "add" || change.type === "remove",
       );
@@ -663,7 +668,7 @@ export function GlitchloomWorkbench() {
     edgePulseTimers.current.clear();
   }, [activity]);
   const onEdgesChange = useCallback(
-    (changes: EdgeChange<LoomEdge>[]) => {
+    (changes: EdgeChange<WorkflowEdge>[]) => {
       const semanticIds = new Set(edges.map((edge) => edge.id));
       const semanticChanges = changes.filter((change) =>
         semanticIds.has(
@@ -684,16 +689,16 @@ export function GlitchloomWorkbench() {
         ...connection,
         id: crypto.randomUUID(),
         markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
-      } as LoomEdge);
+      } as WorkflowEdge);
     },
     [connectGraph, markSemanticDirty],
   );
   const isValidConnection = useCallback(
-    (connection: Connection | LoomEdge) => isGraphConnectionValid(connection, nodes, edges),
+    (connection: Connection | WorkflowEdge) => isGraphConnectionValid(connection, nodes, edges),
     [edges, nodes],
   );
   const onReconnect = useCallback(
-    (oldEdge: LoomEdge, connection: Connection) => {
+    (oldEdge: WorkflowEdge, connection: Connection) => {
       reconnectSuccessful.current = true;
       markSemanticDirty();
       updateDocument(
@@ -718,7 +723,7 @@ export function GlitchloomWorkbench() {
   const onReconnectEnd = useCallback(
     (
       _event: MouseEvent | TouchEvent,
-      edge: LoomEdge,
+      edge: WorkflowEdge,
       _handleType: "source" | "target",
       connectionState: { isValid: boolean | null },
     ) => {
@@ -764,7 +769,7 @@ export function GlitchloomWorkbench() {
             ...current.map((node) => ({ ...node, selected: false })),
             {
               id,
-              type: "loomNode",
+              type: "workflowNode",
               position: nextPosition,
               data: {
                 kind: definition.kind,
@@ -775,6 +780,7 @@ export function GlitchloomWorkbench() {
                   ...(definition.workflow ? { workflow_digest: definition.workflow.digest } : {}),
                 },
                 controlPorts: {},
+                ...(definition.editor === "loom" ? { state: createLoomState() } : {}),
                 runStatus: "idle",
               },
               selected: true,
@@ -818,7 +824,7 @@ export function GlitchloomWorkbench() {
     addNode(definition, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
   };
 
-  const updateSelected = (updater: (node: LoomNode) => LoomNode, semantic = true) => {
+  const updateSelected = (updater: (node: WorkflowNode) => WorkflowNode, semantic = true) => {
     if (!selectedId) return;
     updateDocument(
       ({ nodes: current }) => ({
@@ -834,6 +840,13 @@ export function GlitchloomWorkbench() {
       markSemanticDirty();
     },
     [markSemanticDirty, updateGraphNodeField],
+  );
+  const updateLoomState = useCallback(
+    (nodeId: string, state: LoomState) => {
+      updateGraphNodeState(nodeId, state);
+      markSemanticDirty();
+    },
+    [markSemanticDirty, updateGraphNodeState],
   );
   const updateControlPort = (fieldName: string, mode?: ControlPortMode) => {
     if (!selectedId || !selectedNode) return;
@@ -1016,7 +1029,7 @@ export function GlitchloomWorkbench() {
           ...currentNodes.map((node) => ({ ...node, selected: false })),
           {
             id: nodeId,
-            type: "loomNode",
+            type: "workflowNode",
             position,
             selected: true,
             data: {
@@ -1090,7 +1103,7 @@ export function GlitchloomWorkbench() {
         edges: hydrated.edges,
         frames: hydrated.frames,
         edgeRouting: hydrated.edgeRouting,
-        loomName: response.workflow.name,
+        graphName: response.workflow.name,
         isDirty: false,
       };
       const currentSnapshot = captureSnapshot();
@@ -1114,18 +1127,18 @@ export function GlitchloomWorkbench() {
     }
   };
 
-  const rememberLoom = (loom: LoomSpec) => {
-    const summary: LoomSummary = {
-      id: loom.id,
-      name: loom.graph.name,
-      revision: loom.revision,
-      digest: loom.digest,
-      created_at: loom.created_at,
-      updated_at: loom.updated_at,
-      node_count: loom.graph.nodes.length,
+  const rememberGraph = (graph: GraphDocument) => {
+    const summary: GraphDocumentSummary = {
+      id: graph.id,
+      name: graph.graph.name,
+      revision: graph.revision,
+      digest: graph.digest,
+      created_at: graph.created_at,
+      updated_at: graph.updated_at,
+      node_count: graph.graph.nodes.length,
     };
-    setLooms((current) =>
-      [...current.filter((item) => item.id !== loom.id), summary].sort((left, right) =>
+    setGraphs((current) =>
+      [...current.filter((item) => item.id !== graph.id), summary].sort((left, right) =>
         left.name.localeCompare(right.name),
       ),
     );
@@ -1143,7 +1156,7 @@ export function GlitchloomWorkbench() {
       edges: hydrated.edges,
       frames: hydrated.frames,
       edgeRouting: hydrated.edgeRouting,
-      loomName: graph.name,
+      graphName: graph.name,
       isDirty: true,
     };
     const tabId = `draft:${crypto.randomUUID()}`;
@@ -1154,39 +1167,39 @@ export function GlitchloomWorkbench() {
       ),
       {
         id: tabId,
-        type: "loom",
+        type: "graph",
         sourceTemplateId,
         snapshot,
       },
     ]);
     setActiveTabId(tabId);
     applySnapshot(snapshot);
-    setLoomLibraryOpen(false);
+    setGraphLibraryOpen(false);
   };
 
-  const openSavedLoom = async (loomId: string, asCopy = false) => {
-    const existing = !asCopy ? tabs.find((tab) => tab.loom?.id === loomId) : undefined;
+  const openSavedGraph = async (graphId: string, asCopy = false) => {
+    const existing = !asCopy ? tabs.find((tab) => tab.graph?.id === graphId) : undefined;
     if (existing) {
-      setLoomLibraryOpen(false);
+      setGraphLibraryOpen(false);
       switchGraphTab(existing.id);
       return;
     }
-    setLoadingDocumentId(`loom:${loomId}:${asCopy ? "copy" : "open"}`);
-    setLoomLibraryError(undefined);
+    setLoadingDocumentId(`graph:${graphId}:${asCopy ? "copy" : "open"}`);
+    setGraphLibraryError(undefined);
     try {
-      const response = await fetchLoom(loomId);
+      const response = await fetchGraph(graphId);
       if (asCopy) {
         openHydratedDraft(
           {
-            ...response.loom.graph,
-            name: `${response.loom.graph.name} copy`,
+            ...response.graph.graph,
+            name: `${response.graph.graph.name} copy`,
           },
           response.definitions,
         );
         return;
       }
       const hydrated = hydrateGraph(
-        response.loom.graph,
+        response.graph.graph,
         catalog?.nodes ?? [],
         response.definitions,
       );
@@ -1196,10 +1209,10 @@ export function GlitchloomWorkbench() {
         edges: hydrated.edges,
         frames: hydrated.frames,
         edgeRouting: hydrated.edgeRouting,
-        loomName: response.loom.graph.name,
+        graphName: response.graph.graph.name,
         isDirty: false,
       };
-      const tabId = `loom:${response.loom.id}`;
+      const tabId = `graph:${response.graph.id}`;
       const currentSnapshot = captureSnapshot();
       setTabs((current) => [
         ...current.map((tab) =>
@@ -1207,29 +1220,29 @@ export function GlitchloomWorkbench() {
         ),
         {
           id: tabId,
-          type: "loom",
-          loom: response.loom,
+          type: "graph",
+          graph: response.graph,
           snapshot,
         },
       ]);
       setActiveTabId(tabId);
       applySnapshot(snapshot);
-      setLoomLibraryOpen(false);
+      setGraphLibraryOpen(false);
     } catch (error) {
-      setLoomLibraryError(error instanceof Error ? error.message : String(error));
+      setGraphLibraryError(error instanceof Error ? error.message : String(error));
     } finally {
       setLoadingDocumentId(undefined);
     }
   };
 
-  const openLoomTemplate = async (templateId: string) => {
+  const openGraphTemplate = async (templateId: string) => {
     setLoadingDocumentId(`template:${templateId}`);
-    setLoomLibraryError(undefined);
+    setGraphLibraryError(undefined);
     try {
-      const response = await fetchLoomTemplate(templateId);
+      const response = await fetchGraphTemplate(templateId);
       openHydratedDraft(response.template.graph, response.definitions, response.template.id);
     } catch (error) {
-      setLoomLibraryError(error instanceof Error ? error.message : String(error));
+      setGraphLibraryError(error instanceof Error ? error.message : String(error));
     } finally {
       setLoadingDocumentId(undefined);
     }
@@ -1237,46 +1250,42 @@ export function GlitchloomWorkbench() {
 
   const openStarterCopy = () => {
     if (!catalog) return;
-    const starter = talkieStarter(catalog.nodes);
-    openHydratedDraft(
-      serializeGraph("Talkie perturbation pair", starter.nodes, starter.edges),
-      [],
-      "starter",
-    );
+    const starter = createStarterGraph(catalog.nodes);
+    openHydratedDraft(serializeGraph("Loom workshop", starter.nodes, starter.edges), [], "starter");
   };
 
-  const persistCurrentLoom = async (name: string, options: { createNew: boolean }) => {
+  const persistCurrentGraph = async (name: string, options: { createNew: boolean }) => {
     if (activeWorkflow) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
-      setLoomSaveError("Give this loom a name.");
+      setGraphSaveError("Give this graph a name.");
       return;
     }
-    setSavingLoom(true);
+    setSavingGraph(true);
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
     setContextMenu(undefined);
-    setLoomSaveError(undefined);
+    setGraphSaveError(undefined);
     try {
       const graph = serializeGraph(trimmedName, nodes, edges, frames, edgeRouting);
       const saved =
-        activeLoom && !options.createNew
-          ? await updateLoom(activeLoom.id, activeLoom.revision, graph)
-          : await createLoom({ graph });
+        activeGraph && !options.createNew
+          ? await updateGraph(activeGraph.id, activeGraph.revision, graph)
+          : await createGraph({ graph });
       const nextSnapshot: GraphSnapshot = {
         ...captureSnapshot(),
-        loomName: saved.graph.name,
+        graphName: saved.graph.name,
         isDirty: false,
       };
-      const nextTabId = activeTabId === MAIN_TAB_ID ? MAIN_TAB_ID : `loom:${saved.id}`;
+      const nextTabId = activeTabId === MAIN_TAB_ID ? MAIN_TAB_ID : `graph:${saved.id}`;
       setTabs((current) =>
         current.map((tab) =>
           tab.id === activeTabId
             ? {
                 ...tab,
                 id: nextTabId,
-                loom: saved,
+                graph: saved,
                 sourceTemplateId: undefined,
                 snapshot: nextSnapshot,
               }
@@ -1285,31 +1294,31 @@ export function GlitchloomWorkbench() {
       );
       if (nextTabId !== activeTabId) setActiveTabId(nextTabId);
       withoutGraphHistory(() => {
-        setLoomName(saved.graph.name);
+        setGraphName(saved.graph.name);
         setIsDirty(false);
       });
-      rememberLoom(saved);
-      setLoomSaveDialogOpen(false);
-      setLoomNotice(`${saved.graph.name} saved at revision ${saved.revision}.`);
+      rememberGraph(saved);
+      setGraphSaveDialogOpen(false);
+      setGraphNotice(`${saved.graph.name} saved at revision ${saved.revision}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (loomSaveDialogOpen) setLoomSaveError(message);
-      else setLoomNotice(message);
+      if (graphSaveDialogOpen) setGraphSaveError(message);
+      else setGraphNotice(message);
     } finally {
-      setSavingLoom(false);
+      setSavingGraph(false);
     }
   };
 
-  const requestSaveLoom = (saveAs = false) => {
+  const requestSaveGraph = (saveAs = false) => {
     if (activeWorkflow) return;
-    if (activeLoom && !saveAs) {
-      void persistCurrentLoom(loomName, { createNew: false });
+    if (activeGraph && !saveAs) {
+      void persistCurrentGraph(graphName, { createNew: false });
       return;
     }
-    setLoomSaveAs(saveAs);
-    setLoomSaveName(loomName);
-    setLoomSaveError(undefined);
-    setLoomSaveDialogOpen(true);
+    setGraphSaveAs(saveAs);
+    setGraphSaveName(graphName);
+    setGraphSaveError(undefined);
+    setGraphSaveDialogOpen(true);
   };
 
   const performCloseTab = (tabId: string) => {
@@ -1392,7 +1401,7 @@ export function GlitchloomWorkbench() {
 
   const openEditSaveDialog = () => {
     if (!activeWorkflow) return;
-    setWorkflowName(loomName);
+    setWorkflowName(graphName);
     setWorkflowDescription(activeWorkflow.description);
     setWorkflowBoundaryLabels({});
     setWorkflowError(undefined);
@@ -1489,7 +1498,7 @@ export function GlitchloomWorkbench() {
       if (saveDialogPurpose === "edit") {
         const nextSnapshot: GraphSnapshot = {
           ...captureSnapshot(),
-          loomName: response.workflow.name,
+          graphName: response.workflow.name,
           isDirty: false,
         };
         setTabs((current) =>
@@ -1504,7 +1513,7 @@ export function GlitchloomWorkbench() {
           ),
         );
         withoutGraphHistory(() => {
-          setLoomName(response.workflow.name);
+          setGraphName(response.workflow.name);
           setIsDirty(false);
         });
       }
@@ -1547,8 +1556,8 @@ export function GlitchloomWorkbench() {
   };
   const applyStarter = () => {
     if (!catalog) return;
-    const starter = talkieStarter(catalog.nodes);
-    const starterName = "Talkie perturbation pair";
+    const starter = createStarterGraph(catalog.nodes);
+    const starterName = "Loom workshop";
     markSemanticDirty();
     replaceGraph(starter.nodes, starter.edges, starterName, false);
     setRun(undefined);
@@ -1560,12 +1569,12 @@ export function GlitchloomWorkbench() {
         tab.id === activeTabId
           ? {
               ...tab,
-              loom: undefined,
+              graph: undefined,
               sourceTemplateId: "starter",
               snapshot: {
                 nodes: starter.nodes,
                 edges: starter.edges,
-                loomName: starterName,
+                graphName: starterName,
                 isDirty: false,
               },
             }
@@ -1603,7 +1612,7 @@ export function GlitchloomWorkbench() {
   };
 
   const execute = async (requestedTargetIds: string[] = []) => {
-    const graph = serializeGraph(loomName, nodes, edges, frames, edgeRouting);
+    const graph = serializeGraph(graphName, nodes, edges, frames, edgeRouting);
     const submittedFingerprint = semanticExecutionFingerprint(graph);
     const targetNodeIds = [
       ...new Set(requestedTargetIds.filter((nodeId) => nodes.some((node) => node.id === nodeId))),
@@ -1859,12 +1868,12 @@ export function GlitchloomWorkbench() {
           event.preventDefault();
           setContextMenu(undefined);
           setWorkflowMenu(undefined);
-        } else if (loomLibraryOpen) {
+        } else if (graphLibraryOpen) {
           event.preventDefault();
-          setLoomLibraryOpen(false);
-        } else if (loomSaveDialogOpen && !savingLoom) {
+          setGraphLibraryOpen(false);
+        } else if (graphSaveDialogOpen && !savingGraph) {
           event.preventDefault();
-          setLoomSaveDialogOpen(false);
+          setGraphSaveDialogOpen(false);
         } else if (deleteDefinition && !deletingWorkflow) {
           event.preventDefault();
           setDeleteDefinition(undefined);
@@ -1898,7 +1907,7 @@ export function GlitchloomWorkbench() {
         !running &&
         !graphBusy &&
         !saveDialogOpen &&
-        !loomSaveDialogOpen &&
+        !graphSaveDialogOpen &&
         !resetDialogOpen;
       if (
         historyShortcut &&
@@ -1920,13 +1929,13 @@ export function GlitchloomWorkbench() {
         !activeWorkflow &&
         !running &&
         !loadingGraph &&
-        !loomLibraryOpen &&
+        !graphLibraryOpen &&
         !saveDialogOpen &&
-        !loomSaveDialogOpen &&
-        !savingLoom
+        !graphSaveDialogOpen &&
+        !savingGraph
       ) {
         event.preventDefault();
-        requestSaveLoom(event.shiftKey);
+        requestSaveGraph(event.shiftKey);
         return;
       }
       if (
@@ -1935,7 +1944,7 @@ export function GlitchloomWorkbench() {
         !editable &&
         !resetDialogOpen &&
         !saveDialogOpen &&
-        !savingLoom
+        !savingGraph
       ) {
         event.preventDefault();
         selectAllNodes();
@@ -1947,14 +1956,14 @@ export function GlitchloomWorkbench() {
         !editable &&
         !resetDialogOpen &&
         !saveDialogOpen &&
-        !savingLoom &&
+        !savingGraph &&
         selectedNodes.length > 0
       ) {
         event.preventDefault();
         duplicateSelected();
         return;
       }
-      if (commandKey && event.key === "Enter" && !running && !savingLoom && nodes.length > 0) {
+      if (commandKey && event.key === "Enter" && !running && !savingGraph && nodes.length > 0) {
         event.preventDefault();
         void execute();
         return;
@@ -2021,7 +2030,7 @@ export function GlitchloomWorkbench() {
           aggregateTotalCount: aggregate.totalCount,
           activeChildTitle: aggregate.activeChildTitle,
           onToggleCollapsed: () => updateFrame(frame.id, { collapsed: !frame.data.collapsed }),
-          onUpdate: (update: Partial<Pick<LoomFrame["data"], "title" | "color">>) =>
+          onUpdate: (update: Partial<Pick<WorkflowFrame["data"], "title" | "color">>) =>
             updateFrame(frame.id, update),
         },
       };
@@ -2032,6 +2041,8 @@ export function GlitchloomWorkbench() {
       data: {
         ...node.data,
         onUpdateField: (field: string, value: unknown) => updateNodeField(node.id, field, value),
+        onUpdateState: (state: LoomState) => updateLoomState(node.id, state),
+        onOpenEditor: () => setOpenLoomNodeId(node.id),
         executionScopeRole:
           executionScope?.mode !== "targets"
             ? undefined
@@ -2085,45 +2096,45 @@ export function GlitchloomWorkbench() {
   return (
     <div className={cx(styles, "app-shell", afterHours && "is-after-hours")}>
       <WorkbenchTopBar
-        activeLoom={activeLoom}
+        activeGraph={activeGraph}
         activeTabId={activeTabId}
         activeWorkflow={activeWorkflow}
         afterHours={afterHours}
         catalog={catalog}
         graphBusy={graphBusy}
         isDirty={isDirty}
-        loomName={loomName}
+        graphName={graphName}
         nodeCount={nodes.length}
         running={running}
-        savingLoom={savingLoom}
+        savingGraph={savingGraph}
         savingWorkflow={savingWorkflow}
         canRedo={canRedo}
         canUndo={canUndo}
         onRedo={redoDocument}
         onUndo={undoDocument}
         onExecute={() => void execute()}
-        onLoomNameChange={renameLoom}
+        onGraphNameChange={renameGraph}
         onOpenEditSaveDialog={openEditSaveDialog}
         onOpenLibrary={() => {
-          setLoomLibraryError(undefined);
-          setLoomLibraryOpen(true);
+          setGraphLibraryError(undefined);
+          setGraphLibraryOpen(true);
         }}
-        onRequestSaveLoom={requestSaveLoom}
+        onRequestSaveGraph={requestSaveGraph}
         onRequestStarterReset={requestStarterReset}
         onToggleAfterHours={() => setAfterHours((current) => !current)}
       />
 
       <GraphTabs
-        activeLoom={activeLoom}
+        activeGraph={activeGraph}
         activeTabId={activeTabId}
         activeWorkflow={activeWorkflow}
         canOpenGraph={Boolean(catalog)}
         graphBusy={graphBusy}
         isDirty={isDirty}
-        loomName={loomName}
+        graphName={graphName}
         running={running}
         tabs={tabs}
-        onOpenLibrary={() => setLoomLibraryOpen(true)}
+        onOpenLibrary={() => setGraphLibraryOpen(true)}
         onRequestCloseTab={requestCloseTab}
         onSwitchTab={switchGraphTab}
       />
@@ -2178,7 +2189,7 @@ export function GlitchloomWorkbench() {
           runActivity={activity}
           runError={runError}
           running={running}
-          savingLoom={savingLoom}
+          savingGraph={savingGraph}
           isValidConnection={isValidConnection}
           onClearExecutionScope={() => setExecutionScope(undefined)}
           onConnect={onConnect}
@@ -2287,6 +2298,11 @@ export function GlitchloomWorkbench() {
               }))
             }
             onUpdateControlPort={updateControlPort}
+            onOpenNodeEditor={() => {
+              if (selectedNode?.data.definition.editor === "loom") {
+                setOpenLoomNodeId(selectedNode.id);
+              }
+            }}
             onDelete={() => deleteSelected()}
             onClose={() => setInspectorOpen(false)}
           />
@@ -2309,7 +2325,7 @@ export function GlitchloomWorkbench() {
             onDoubleClick={() => resetPanelWidth("inspector")}
           />
         )}
-        {savingLoom && <div className={cx(styles, "edit-lock-overlay")} aria-hidden="true" />}
+        {savingGraph && <div className={cx(styles, "edit-lock-overlay")} aria-hidden="true" />}
       </main>
       {workflowMenu && (
         <WorkflowDefinitionMenu
@@ -2319,19 +2335,19 @@ export function GlitchloomWorkbench() {
           onEdit={(definition) => void openWorkflowEditor(definition)}
         />
       )}
-      {loomLibraryOpen && (
+      {graphLibraryOpen && (
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
         // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Close control
         <div
           className={cx(styles, "dialog-backdrop")}
-          onClick={() => !loadingDocumentId && setLoomLibraryOpen(false)}
+          onClick={() => !loadingDocumentId && setGraphLibraryOpen(false)}
         >
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
-            className={cx(styles, "loom-library-dialog")}
+            className={cx(styles, "graph-library-dialog")}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="loom-library-title"
+            aria-labelledby="graph-library-title"
             onClick={(event) => event.stopPropagation()}
           >
             <div className={cx(styles, "workflow-dialog-heading")}>
@@ -2339,38 +2355,38 @@ export function GlitchloomWorkbench() {
                 <FolderOpen size={18} />
               </span>
               <div>
-                <h2 id="loom-library-title">Open a loom</h2>
+                <h2 id="graph-library-title">Open a graph</h2>
                 <p>
-                  Saved looms reopen as editable documents. Templates and copies always start in a
+                  Saved graphs reopen as editable documents. Templates and copies always start in a
                   new unsaved tab.
                 </p>
               </div>
             </div>
-            <div className={cx(styles, "loom-library-scroll")}>
-              <section className={cx(styles, "loom-library-section")}>
-                <div className={cx(styles, "loom-library-section-heading")}>
+            <div className={cx(styles, "graph-library-scroll")}>
+              <section className={cx(styles, "graph-library-section")}>
+                <div className={cx(styles, "graph-library-section-heading")}>
                   <strong>Templates</strong>
                   <span>read-only starting points</span>
                 </div>
-                <div className={cx(styles, "loom-library-list")}>
+                <div className={cx(styles, "graph-library-list")}>
                   <button
                     type="button"
-                    className={cx(styles, "loom-library-item")}
+                    className={cx(styles, "graph-library-item")}
                     onClick={openStarterCopy}
                     disabled={Boolean(loadingDocumentId) || !catalog}
                   >
                     <span>
-                      <strong>Talkie perturbation pair</strong>
-                      <small>Built-in starter · opens as a copy</small>
+                      <strong>Loom workshop</strong>
+                      <small>Endpoint, model, Loom, and preview · opens as a copy</small>
                     </span>
                     <FilePlus2 size={15} />
                   </button>
-                  {loomTemplates.map((template) => (
+                  {graphTemplates.map((template) => (
                     <button
                       type="button"
-                      className={cx(styles, "loom-library-item")}
+                      className={cx(styles, "graph-library-item")}
                       key={template.id}
-                      onClick={() => void openLoomTemplate(template.id)}
+                      onClick={() => void openGraphTemplate(template.id)}
                       disabled={Boolean(loadingDocumentId)}
                     >
                       <span>
@@ -2389,64 +2405,69 @@ export function GlitchloomWorkbench() {
                   ))}
                 </div>
               </section>
-              <section className={cx(styles, "loom-library-section")}>
-                <div className={cx(styles, "loom-library-section-heading")}>
-                  <strong>Saved looms</strong>
+              <section className={cx(styles, "graph-library-section")}>
+                <div className={cx(styles, "graph-library-section-heading")}>
+                  <strong>Saved graphs</strong>
                   <span>
-                    {looms.length} local document{looms.length === 1 ? "" : "s"}
+                    {graphs.length} local document{graphs.length === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className={cx(styles, "loom-library-list")}>
-                  {looms.map((loom) => (
-                    <div className={cx(styles, "loom-library-item saved-loom-item")} key={loom.id}>
+                <div className={cx(styles, "graph-library-list")}>
+                  {graphs.map((graph) => (
+                    <div
+                      className={cx(styles, "graph-library-item saved-graph-item")}
+                      key={graph.id}
+                    >
                       <button
                         type="button"
-                        onClick={() => void openSavedLoom(loom.id)}
+                        onClick={() => void openSavedGraph(graph.id)}
                         disabled={Boolean(loadingDocumentId)}
                       >
-                        <strong>{loom.name}</strong>
+                        <strong>{graph.name}</strong>
                         <small>
-                          r{loom.revision} · {loom.node_count} node
-                          {loom.node_count === 1 ? "" : "s"} · updated{" "}
-                          {new Date(loom.updated_at).toLocaleString()}
+                          r{graph.revision} · {graph.node_count} node
+                          {graph.node_count === 1 ? "" : "s"} · updated{" "}
+                          {new Date(graph.updated_at).toLocaleString()}
                         </small>
                       </button>
                       <button
                         type="button"
-                        className={cx(styles, "loom-copy-button")}
-                        onClick={() => void openSavedLoom(loom.id, true)}
+                        className={cx(styles, "graph-copy-button")}
+                        onClick={() => void openSavedGraph(graph.id, true)}
                         disabled={Boolean(loadingDocumentId)}
                         title="Open as an unsaved copy"
-                        aria-label={`Open ${loom.name} as a copy`}
+                        aria-label={`Open ${graph.name} as a copy`}
                       >
-                        {loadingDocumentId === `loom:${loom.id}:copy` ? (
+                        {loadingDocumentId === `graph:${graph.id}:copy` ? (
                           <LoaderCircle className={cx(styles, "spin-icon")} size={14} />
                         ) : (
                           <Copy size={14} />
                         )}
                       </button>
-                      {loadingDocumentId === `loom:${loom.id}:open` && (
+                      {loadingDocumentId === `graph:${graph.id}:open` && (
                         <LoaderCircle
-                          className={cx(styles, "spin-icon loom-open-spinner")}
+                          className={cx(styles, "spin-icon graph-open-spinner")}
                           size={14}
                         />
                       )}
                     </div>
                   ))}
-                  {looms.length === 0 && (
+                  {graphs.length === 0 && (
                     <p className={cx(styles, "empty-copy")}>
-                      No saved looms yet. Save the current tab to create one.
+                      No saved graphs yet. Save the current tab to create one.
                     </p>
                   )}
                 </div>
               </section>
             </div>
-            {loomLibraryError && <p className={cx(styles, "workflow-error")}>{loomLibraryError}</p>}
+            {graphLibraryError && (
+              <p className={cx(styles, "workflow-error")}>{graphLibraryError}</p>
+            )}
             <div className={cx(styles, "workflow-dialog-actions")}>
               <button
                 type="button"
                 className={cx(styles, "secondary-button")}
-                onClick={() => setLoomLibraryOpen(false)}
+                onClick={() => setGraphLibraryOpen(false)}
                 disabled={Boolean(loadingDocumentId)}
               >
                 Close
@@ -2455,19 +2476,19 @@ export function GlitchloomWorkbench() {
           </section>
         </div>
       )}
-      {loomSaveDialogOpen && (
+      {graphSaveDialogOpen && (
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal supplements explicit dialog controls
         // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users use the dialog's Cancel control
         <div
           className={cx(styles, "dialog-backdrop")}
-          onClick={() => !savingLoom && setLoomSaveDialogOpen(false)}
+          onClick={() => !savingGraph && setGraphSaveDialogOpen(false)}
         >
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: prevents inner clicks from dismissing the dialog */}
           <section
-            className={cx(styles, "workflow-dialog loom-save-dialog")}
+            className={cx(styles, "workflow-dialog graph-save-dialog")}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="loom-save-title"
+            aria-labelledby="graph-save-title"
             onClick={(event) => event.stopPropagation()}
           >
             <div className={cx(styles, "workflow-dialog-heading")}>
@@ -2475,12 +2496,12 @@ export function GlitchloomWorkbench() {
                 <Save size={18} />
               </span>
               <div>
-                <h2 id="loom-save-title">
-                  {loomSaveAs || activeLoom ? "Save as a new loom" : "Save loom"}
+                <h2 id="graph-save-title">
+                  {graphSaveAs || activeGraph ? "Save as a new graph" : "Save graph"}
                 </h2>
                 <p>
-                  {loomSaveAs
-                    ? "This creates a separate document; the source loom and workflow definitions stay unchanged."
+                  {graphSaveAs
+                    ? "This creates a separate document; the source graph and workflow definitions stay unchanged."
                     : "This tab will become a saved top-level document. Reusable workflows remain separately versioned."}
                 </p>
               </div>
@@ -2488,40 +2509,40 @@ export function GlitchloomWorkbench() {
             <label>
               <span>Name</span>
               <input
-                value={loomSaveName}
-                onChange={(event) => setLoomSaveName(event.target.value)}
+                value={graphSaveName}
+                onChange={(event) => setGraphSaveName(event.target.value)}
                 autoFocus
-                disabled={savingLoom}
+                disabled={savingGraph}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && loomSaveName.trim()) {
+                  if (event.key === "Enter" && graphSaveName.trim()) {
                     event.preventDefault();
-                    void persistCurrentLoom(loomSaveName, { createNew: true });
+                    void persistCurrentGraph(graphSaveName, { createNew: true });
                   }
                 }}
               />
             </label>
-            {loomSaveError && <p className={cx(styles, "workflow-error")}>{loomSaveError}</p>}
+            {graphSaveError && <p className={cx(styles, "workflow-error")}>{graphSaveError}</p>}
             <div className={cx(styles, "workflow-dialog-actions")}>
               <button
                 type="button"
                 className={cx(styles, "secondary-button")}
-                onClick={() => setLoomSaveDialogOpen(false)}
-                disabled={savingLoom}
+                onClick={() => setGraphSaveDialogOpen(false)}
+                disabled={savingGraph}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className={cx(styles, "run-button")}
-                onClick={() => void persistCurrentLoom(loomSaveName, { createNew: true })}
-                disabled={savingLoom || !loomSaveName.trim()}
+                onClick={() => void persistCurrentGraph(graphSaveName, { createNew: true })}
+                disabled={savingGraph || !graphSaveName.trim()}
               >
-                {savingLoom ? (
+                {savingGraph ? (
                   <LoaderCircle className={cx(styles, "spin-icon")} size={15} />
                 ) : (
                   <Save size={15} />
                 )}
-                {savingLoom ? "Saving…" : "Save loom"}
+                {savingGraph ? "Saving…" : "Save graph"}
               </button>
             </div>
           </section>
@@ -2794,8 +2815,8 @@ export function GlitchloomWorkbench() {
               <p>
                 Closing “
                 {closeTabId === activeTabId
-                  ? loomName
-                  : tabs.find((tab) => tab.id === closeTabId)?.snapshot.loomName}
+                  ? graphName
+                  : tabs.find((tab) => tab.id === closeTabId)?.snapshot.graphName}
                 ” will discard changes made since it was opened or last saved.
               </p>
             </div>
@@ -2835,21 +2856,29 @@ export function GlitchloomWorkbench() {
           </button>
         </div>
       )}
-      {loomNotice && !loomSaveDialogOpen && (
-        <div className={cx(styles, "workflow-toast loom-toast")} role="status">
+      {graphNotice && !graphSaveDialogOpen && (
+        <div className={cx(styles, "workflow-toast graph-toast")} role="status">
           <div>
-            <strong>Loom document</strong>
-            <span>{loomNotice}</span>
+            <strong>Graph document</strong>
+            <span>{graphNotice}</span>
           </div>
           <button
             type="button"
             className={cx(styles, "undo-dismiss")}
-            onClick={() => setLoomNotice(undefined)}
-            aria-label="Dismiss loom notice"
+            onClick={() => setGraphNotice(undefined)}
+            aria-label="Dismiss graph notice"
           >
             <X size={13} />
           </button>
         </div>
+      )}
+      {openLoomNodeId && nodes.find((node) => node.id === openLoomNodeId)?.data.state && (
+        <LoomEditor
+          graph={serializeGraph(graphName, nodes, edges, frames, edgeRouting)}
+          node={nodes.find((node) => node.id === openLoomNodeId)!}
+          onChange={(state) => updateLoomState(openLoomNodeId, state)}
+          onClose={() => setOpenLoomNodeId(undefined)}
+        />
       )}
     </div>
   );

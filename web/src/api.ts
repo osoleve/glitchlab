@@ -2,16 +2,16 @@ import type { paths } from "./generated/api";
 import { parseRunEventStream, type RunStreamEvent } from "./runStream";
 import type {
   CatalogResponse,
-  DeleteLoomResponse,
+  DeleteGraphDocumentResponse,
   DeleteWorkflowResponse,
+  GraphDocument,
+  GraphDocumentDraft,
+  GraphDocumentSummary,
   GraphSpec,
-  LoadLoomResponse,
-  LoadLoomTemplateResponse,
+  GraphTemplateSummary,
+  LoadGraphDocumentResponse,
+  LoadGraphTemplateResponse,
   LoadWorkflowResponse,
-  LoomDraft,
-  LoomSpec,
-  LoomSummary,
-  LoomTemplateSummary,
   NodeRunResult,
   RunErrorDetail,
   RunResponse,
@@ -41,14 +41,14 @@ type RequestPayload<Operation> = Operation extends {
   : never;
 
 type CatalogPayload = SuccessPayload<paths["/api/catalog"]["get"], 200>;
-type LoomListPayload = SuccessPayload<paths["/api/looms"]["get"], 200>;
-type CreateLoomPayload = SuccessPayload<paths["/api/looms"]["post"], 201>;
-type LoadLoomPayload = SuccessPayload<paths["/api/looms/{loom_id}"]["get"], 200>;
-type UpdateLoomPayload = SuccessPayload<paths["/api/looms/{loom_id}"]["put"], 200>;
-type DeleteLoomPayload = SuccessPayload<paths["/api/looms/{loom_id}"]["delete"], 200>;
-type LoomTemplateListPayload = SuccessPayload<paths["/api/loom-templates"]["get"], 200>;
-type LoadLoomTemplatePayload = SuccessPayload<
-  paths["/api/loom-templates/{template_id}"]["get"],
+type GraphListPayload = SuccessPayload<paths["/api/graphs"]["get"], 200>;
+type CreateGraphPayload = SuccessPayload<paths["/api/graphs"]["post"], 201>;
+type LoadGraphPayload = SuccessPayload<paths["/api/graphs/{graph_id}"]["get"], 200>;
+type UpdateGraphPayload = SuccessPayload<paths["/api/graphs/{graph_id}"]["put"], 200>;
+type DeleteGraphPayload = SuccessPayload<paths["/api/graphs/{graph_id}"]["delete"], 200>;
+type GraphTemplateListPayload = SuccessPayload<paths["/api/graph-templates"]["get"], 200>;
+type LoadGraphTemplatePayload = SuccessPayload<
+  paths["/api/graph-templates/{template_id}"]["get"],
   200
 >;
 type RunPayload = SuccessPayload<paths["/api/runs"]["post"], 200>;
@@ -64,8 +64,8 @@ type UpdateWorkflowPayload = SuccessPayload<
 type DeleteWorkflowPayload = SuccessPayload<paths["/api/workflows/{workflow_id}"]["delete"], 200>;
 
 type RunRequestPayload = RequestPayload<paths["/api/runs"]["post"]>;
-type CreateLoomRequestPayload = RequestPayload<paths["/api/looms"]["post"]>;
-type UpdateLoomRequestPayload = RequestPayload<paths["/api/looms/{loom_id}"]["put"]>;
+type CreateGraphRequestPayload = RequestPayload<paths["/api/graphs"]["post"]>;
+type UpdateGraphRequestPayload = RequestPayload<paths["/api/graphs/{graph_id}"]["put"]>;
 type SaveWorkflowRequestPayload = RequestPayload<paths["/api/workflows"]["post"]>;
 type UpdateWorkflowRequestPayload = RequestPayload<
   paths["/api/workflows/{workflow_id}/versions"]["post"]
@@ -107,7 +107,7 @@ function isGraphSpec(value: unknown): value is GraphSpec {
   );
 }
 
-function isLoomSpec(value: unknown): value is LoomSpec {
+function isGraphDocument(value: unknown): value is GraphDocument {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
@@ -119,7 +119,7 @@ function isLoomSpec(value: unknown): value is LoomSpec {
   );
 }
 
-function isLoomSummary(value: unknown): value is LoomSummary {
+function isGraphDocumentSummary(value: unknown): value is GraphDocumentSummary {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
@@ -129,22 +129,24 @@ function isLoomSummary(value: unknown): value is LoomSummary {
   );
 }
 
-function isLoomListPayload(value: unknown): value is LoomListPayload {
-  return isRecord(value) && Array.isArray(value.looms) && value.looms.every(isLoomSummary);
+function isGraphListPayload(value: unknown): value is GraphListPayload {
+  return (
+    isRecord(value) && Array.isArray(value.graphs) && value.graphs.every(isGraphDocumentSummary)
+  );
 }
 
-function isCreateLoomPayload(value: unknown): value is CreateLoomPayload &
-  UpdateLoomPayload & {
-    loom: LoomSpec;
+function isCreateGraphPayload(value: unknown): value is CreateGraphPayload &
+  UpdateGraphPayload & {
+    graph: GraphDocument;
   } {
-  return isRecord(value) && isLoomSpec(value.loom);
+  return isRecord(value) && isGraphDocument(value.graph);
 }
 
-function isLoadLoomPayload(value: unknown): value is LoadLoomPayload & LoadLoomResponse {
-  return isRecord(value) && isLoomSpec(value.loom) && Array.isArray(value.definitions);
+function isLoadGraphPayload(value: unknown): value is LoadGraphPayload & LoadGraphDocumentResponse {
+  return isRecord(value) && isGraphDocument(value.graph) && Array.isArray(value.definitions);
 }
 
-function isDeleteLoomPayload(value: unknown): value is DeleteLoomPayload {
+function isDeleteGraphPayload(value: unknown): value is DeleteGraphPayload {
   return (
     isRecord(value) &&
     isRecord(value.deleted) &&
@@ -155,7 +157,7 @@ function isDeleteLoomPayload(value: unknown): value is DeleteLoomPayload {
   );
 }
 
-function isLoomTemplateListPayload(value: unknown): value is LoomTemplateListPayload {
+function isGraphTemplateListPayload(value: unknown): value is GraphTemplateListPayload {
   return (
     isRecord(value) &&
     Array.isArray(value.templates) &&
@@ -169,9 +171,9 @@ function isLoomTemplateListPayload(value: unknown): value is LoomTemplateListPay
   );
 }
 
-function isLoadLoomTemplatePayload(
+function isLoadGraphTemplatePayload(
   value: unknown,
-): value is LoadLoomTemplatePayload & LoadLoomTemplateResponse {
+): value is LoadGraphTemplatePayload & LoadGraphTemplateResponse {
   return (
     isRecord(value) &&
     isRecord(value.template) &&
@@ -367,83 +369,83 @@ async function documentResponseError(response: Response, fallback: string): Prom
   return new Error(detail ?? `${fallback} (${response.status}).`);
 }
 
-export async function fetchLooms(): Promise<LoomSummary[]> {
-  const response = await fetch("/api/looms");
+export async function fetchGraphs(): Promise<GraphDocumentSummary[]> {
+  const response = await fetch("/api/graphs");
   if (!response.ok) {
-    throw await documentResponseError(response, "Loom list failed");
+    throw await documentResponseError(response, "Graph list failed");
   }
-  const payload = await decodeJson(response, "Loom list request", isLoomListPayload);
-  return payload.looms;
+  const payload = await decodeJson(response, "Graph list request", isGraphListPayload);
+  return payload.graphs;
 }
 
-export async function createLoom(draft: LoomDraft): Promise<LoomSpec> {
-  const body = draft satisfies CreateLoomRequestPayload;
-  const response = await fetch("/api/looms", {
+export async function createGraph(draft: GraphDocumentDraft): Promise<GraphDocument> {
+  const body = draft satisfies CreateGraphRequestPayload;
+  const response = await fetch("/api/graphs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw await documentResponseError(response, "Loom save failed");
+    throw await documentResponseError(response, "Graph save failed");
   }
-  const payload = await decodeJson(response, "Loom save request", isCreateLoomPayload);
-  return payload.loom;
+  const payload = await decodeJson(response, "Graph save request", isCreateGraphPayload);
+  return payload.graph;
 }
 
-export async function fetchLoom(loomId: string): Promise<LoadLoomResponse> {
-  const response = await fetch(`/api/looms/${encodeURIComponent(loomId)}`);
+export async function fetchGraph(graphId: string): Promise<LoadGraphDocumentResponse> {
+  const response = await fetch(`/api/graphs/${encodeURIComponent(graphId)}`);
   if (!response.ok) {
-    throw await documentResponseError(response, "Loom load failed");
+    throw await documentResponseError(response, "Graph load failed");
   }
-  return decodeJson(response, "Loom load request", isLoadLoomPayload);
+  return decodeJson(response, "Graph load request", isLoadGraphPayload);
 }
 
-export async function updateLoom(
-  loomId: string,
+export async function updateGraph(
+  graphId: string,
   expectedRevision: number,
   graph: GraphSpec,
-): Promise<LoomSpec> {
+): Promise<GraphDocument> {
   const body = {
     graph,
     expected_revision: expectedRevision,
-  } satisfies UpdateLoomRequestPayload;
-  const response = await fetch(`/api/looms/${encodeURIComponent(loomId)}`, {
+  } satisfies UpdateGraphRequestPayload;
+  const response = await fetch(`/api/graphs/${encodeURIComponent(graphId)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw await documentResponseError(response, "Loom update failed");
+    throw await documentResponseError(response, "Graph update failed");
   }
-  const payload = await decodeJson(response, "Loom update request", isCreateLoomPayload);
-  return payload.loom;
+  const payload = await decodeJson(response, "Graph update request", isCreateGraphPayload);
+  return payload.graph;
 }
 
-export async function deleteLoom(loomId: string): Promise<DeleteLoomResponse> {
-  const response = await fetch(`/api/looms/${encodeURIComponent(loomId)}`, {
+export async function deleteGraph(graphId: string): Promise<DeleteGraphDocumentResponse> {
+  const response = await fetch(`/api/graphs/${encodeURIComponent(graphId)}`, {
     method: "DELETE",
   });
   if (!response.ok) {
-    throw await documentResponseError(response, "Loom delete failed");
+    throw await documentResponseError(response, "Graph delete failed");
   }
-  return decodeJson(response, "Loom delete request", isDeleteLoomPayload);
+  return decodeJson(response, "Graph delete request", isDeleteGraphPayload);
 }
 
-export async function fetchLoomTemplates(): Promise<LoomTemplateSummary[]> {
-  const response = await fetch("/api/loom-templates");
+export async function fetchGraphTemplates(): Promise<GraphTemplateSummary[]> {
+  const response = await fetch("/api/graph-templates");
   if (!response.ok) {
     throw await documentResponseError(response, "Template list failed");
   }
-  const payload = await decodeJson(response, "Template list request", isLoomTemplateListPayload);
+  const payload = await decodeJson(response, "Template list request", isGraphTemplateListPayload);
   return payload.templates;
 }
 
-export async function fetchLoomTemplate(templateId: string): Promise<LoadLoomTemplateResponse> {
-  const response = await fetch(`/api/loom-templates/${encodeURIComponent(templateId)}`);
+export async function fetchGraphTemplate(templateId: string): Promise<LoadGraphTemplateResponse> {
+  const response = await fetch(`/api/graph-templates/${encodeURIComponent(templateId)}`);
   if (!response.ok) {
     throw await documentResponseError(response, "Template load failed");
   }
-  return decodeJson(response, "Template load request", isLoadLoomTemplatePayload);
+  return decodeJson(response, "Template load request", isLoadGraphTemplatePayload);
 }
 
 export async function saveWorkflow(draft: WorkflowDraft): Promise<SaveWorkflowResponse> {

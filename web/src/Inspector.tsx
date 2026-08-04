@@ -1,4 +1,4 @@
-import { ChevronRight, Gauge, PanelRightClose, Trash2 } from "lucide-react";
+import { ChevronRight, Gauge, GitBranch, PanelRightClose, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorBoundary, PreviewErrorFallback } from "./ErrorBoundary";
 import styles from "./Inspector.module.css";
@@ -8,22 +8,23 @@ import type {
   ControlPortMode,
   FieldDefinition,
   GlitchlingDescriptor,
-  LoomEdge,
-  LoomNode,
   NodeRunResult,
   RunResponse,
+  WorkflowEdge,
+  WorkflowNode,
 } from "./types";
 
 interface InspectorProps {
-  selectedNode?: LoomNode;
-  nodes: LoomNode[];
-  edges: LoomEdge[];
+  selectedNode?: WorkflowNode;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
   glitchlings: GlitchlingDescriptor[];
   run?: RunResponse;
   error?: string;
   onUpdateTitle: (value: string) => void;
   onUpdateField: (field: string, value: unknown) => void;
   onUpdateControlPort: (field: string, mode?: ControlPortMode) => void;
+  onOpenNodeEditor?: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -105,7 +106,7 @@ function ResultView({
 }) {
   const value = result?.outputs ?? terminal;
   if (!value) {
-    return <p className={cx(styles, "empty-copy")}>Run the loom to inspect this node’s output.</p>;
+    return <p className={cx(styles, "empty-copy")}>Run the graph to inspect this node’s output.</p>;
   }
   return (
     <div className={cx(styles, "result-block")}>
@@ -122,9 +123,9 @@ function ResultView({
 }
 
 function collectionSourceLabels(
-  selectedNode: LoomNode | undefined,
-  nodes: LoomNode[],
-  edges: LoomEdge[],
+  selectedNode: WorkflowNode | undefined,
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
 ): string[] | undefined {
   if (!selectedNode) return undefined;
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -162,6 +163,7 @@ export function Inspector({
   onUpdateTitle,
   onUpdateField,
   onUpdateControlPort,
+  onOpenNodeEditor,
   onDelete,
   onClose,
 }: InspectorProps) {
@@ -192,7 +194,7 @@ export function Inspector({
       <div className={cx(styles, "inspector-heading")}>
         <div>
           <span>Inspector</span>
-          <small>{selectedNode?.data.title ?? "Loom telemetry"}</small>
+          <small>{selectedNode?.data.title ?? "Graph telemetry"}</small>
         </div>
         <button
           type="button"
@@ -397,6 +399,15 @@ export function Inspector({
                   </details>
                 )}
               </section>
+              {selectedNode.data.definition.editor === "loom" && (
+                <button
+                  type="button"
+                  className={cx(styles, "open-node-editor-button")}
+                  onClick={onOpenNodeEditor}
+                >
+                  <GitBranch size={15} /> Open loom
+                </button>
+              )}
               <button type="button" className={cx(styles, "delete-button")} onClick={onDelete}>
                 <Trash2 size={15} /> Delete node
               </button>
@@ -416,7 +427,7 @@ export function Inspector({
           <div className={cx(styles, "empty-inspector-mark")} aria-hidden="true">
             <Gauge size={18} />
           </div>
-          <h2>Loom telemetry</h2>
+          <h2>Graph telemetry</h2>
           <p className={cx(styles, "empty-copy")}>
             Select an instrument to tune its controls and inspect its latest output.
           </p>
@@ -430,7 +441,7 @@ export function Inspector({
                   ? `${run.manifest.scope.target_node_ids.length} target${
                       run.manifest.scope.target_node_ids.length === 1 ? "" : "s"
                     }`
-                  : "full loom"}
+                  : "full graph"}
               </strong>
             </div>
           )}

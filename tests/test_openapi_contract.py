@@ -32,17 +32,17 @@ def test_success_responses_reference_specific_wire_models() -> None:
     expected = {
         ("/api/health", "get", "200"): "HealthResponse",
         ("/api/catalog", "get", "200"): "CatalogResponse",
-        ("/api/looms", "get", "200"): "LoomListResponse",
-        ("/api/looms", "post", "201"): "LoomResponse",
-        ("/api/looms/{loom_id}", "get", "200"): "LoadLoomResponse",
-        ("/api/looms/{loom_id}", "put", "200"): "LoomResponse",
-        ("/api/looms/{loom_id}", "delete", "200"): "DeleteLoomResponse",
-        ("/api/loom-templates", "get", "200"): "LoomTemplateListResponse",
+        ("/api/graphs", "get", "200"): "GraphDocumentListResponse",
+        ("/api/graphs", "post", "201"): "GraphDocumentResponse",
+        ("/api/graphs/{graph_id}", "get", "200"): "LoadGraphDocumentResponse",
+        ("/api/graphs/{graph_id}", "put", "200"): "GraphDocumentResponse",
+        ("/api/graphs/{graph_id}", "delete", "200"): "DeleteGraphDocumentResponse",
+        ("/api/graph-templates", "get", "200"): "GraphTemplateListResponse",
         (
-            "/api/loom-templates/{template_id}",
+            "/api/graph-templates/{template_id}",
             "get",
             "200",
-        ): "LoadLoomTemplateResponse",
+        ): "LoadGraphTemplateResponse",
         ("/api/workflows", "get", "200"): "WorkflowListResponse",
         ("/api/workflows", "post", "201"): "SaveWorkflowResponse",
         (
@@ -75,7 +75,7 @@ def test_generated_declarations_cover_paths_and_wire_models() -> None:
     generated = GENERATED_TYPES.read_text(encoding="utf-8")
 
     assert '"/api/runs"' in generated
-    assert '"/api/looms/{loom_id}"' in generated
+    assert '"/api/graphs/{graph_id}"' in generated
     assert '"/api/workflows/{workflow_id}/versions/{version}"' in generated
     assert "CatalogResponse:" in generated
     assert "RunErrorResponse:" in generated

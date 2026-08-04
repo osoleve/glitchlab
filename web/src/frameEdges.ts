@@ -1,10 +1,10 @@
-import type { LoomEdge, LoomNode } from "./types";
+import type { WorkflowEdge, WorkflowNode } from "./types";
 
 export function collapseFrameEdges(
-  edges: LoomEdge[],
-  nodes: LoomNode[],
+  edges: WorkflowEdge[],
+  nodes: WorkflowNode[],
   collapsedFrameIds: ReadonlySet<string>,
-): LoomEdge[] {
+): WorkflowEdge[] {
   const parentIds = new Map(nodes.map((node) => [node.id, node.parentId]));
   return edges.flatMap((edge) => {
     const sourceParent = parentIds.get(edge.source);

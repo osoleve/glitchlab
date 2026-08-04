@@ -32,6 +32,7 @@ FieldControl = Literal[
     "select",
     "json",
 ]
+NodeEditor = Literal["loom"]
 
 
 class PortDefinition(BaseModel):
@@ -87,6 +88,10 @@ class NodeDefinition(BaseModel):
     inputs: list[PortDefinition]
     outputs: list[PortDefinition]
     fields: list[FieldDefinition]
+    editor: NodeEditor | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
     workflow: WorkflowReference | None = Field(
         default=None,
         exclude_if=lambda value: value is None,
@@ -168,6 +173,100 @@ class GraphPresentation(BaseModel):
     frames: list[FramePresentation] = Field(default_factory=list)
 
 
+class LoomRunReference(BaseModel):
+    """Compact graph-run identity retained with one generated Loom entry."""
+
+    run_id: str
+    graph_digest: str
+    finished_at: str
+
+
+class LoomEntry(BaseModel):
+    """One ordered text segment in an embedded branching Loom."""
+
+    id: str
+    parent_id: str | None = None
+    text: str = ""
+    source: Literal["human", "model", "edited"] = "human"
+    created_at: str
+    updated_at: str | None = None
+    completion: dict[str, Any] | None = None
+    run: LoomRunReference | None = None
+
+
+class LoomState(BaseModel):
+    """Validated tree state owned by a Loom workflow node."""
+
+    kind: Literal["loom"] = "loom"
+    version: Literal[1] = 1
+    entries: list[LoomEntry]
+    selected_id: str
+
+    @model_validator(mode="after")
+    def validate_tree(self) -> LoomState:
+        """Require one connected, acyclic tree with a valid selected entry."""
+
+        by_id = {entry.id: entry for entry in self.entries}
+        if len(by_id) != len(self.entries):
+            raise ValueError("Loom entry IDs must be unique.")
+        if any(not entry_id for entry_id in by_id):
+            raise ValueError("Loom entry IDs cannot be empty.")
+        if self.selected_id not in by_id:
+            raise ValueError("The selected Loom entry does not exist.")
+
+        roots = [entry for entry in self.entries if entry.parent_id is None]
+        if len(roots) != 1:
+            raise ValueError("A Loom must contain exactly one root entry.")
+        for entry in self.entries:
+            if entry.parent_id is not None and entry.parent_id not in by_id:
+                raise ValueError(
+                    f"Loom entry {entry.id!r} references missing parent {entry.parent_id!r}."
+                )
+            if entry.parent_id == entry.id:
+                raise ValueError(f"Loom entry {entry.id!r} cannot parent itself.")
+
+        visited: set[str] = set()
+        visiting: set[str] = set()
+        children: dict[str, list[str]] = {entry_id: [] for entry_id in by_id}
+        for entry in self.entries:
+            if entry.parent_id is not None:
+                children[entry.parent_id].append(entry.id)
+
+        def visit(entry_id: str) -> None:
+            if entry_id in visiting:
+                raise ValueError("Loom entries cannot contain a cycle.")
+            if entry_id in visited:
+                return
+            visiting.add(entry_id)
+            for child_id in children[entry_id]:
+                visit(child_id)
+            visiting.remove(entry_id)
+            visited.add(entry_id)
+
+        visit(roots[0].id)
+        if len(visited) != len(self.entries):
+            raise ValueError("Every Loom entry must descend from its root.")
+        return self
+
+    def selected_entry(self) -> LoomEntry:
+        """Return the currently selected text segment."""
+
+        return next(entry for entry in self.entries if entry.id == self.selected_id)
+
+    def selected_text(self) -> str:
+        """Return the exact text along the path from the root to the selection."""
+
+        by_id = {entry.id: entry for entry in self.entries}
+        segments: list[str] = []
+        current = by_id[self.selected_id]
+        while True:
+            segments.append(current.text)
+            if current.parent_id is None:
+                break
+            current = by_id[current.parent_id]
+        return "".join(reversed(segments))
+
+
 class GraphNode(BaseModel):
     """A configured node in a Glitchloom graph."""
 
@@ -175,6 +274,10 @@ class GraphNode(BaseModel):
     kind: str
     title: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
+    state: LoomState | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
     control_ports: dict[str, ControlPortMode] = Field(default_factory=dict)
     position: Position = Field(default_factory=Position)
 
@@ -192,7 +295,7 @@ class GraphEdge(BaseModel):
 class GraphSpec(BaseModel):
     """Serializable graph submitted for execution."""
 
-    name: str = "Untitled loom"
+    name: str = "Untitled graph"
     nodes: list[GraphNode]
     edges: list[GraphEdge]
     presentation: GraphPresentation = Field(default_factory=GraphPresentation)
@@ -239,19 +342,19 @@ class RunRequest(BaseModel):
     scope: RunScope = Field(default_factory=RunScope)
 
 
-class LoomDraft(BaseModel):
+class GraphDocumentDraft(BaseModel):
     """An editable top-level graph before document identity is assigned."""
 
     graph: GraphSpec
 
 
-class LoomUpdate(LoomDraft):
-    """A guarded update to an existing mutable loom document."""
+class GraphDocumentUpdate(GraphDocumentDraft):
+    """A guarded update to an existing mutable graph document."""
 
     expected_revision: int = Field(ge=1)
 
 
-class LoomSpec(LoomDraft):
+class GraphDocument(GraphDocumentDraft):
     """A mutable top-level graph document stored independently of workflows."""
 
     id: str
@@ -261,8 +364,8 @@ class LoomSpec(LoomDraft):
     updated_at: str
 
 
-class LoomSummary(BaseModel):
-    """Compact metadata used by the saved-loom picker."""
+class GraphDocumentSummary(BaseModel):
+    """Compact metadata used by the saved-graph picker."""
 
     id: str
     name: str
@@ -273,14 +376,14 @@ class LoomSummary(BaseModel):
     node_count: int
 
 
-class LoomTemplate(BaseModel):
+class GraphTemplate(BaseModel):
     """A checked-in graph example exposed as a read-only starting point."""
 
     id: str
     graph: GraphSpec
 
 
-class LoomTemplateSummary(BaseModel):
+class GraphTemplateSummary(BaseModel):
     """Compact metadata for the template picker."""
 
     id: str
@@ -288,39 +391,39 @@ class LoomTemplateSummary(BaseModel):
     node_count: int
 
 
-class LoomListResponse(BaseModel):
-    """Saved mutable loom summaries."""
+class GraphDocumentListResponse(BaseModel):
+    """Saved mutable graph summaries."""
 
-    looms: list[LoomSummary]
-
-
-class LoomResponse(BaseModel):
-    """Envelope returned after creating or updating a loom."""
-
-    loom: LoomSpec
+    graphs: list[GraphDocumentSummary]
 
 
-class LoadLoomResponse(LoomResponse):
-    """A saved loom plus exact catalog definitions needed to render it."""
+class GraphDocumentResponse(BaseModel):
+    """Envelope returned after creating or updating a graph."""
+
+    graph: GraphDocument
+
+
+class LoadGraphDocumentResponse(GraphDocumentResponse):
+    """A saved graph plus exact catalog definitions needed to render it."""
 
     definitions: list[NodeDefinition]
 
 
-class LoomTemplateListResponse(BaseModel):
+class GraphTemplateListResponse(BaseModel):
     """Checked-in graph template summaries."""
 
-    templates: list[LoomTemplateSummary]
+    templates: list[GraphTemplateSummary]
 
 
-class LoadLoomTemplateResponse(BaseModel):
+class LoadGraphTemplateResponse(BaseModel):
     """A checked-in template plus exact definitions needed to render it."""
 
-    template: LoomTemplate
+    template: GraphTemplate
     definitions: list[NodeDefinition]
 
 
-class DeletedLoom(BaseModel):
-    """Recoverable deletion metadata for one mutable loom."""
+class DeletedGraphDocument(BaseModel):
+    """Recoverable deletion metadata for one mutable graph."""
 
     id: str
     name: str
@@ -328,10 +431,10 @@ class DeletedLoom(BaseModel):
     recoverable_path: str
 
 
-class DeleteLoomResponse(BaseModel):
-    """Envelope returned after moving a loom to recoverable trash."""
+class DeleteGraphDocumentResponse(BaseModel):
+    """Envelope returned after moving a graph to recoverable trash."""
 
-    deleted: DeletedLoom
+    deleted: DeletedGraphDocument
 
 
 class WorkflowInput(BaseModel):

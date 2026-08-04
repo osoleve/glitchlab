@@ -149,7 +149,7 @@ async def test_run_request_envelope_supports_target_scope(
 
 
 @pytest.mark.asyncio
-async def test_loom_documents_roundtrip_revision_guard_and_trash(
+async def test_graph_documents_roundtrip_revision_guard_and_trash(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -186,11 +186,11 @@ async def test_loom_documents_roundtrip_revision_guard_and_trash(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",
     ) as client:
-        created = await client.post("/api/looms", json={"graph": graph})
-        duplicate_name = await client.post("/api/looms", json={"graph": graph})
-        loom_id = created.json()["loom"]["id"]
-        listed = await client.get("/api/looms")
-        loaded = await client.get(f"/api/looms/{loom_id}")
+        created = await client.post("/api/graphs", json={"graph": graph})
+        duplicate_name = await client.post("/api/graphs", json={"graph": graph})
+        graph_id = created.json()["graph"]["id"]
+        listed = await client.get("/api/graphs")
+        loaded = await client.get(f"/api/graphs/{graph_id}")
         updated_graph = {
             **graph,
             "nodes": [
@@ -202,35 +202,35 @@ async def test_loom_documents_roundtrip_revision_guard_and_trash(
             ],
         }
         updated = await client.put(
-            f"/api/looms/{loom_id}",
+            f"/api/graphs/{graph_id}",
             json={"graph": updated_graph, "expected_revision": 1},
         )
         idempotent = await client.put(
-            f"/api/looms/{loom_id}",
+            f"/api/graphs/{graph_id}",
             json={"graph": updated_graph, "expected_revision": 2},
         )
         stale = await client.put(
-            f"/api/looms/{loom_id}",
+            f"/api/graphs/{graph_id}",
             json={"graph": graph, "expected_revision": 1},
         )
-        deleted = await client.delete(f"/api/looms/{loom_id}")
+        deleted = await client.delete(f"/api/graphs/{graph_id}")
 
     assert created.status_code == 201
     assert duplicate_name.status_code == 201
-    assert duplicate_name.json()["loom"]["id"] != loom_id
-    assert len(listed.json()["looms"]) == 2
+    assert duplicate_name.json()["graph"]["id"] != graph_id
+    assert len(listed.json()["graphs"]) == 2
     assert loaded.status_code == 200
-    assert loaded.json()["loom"]["graph"]["nodes"][0]["title"] == "Keep whitespace"
-    assert loaded.json()["loom"]["graph"]["nodes"][0]["config"]["text"] == (
+    assert loaded.json()["graph"]["graph"]["nodes"][0]["title"] == "Keep whitespace"
+    assert loaded.json()["graph"]["graph"]["nodes"][0]["config"]["text"] == (
         "  semantically spaced  "
     )
     assert {
         definition["kind"] for definition in loaded.json()["definitions"]
     } == {"text_input", "passthrough"}
     assert updated.status_code == 200
-    assert updated.json()["loom"]["revision"] == 2
+    assert updated.json()["graph"]["revision"] == 2
     assert idempotent.status_code == 200
-    assert idempotent.json()["loom"]["revision"] == 2
+    assert idempotent.json()["graph"]["revision"] == 2
     assert stale.status_code == 409
     assert stale.json()["detail"]["current_revision"] == 2
     assert deleted.status_code == 200
@@ -239,7 +239,7 @@ async def test_loom_documents_roundtrip_revision_guard_and_trash(
 
 
 @pytest.mark.asyncio
-async def test_checked_in_loom_templates_are_read_only(
+async def test_checked_in_graph_templates_are_read_only(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -248,9 +248,9 @@ async def test_checked_in_loom_templates_are_read_only(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",
     ) as client:
-        listed = await client.get("/api/loom-templates")
-        loaded = await client.get("/api/loom-templates/talkie-smoke")
-        traversal = await client.get("/api/loom-templates/..%2Fpyproject")
+        listed = await client.get("/api/graph-templates")
+        loaded = await client.get("/api/graph-templates/talkie-smoke")
+        traversal = await client.get("/api/graph-templates/..%2Fpyproject")
 
     assert listed.status_code == 200
     assert any(
@@ -262,7 +262,7 @@ async def test_checked_in_loom_templates_are_read_only(
     )
     assert loaded.json()["template"]["graph"]["nodes"]
     assert traversal.status_code == 404
-    assert not (tmp_path / ".glitchloom" / "looms").exists()
+    assert not (tmp_path / ".glitchloom" / "graphs").exists()
 
 
 @pytest.mark.asyncio

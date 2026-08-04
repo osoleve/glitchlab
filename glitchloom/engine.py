@@ -374,6 +374,16 @@ class GraphEngine:
                 self._node_definition(node)
             except ValueError as exc:
                 raise GraphRunFailure(str(exc), node_id=node.id) from exc
+            if node.kind == "loom" and node.state is None:
+                raise GraphRunFailure(
+                    "Loom nodes require an embedded Loom state.",
+                    node_id=node.id,
+                )
+            if node.kind != "loom" and node.state is not None:
+                raise GraphRunFailure(
+                    f"Node kind {node.kind!r} cannot own Loom state.",
+                    node_id=node.id,
+                )
 
         incoming: dict[str, list[GraphEdge]] = defaultdict(list)
         outgoing: dict[str, list[GraphEdge]] = defaultdict(list)
@@ -718,6 +728,10 @@ class GraphEngine:
                 binding.name: child_outputs[binding.node_id][binding.node_port]
                 for binding in workflow.outputs
             }
+        if kind == "loom":
+            if node.state is None:
+                raise ValueError("Loom node state is missing.")
+            return {"text": node.state.selected_text()}
         if kind == "text_input":
             return {"text": str(config.get("text", ""))}
         if kind == "number_input":

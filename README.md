@@ -14,14 +14,10 @@ The 0.8 version-zero milestone ships with a live vertical slice for:
 - OpenRouter's raw `/api/v1/completions` transport
 - commit-pinned, bounded Hugging Face Hub dataset slices
 
-The starter loom expresses the experiment entirely with generic nodes: one
-OpenAI-compatible endpoint, two model references, and four completion branches
-run the original prompt and a seeded Typogre corruption through both Talkies.
-Their normalized completion records are collected and exposed in the inspector.
-The output view recognizes both those records and raw OpenAI-compatible completion
-envelopes, including lists of either shape. It keeps generated text prominent,
-surfaces compact model, finish, token, latency, cache, revision, and seed context,
-and leaves request details plus the complete JSON available on demand.
+The starter graph is a compact Loom workshop: one OpenAI-compatible endpoint and
+one model feed a Loom node, whose selected text is sent to a preview. Opening the
+Loom provides a branching text workspace without changing ordinary graph-run
+semantics.
 The workbench also tracks unsaved graph changes and provides document-wide
 undo/redo from the topbar or `Ctrl`/`Cmd`+`Z` and `Ctrl`/`Cmd`+`Shift`+`Z`.
 History covers graph edits and starter resets while excluding run results and
@@ -31,7 +27,7 @@ Selected canvas nodes have working resize handles, `Ctrl`/`Cmd`+click builds a
 multi-node selection, and `Delete` / `Backspace` removes the current canvas
 selection. Right-clicking nodes, selections, wires, or the canvas opens
 Glitchloom's context menu. Selected wires expose draggable endpoints; dropping
-one away from a compatible port disconnects it. `Ctrl+Enter` runs the loom. The
+one away from a compatible port disconnects it. `Ctrl+Enter` runs the graph. The
 node library and inspector use standard draggable dividers, support arrow-key
 resizing when focused, and reset to their responsive defaults on double-click.
 
@@ -54,9 +50,37 @@ instead emits empty text and `matched: false`. A typical structured fill path is
 Do not reuse the closing marker as the completion stop string when the extractor
 must verify it, because completion providers commonly omit matched stop text.
 
+## Loom nodes
+
+A **Loom** is a text-producing workflow node with required **Endpoint** and
+**Model** inputs. An ordinary graph run never calls the model from a Loom: it
+emits the exact concatenated text along the path from the root to the currently
+selected entry, including all leading, trailing, and inter-segment whitespace.
+The inputs exist for interactive generation when the Loom editor is open.
+
+The editor stores a validated, ordered branch tree inside the graph node. Select
+any prior entry, edit it, write a child, generate one to four full-completion
+candidates, or inspect the ten most likely next tokens. The branch browser is a
+nested left-to-right tree, so every generation is grouped with its actual
+parent. Token choices use hotkeys `0` through `9`; selecting one stores that
+exact token as a child and immediately loads the next distribution for
+token-by-token steering.
+
+Generation uses that same root-to-selection text without trimming, then reuses
+the ordinary completion executor in target-run mode. Generated entries retain
+their normalized completion output plus a compact run ID, graph digest, and
+completion timestamp. Selecting an entry immediately changes the complete path
+emitted by the Loom node. Digit hotkeys are disabled while an input, select, or
+textarea has focus so they never interfere with editing.
+
+Completion settings remain catalog-driven and are edited in the normal node
+inspector. Seeded sibling generation derives distinct deterministic seeds from
+the configured seed. Graph documents own their Loom state; no arbitrary code is
+stored or executed.
+
 ## Partial execution and run freshness
 
-The topbar and `Ctrl+Enter` still run the complete loom. Right-click a node and
+The topbar and `Ctrl+Enter` run the complete graph. Right-click a node and
 choose **Run to here**, or right-click a multi-node selection and choose **Run to
 selection**, to execute only the requested targets and their complete transitive
 upstream closure. Unrelated incomplete branches, cycles, and side effects do not
@@ -83,21 +107,21 @@ never carries prompt or output values in progress events. A dropped stream is
 reported as an unknown outcome and is not silently retried, because file writes
 or provider calls may already have happened.
 
-## Saved looms and templates
+## Saved graphs and templates
 
-Top-level looms are editable documents, deliberately separate from immutable
-reusable workflows. **Save** updates the current saved loom with revision
-protection; **Save as** always creates a new document. Saved looms reopen in
+Top-level graphs are editable documents, deliberately separate from immutable
+reusable workflows. **Save** updates the current saved graph with revision
+protection; **Save as** always creates a new document. Saved graphs reopen in
 closable graph tabs, while **Open as copy** removes the source identity and starts
-an unsaved tab. This makes a saved loom useful as an experiment template without
+an unsaved tab. This makes a saved graph useful as an experiment template without
 risking its source document or any versioned workflow node it contains.
 
 Checked-in graphs under `examples/` appear as read-only templates and also always
-open as copies. Mutable loom documents live under
-`GLITCHLOOM_WORKSPACE/.glitchloom/looms`; deletion uses recoverable local trash.
-Exact workflow versions referenced by a loom are retained when it loads rather
+open as copies. Mutable graph documents live under
+`GLITCHLOOM_WORKSPACE/.glitchloom/graphs`; deletion uses recoverable local trash.
+Exact workflow versions referenced by a graph are retained when it loads rather
 than being silently replaced by the latest catalog version. `Ctrl+S` saves the
-current loom and `Ctrl+Shift+S` opens Save as.
+current graph and `Ctrl+Shift+S` opens Save as.
 
 ## Canvas context actions
 
@@ -111,7 +135,7 @@ invalidating run freshness. A full-graph tidy also refits the completed layout;
 selection tidy leaves the surrounding spatial context in place. A multi-node
 selection can also be grouped into a collapsible frame. Frames have editable
 titles and five color choices; membership, bounds, collapse state, and the graph's
-wire-routing preference persist with the loom while remaining presentation-only
+wire-routing preference persist with the graph while remaining presentation-only
 for run freshness. Collapsed frames retain their external connectivity through
 non-editable boundary wires. Selecting nodes
 emphasizes their complete upstream and downstream wire paths; unrelated wires
@@ -136,7 +160,7 @@ headers. Cached results include every request-affecting provider field and are
 separated when the credential rotates without writing the credential itself.
 
 OpenRouter's model catalog is dynamic. The checked-in
-`examples/openrouter-huggingface.json` loom uses a model slug that was live when
+`examples/openrouter-huggingface.json` graph uses a model slug that was live when
 the example was updated; verify or replace it before a long experiment. The node
 does not hard-code a model list.
 

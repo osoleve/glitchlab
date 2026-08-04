@@ -128,11 +128,11 @@
   content: "◎ ";
 }
 
-:global(.react-flow__node-loomFrame) {
+:global(.react-flow__node-workflowFrame) {
   z-index: -1 !important;
 }
 
-:global(.react-flow__node-loomFrame.selected) {
+:global(.react-flow__node-workflowFrame.selected) {
   z-index: 0 !important;
 }
 

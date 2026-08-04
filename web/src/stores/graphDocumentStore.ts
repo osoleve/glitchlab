@@ -14,47 +14,49 @@ import type {
   ControlPortMode,
   EdgeRouting,
   FrameColor,
-  LoomEdge,
-  LoomFrame,
-  LoomNode,
+  LoomState,
+  WorkflowEdge,
+  WorkflowFrame,
+  WorkflowNode,
 } from "../types";
 
 type Updater<T> = T | ((current: T) => T);
 type GraphDocumentFields = Pick<
   GraphDocumentState,
-  "nodes" | "edges" | "frames" | "edgeRouting" | "loomName" | "isDirty"
+  "nodes" | "edges" | "frames" | "edgeRouting" | "graphName" | "isDirty"
 >;
 type GraphDocumentUpdate = Partial<GraphDocumentFields>;
 
 export interface GraphHistoryState extends GraphDocumentFields {}
 
 export interface GraphDocumentState {
-  nodes: LoomNode[];
-  edges: LoomEdge[];
-  frames: LoomFrame[];
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  frames: WorkflowFrame[];
   edgeRouting: EdgeRouting;
   selectedId?: string;
-  loomName: string;
+  graphName: string;
   isDirty: boolean;
-  setNodes: (nodes: Updater<LoomNode[]>) => void;
-  setEdges: (edges: Updater<LoomEdge[]>) => void;
-  setFrames: (frames: Updater<LoomFrame[]>) => void;
+  setNodes: (nodes: Updater<WorkflowNode[]>) => void;
+  setEdges: (edges: Updater<WorkflowEdge[]>) => void;
+  setFrames: (frames: Updater<WorkflowFrame[]>) => void;
   setEdgeRouting: (edgeRouting: EdgeRouting) => void;
   setSelectedId: (selectedId?: string) => void;
-  setLoomName: (loomName: string) => void;
+  setGraphName: (graphName: string) => void;
   setIsDirty: (isDirty: boolean) => void;
   markDirty: () => void;
   markSemanticDirty: () => void;
-  renameLoom: (loomName: string) => void;
+  renameGraph: (graphName: string) => void;
   updateDocument: (
     updater: (document: GraphDocumentFields) => GraphDocumentUpdate,
     semantic?: boolean,
   ) => void;
-  applyNodeChanges: (changes: NodeChange<LoomNode>[]) => void;
-  applyFrameChanges: (changes: NodeChange<LoomFrame>[]) => void;
-  applyEdgeChanges: (changes: EdgeChange<LoomEdge>[]) => void;
-  connect: (connection: Connection | LoomEdge) => void;
+  applyNodeChanges: (changes: NodeChange<WorkflowNode>[]) => void;
+  applyFrameChanges: (changes: NodeChange<WorkflowFrame>[]) => void;
+  applyEdgeChanges: (changes: EdgeChange<WorkflowEdge>[]) => void;
+  connect: (connection: Connection | WorkflowEdge) => void;
   updateNodeField: (nodeId: string, field: string, value: unknown) => void;
+  updateNodeState: (nodeId: string, state: LoomState) => void;
   updateControlPort: (nodeId: string, fieldName: string, mode?: ControlPortMode) => void;
   removeNodes: (nodeIds: string[]) => void;
   removeEdge: (edgeId: string) => void;
@@ -76,23 +78,23 @@ export interface GraphDocumentState {
   ) => void;
   removeFrames: (frameIds: string[]) => void;
   replaceGraph: (
-    nodes: LoomNode[],
-    edges: LoomEdge[],
-    loomName: string,
+    nodes: WorkflowNode[],
+    edges: WorkflowEdge[],
+    graphName: string,
     isDirty: boolean,
-    frames?: LoomFrame[],
+    frames?: WorkflowFrame[],
     edgeRouting?: EdgeRouting,
   ) => void;
 }
 
-function resetRunStatuses(nodes: LoomNode[]): LoomNode[] {
+function resetRunStatuses(nodes: WorkflowNode[]): WorkflowNode[] {
   return nodes.map((node) => ({
     ...node,
     data: { ...node.data, runStatus: "idle" as const },
   }));
 }
 
-function historyNode(node: LoomNode): LoomNode {
+function historyNode(node: WorkflowNode): WorkflowNode {
   return {
     ...node,
     measured: undefined,
@@ -104,11 +106,13 @@ function historyNode(node: LoomNode): LoomNode {
       runStatus: "idle",
       executionScopeRole: undefined,
       onUpdateField: undefined,
+      onUpdateState: undefined,
+      onOpenEditor: undefined,
     },
   };
 }
 
-function historyEdge(edge: LoomEdge): LoomEdge {
+function historyEdge(edge: WorkflowEdge): WorkflowEdge {
   return {
     ...edge,
     selected: false,
@@ -116,7 +120,7 @@ function historyEdge(edge: LoomEdge): LoomEdge {
   };
 }
 
-function historyFrame(frame: LoomFrame): LoomFrame {
+function historyFrame(frame: WorkflowFrame): WorkflowFrame {
   return {
     ...frame,
     measured: undefined,
@@ -137,7 +141,7 @@ function graphHistoryState(state: GraphDocumentState): GraphHistoryState {
     edges: state.edges.map(historyEdge),
     frames: state.frames.map(historyFrame),
     edgeRouting: state.edgeRouting,
-    loomName: state.loomName,
+    graphName: state.graphName,
     isDirty: state.isDirty,
   };
 }
@@ -151,7 +155,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
   edges: [],
   frames: [],
   edgeRouting: "smoothstep",
-  loomName: "Talkie perturbation pair",
+  graphName: "Loom workshop",
   isDirty: false,
   setNodes: (nodes) =>
     set((state) => ({ nodes: typeof nodes === "function" ? nodes(state.nodes) : nodes })),
@@ -161,7 +165,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     set((state) => ({ frames: typeof frames === "function" ? frames(state.frames) : frames })),
   setEdgeRouting: (edgeRouting) => set({ edgeRouting, isDirty: true }),
   setSelectedId: (selectedId) => set({ selectedId }),
-  setLoomName: (loomName) => set({ loomName }),
+  setGraphName: (graphName) => set({ graphName }),
   setIsDirty: (isDirty) => set({ isDirty }),
   markDirty: () => set({ isDirty: true }),
   markSemanticDirty: () =>
@@ -169,7 +173,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       isDirty: true,
       nodes: resetRunStatuses(state.nodes),
     })),
-  renameLoom: (loomName) => set({ loomName, isDirty: true }),
+  renameGraph: (graphName) => set({ graphName, isDirty: true }),
   updateDocument: (updater, semantic = true) =>
     set((state) => {
       const update = updater({
@@ -177,7 +181,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         edges: state.edges,
         frames: state.frames,
         edgeRouting: state.edgeRouting,
-        loomName: state.loomName,
+        graphName: state.graphName,
         isDirty: state.isDirty,
       });
       const nodes = update.nodes ?? state.nodes;
@@ -274,6 +278,13 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         isDirty: true,
         nodes: resetRunStatuses(nodes),
       };
+    }),
+  updateNodeState: (nodeId, loomState) =>
+    set((state) => {
+      const nodes = state.nodes.map((node) =>
+        node.id === nodeId ? { ...node, data: { ...node.data, state: loomState } } : node,
+      );
+      return { isDirty: true, nodes: resetRunStatuses(nodes) };
     }),
   updateControlPort: (nodeId, fieldName, mode) =>
     set((state) => {
@@ -427,6 +438,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
             ...node.data,
             config: structuredClone(node.data.config),
             controlPorts: { ...node.data.controlPorts },
+            state: node.data.state ? structuredClone(node.data.state) : undefined,
             runStatus: "idle" as const,
           },
         };
@@ -480,9 +492,9 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       const bottom = Math.max(...absolute.map((item) => item.y + item.height));
       createdId = `frame-${createId().slice(0, 8)}`;
       const framePosition = { x: left - 28, y: top - 62 };
-      const frame: LoomFrame = {
+      const frame: WorkflowFrame = {
         id: createdId,
-        type: "loomFrame",
+        type: "workflowFrame",
         position: framePosition,
         width: Math.max(320, right - left + 56),
         height: Math.max(190, bottom - top + 90),
@@ -517,7 +529,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         ...state.frames.map((frame) => ({ ...frame, selected: false })),
         {
           id,
-          type: "loomFrame" as const,
+          type: "workflowFrame" as const,
           position,
           width: 420,
           height: 260,
@@ -563,8 +575,8 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         isDirty: true,
       };
     }),
-  replaceGraph: (nodes, edges, loomName, isDirty, frames = [], edgeRouting = "smoothstep") =>
-    set({ nodes, edges, frames, edgeRouting, selectedId: undefined, loomName, isDirty }),
+  replaceGraph: (nodes, edges, graphName, isDirty, frames = [], edgeRouting = "smoothstep") =>
+    set({ nodes, edges, frames, edgeRouting, selectedId: undefined, graphName, isDirty }),
 });
 
 export const useGraphDocumentStore = create<GraphDocumentState>()(

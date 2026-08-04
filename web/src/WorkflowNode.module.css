@@ -1,4 +1,4 @@
-.loom-node {
+.workflow-node {
   position: relative;
   width: 236px;
   height: calc(var(--node-base-height) + var(--port-rows) * 28px);
@@ -14,65 +14,65 @@
   box-shadow:
     0 18px 38px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.025);
-  animation: var(--loom-node-animation);
+  animation: var(--workflow-node-animation);
   transition:
     border-color 130ms ease,
     box-shadow 130ms ease,
     transform 130ms ease;
 }
 
-.loom-node.category-text {
+.workflow-node.category-text {
   --accent: var(--thread-text);
 }
 
-.loom-node.category-values {
+.workflow-node.category-values {
   --accent: var(--thread-value);
 }
 
-.loom-node.category-flow {
+.workflow-node.category-flow {
   --accent: var(--thread-flow);
 }
 
-.loom-node.category-models {
+.workflow-node.category-models {
   --accent: var(--thread-model);
 }
 
-.loom-node.category-glitchlings {
+.workflow-node.category-glitchlings {
   --accent: var(--thread-glitch);
 }
 
-.loom-node.category-files {
+.workflow-node.category-files {
   --accent: var(--thread-file);
 }
 
-.loom-node.category-data {
+.workflow-node.category-data {
   --accent: var(--thread-flow);
 }
 
-.loom-node.category-inspect {
+.workflow-node.category-inspect {
   --accent: var(--thread-inspect);
 }
 
-.loom-node.category-workflows {
+.workflow-node.category-workflows {
   --accent: var(--thread-workflow);
 }
 
-:global(.react-flow__node)[style*="width"] .loom-node {
+:global(.react-flow__node)[style*="width"] .workflow-node {
   width: 100%;
 }
 
-:global(.react-flow__node)[style*="height"] .loom-node {
+:global(.react-flow__node)[style*="height"] .workflow-node {
   height: 100%;
 }
 
-.loom-resize-line {
+.workflow-resize-line {
   z-index: 4;
   --resize-line-color: color-mix(in srgb, var(--accent) 54%, transparent);
   border: 0 !important;
 }
 
-.loom-resize-line:global(.left),
-.loom-resize-line:global(.right) {
+.workflow-resize-line:global(.left),
+.workflow-resize-line:global(.right) {
   width: 18px !important;
   background: linear-gradient(
     90deg,
@@ -83,8 +83,8 @@
   );
 }
 
-.loom-resize-line:global(.top),
-.loom-resize-line:global(.bottom) {
+.workflow-resize-line:global(.top),
+.workflow-resize-line:global(.bottom) {
   height: 18px !important;
   background: linear-gradient(
     0deg,
@@ -95,11 +95,11 @@
   );
 }
 
-.loom-resize-line:hover {
+.workflow-resize-line:hover {
   --resize-line-color: color-mix(in srgb, var(--accent) 84%, #efe3ef);
 }
 
-.loom-resize-handle {
+.workflow-resize-handle {
   z-index: 5;
   width: 9px !important;
   height: 9px !important;
@@ -115,18 +115,18 @@
     background 110ms ease;
 }
 
-.loom-resize-handle:hover {
+.workflow-resize-handle:hover {
   width: 12px !important;
   height: 12px !important;
   background: var(--accent) !important;
 }
 
-.loom-node:hover {
+.workflow-node:hover {
   border-color: #5a4e5e;
   transform: translateY(-1px);
 }
 
-.loom-node.is-selected {
+.workflow-node.is-selected {
   border-color: color-mix(in srgb, var(--accent) 72%, #eee0ee);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
@@ -134,14 +134,14 @@
     0 0 28px color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
-.loom-node.execution-scope-required {
+.workflow-node.execution-scope-required {
   border-color: color-mix(in srgb, var(--accent) 56%, #8e789e);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent),
     0 18px 38px rgba(0, 0, 0, 0.28);
 }
 
-.loom-node.execution-scope-target {
+.workflow-node.execution-scope-target {
   border-color: color-mix(in srgb, var(--accent) 62%, #ead8f3);
   box-shadow:
     0 0 0 2px rgba(212, 176, 236, 0.24),
@@ -149,7 +149,7 @@
     0 0 30px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
-.loom-node.execution-scope-target::after {
+.workflow-node.execution-scope-target::after {
   position: absolute;
   top: -8px;
   right: 10px;
@@ -165,13 +165,13 @@
   text-transform: uppercase;
 }
 
-.loom-node.execution-scope-unrelated {
+.workflow-node.execution-scope-unrelated {
   opacity: 0.26;
   filter: saturate(0.4);
 }
 
-.loom-node.execution-scope-unrelated:hover,
-.loom-node.execution-scope-unrelated.is-selected {
+.workflow-node.execution-scope-unrelated:hover,
+.workflow-node.execution-scope-unrelated.is-selected {
   opacity: 0.72;
 }
 
@@ -302,6 +302,31 @@
   line-height: 1.45;
 }
 
+.node-editor-button {
+  position: absolute;
+  top: 82px;
+  left: 14px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, #544c68);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 12%, #181522);
+  color: #f2edf9;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.node-editor-button:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, #181522);
+}
+
 .node-summary::before {
   margin-right: 5px;
   color: #5f5864;
@@ -363,7 +388,7 @@
   line-height: 1.35;
 }
 
-.loom-node.has-inline-textarea .node-inline-fields {
+.workflow-node.has-inline-textarea .node-inline-fields {
   position: absolute;
   top: 52px;
   right: 14px;
@@ -375,20 +400,20 @@
   margin-top: 0;
 }
 
-.loom-node.has-inline-textarea .node-inline-field.is-textarea {
+.workflow-node.has-inline-textarea .node-inline-field.is-textarea {
   height: 100%;
   min-height: 0;
   align-content: stretch;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.loom-node.has-inline-textarea .node-inline-field textarea {
+.workflow-node.has-inline-textarea .node-inline-field textarea {
   height: 100%;
   min-height: 48px;
 }
 
-.loom-node.has-inline-textarea .node-inputs,
-.loom-node.has-inline-textarea .node-outputs {
+.workflow-node.has-inline-textarea .node-inputs,
+.workflow-node.has-inline-textarea .node-outputs {
   top: auto;
   height: var(--port-area-height);
 }

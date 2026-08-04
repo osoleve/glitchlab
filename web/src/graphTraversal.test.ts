@@ -5,7 +5,7 @@ import {
   semanticExecutionFingerprint,
   upstreamClosure,
 } from "./graphTraversal";
-import type { GraphSpec, LoomEdge } from "./types";
+import type { GraphSpec, WorkflowEdge } from "./types";
 
 const nodeIds = ["shared", "left", "right", "merge", "after"];
 const edges = [
@@ -14,7 +14,7 @@ const edges = [
   { id: "left-merge", source: "left", target: "merge" },
   { id: "right-merge", source: "right", target: "merge" },
   { id: "merge-after", source: "merge", target: "after" },
-] as LoomEdge[];
+] as WorkflowEdge[];
 
 describe("graph traversal", () => {
   it("computes upstream unions in stable graph order", () => {

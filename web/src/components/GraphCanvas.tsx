@@ -13,22 +13,22 @@ import {
 import { Focus, PanelLeftOpen, PanelRightOpen, X } from "lucide-react";
 import type { DragEvent, ReactNode, RefObject } from "react";
 import styles from "../App.module.css";
-import { LoomFrameNode } from "../FrameNode";
-import { LoomNodeCardWithBoundary } from "../LoomNode";
+import { WorkflowFrameNode } from "../FrameNode";
 import { moduleClassNames as cx } from "../moduleClassNames";
 import { useGraphDocumentStore } from "../stores/graphDocumentStore";
 import type { RunActivity } from "../stores/runControllerStore";
 import type { ExecutionScopeState } from "../stores/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
-import type { CanvasNode, EdgeRouting, LoomEdge, LoomNode } from "../types";
+import type { CanvasNode, EdgeRouting, WorkflowEdge, WorkflowNode } from "../types";
+import { WorkflowNodeCardWithBoundary } from "../WorkflowNode";
 import type { ContextMenuState } from "./CanvasContextMenu";
 
-const nodeTypes = { loomNode: LoomNodeCardWithBoundary, loomFrame: LoomFrameNode };
+const nodeTypes = { workflowNode: WorkflowNodeCardWithBoundary, workflowFrame: WorkflowFrameNode };
 
 interface GraphCanvasProps {
   canvasRef: RefObject<HTMLElement | null>;
   children?: ReactNode;
-  edges: LoomEdge[];
+  edges: WorkflowEdge[];
   edgeRouting: EdgeRouting;
   executionScope?: ExecutionScopeState;
   nodes: CanvasNode[];
@@ -36,26 +36,26 @@ interface GraphCanvasProps {
   runActivity?: RunActivity;
   runError?: string;
   running: boolean;
-  savingLoom: boolean;
+  savingGraph: boolean;
   onClearExecutionScope: () => void;
   onConnect: (connection: Connection) => void;
   onDismissRunError: () => void;
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
-  onEdgesChange: (changes: EdgeChange<LoomEdge>[]) => void;
+  onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => void;
   onFitExecutionScope: () => void;
   onNodeDragStop: () => void;
   onNodesChange: (changes: NodeChange<CanvasNode>[]) => void;
   onOpenContextMenu: (contextMenu?: ContextMenuState) => void;
-  onReconnect: (edge: LoomEdge, connection: Connection) => void;
+  onReconnect: (edge: WorkflowEdge, connection: Connection) => void;
   onReconnectEnd: (
     event: MouseEvent | TouchEvent,
-    edge: LoomEdge,
+    edge: WorkflowEdge,
     handleType: "source" | "target",
     connectionState: { isValid: boolean | null },
   ) => void;
   onReconnectStart: () => void;
   onResetQuickAdd: () => void;
-  isValidConnection: (connection: Connection | LoomEdge) => boolean;
+  isValidConnection: (connection: Connection | WorkflowEdge) => boolean;
 }
 
 function formatElapsed(seconds: number): string {
@@ -84,7 +84,7 @@ export function GraphCanvas({
   runActivity,
   runError,
   running,
-  savingLoom,
+  savingGraph,
   onClearExecutionScope,
   onConnect,
   onDismissRunError,
@@ -217,7 +217,7 @@ export function GraphCanvas({
         connectionRadius={32}
         multiSelectionKeyCode={["Control", "Meta"]}
         onNodeClick={(_event, node) => {
-          if (node.type === "loomFrame") {
+          if (node.type === "workflowFrame") {
             setInspectorOpen(false);
             onOpenContextMenu(undefined);
             return;
@@ -237,7 +237,7 @@ export function GraphCanvas({
         }}
         onNodeContextMenu={(event, node) => {
           event.preventDefault();
-          if (node.type === "loomFrame") {
+          if (node.type === "workflowFrame") {
             clearSelection();
             setFrames((current) =>
               current.map((frame) => ({ ...frame, selected: frame.id === node.id })),
@@ -299,7 +299,7 @@ export function GraphCanvas({
         fitViewOptions={{ padding: 0.03, minZoom: 0.52, maxZoom: 0.95 }}
         minZoom={0.32}
         maxZoom={1.7}
-        deleteKeyCode={savingLoom ? null : ["Backspace", "Delete"]}
+        deleteKeyCode={savingGraph ? null : ["Backspace", "Delete"]}
         colorMode="dark"
         connectionLineStyle={{ stroke: "#b8a4e6", strokeWidth: 2 }}
         connectionLineType={edgeRouting as ConnectionLineType}
@@ -308,8 +308,8 @@ export function GraphCanvas({
         <Background variant={BackgroundVariant.Lines} gap={32} size={0.7} color="#292633" />
         <MiniMap
           nodeColor={(node) => {
-            if (node.type === "loomFrame") return "rgba(169, 139, 244, 0.24)";
-            const category = (node.data as LoomNode["data"]).definition.category;
+            if (node.type === "workflowFrame") return "rgba(169, 139, 244, 0.24)";
+            const category = (node.data as WorkflowNode["data"]).definition.category;
             return category === "Glitchlings"
               ? "#e2767f"
               : category === "Models"
@@ -334,7 +334,7 @@ export function GraphCanvas({
                 ? executionScope.targetNodeIds.length === 1
                   ? "Run to target"
                   : `Run to ${executionScope.targetNodeIds.length} targets`
-                : "Full loom run"}
+                : "Full graph run"}
             </strong>
             <small>
               {executionScope.nodeIds.length} node

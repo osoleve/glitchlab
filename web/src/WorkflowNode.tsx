@@ -12,6 +12,7 @@ import {
   Eye,
   FileInput,
   FileOutput,
+  GitBranch,
   GitFork,
   Hash,
   Layers3,
@@ -28,9 +29,10 @@ import {
 } from "lucide-react";
 import { type ComponentType, type CSSProperties, useEffect, useState } from "react";
 import { ErrorBoundary, NodeErrorFallback } from "./ErrorBoundary";
-import styles from "./LoomNode.module.css";
+import { selectedLoomText } from "./loom";
 import { moduleClassNames as cx } from "./moduleClassNames";
-import type { FieldDefinition, LoomNode, LoomNodeData } from "./types";
+import type { FieldDefinition, WorkflowNode, WorkflowNodeData } from "./types";
+import styles from "./WorkflowNode.module.css";
 
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
   text_input: TextCursorInput,
@@ -51,6 +53,7 @@ const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number 
   openrouter_endpoint: Cloud,
   model: Box,
   completion: Sparkles,
+  loom: GitBranch,
   glitchling: Bug,
   gaggle: Users,
   corrupt: WandSparkles,
@@ -60,7 +63,7 @@ const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number 
   preview: Eye,
 };
 
-function summary(data: LoomNodeData): string {
+function summary(data: WorkflowNodeData): string {
   const config = data.config;
   const suppliedByPort = (field: string) =>
     data.controlPorts[field] === "input" || data.controlPorts[field] === "passthrough";
@@ -93,6 +96,8 @@ function summary(data: LoomNodeData): string {
       return `${
         suppliedByPort("max_tokens") ? "wired tokens" : `${String(config.max_tokens ?? 96)} tokens`
       } · ${suppliedByPort("seed") ? "wired seed" : `seed ${String(config.seed ?? "—")}`}`;
+    case "loom":
+      return data.state ? selectedLoomText(data.state).slice(0, 72) : "Open the Loom to begin";
     case "glitchling":
       return `${String(config.name ?? "")} · seed ${String(config.seed ?? "")}`;
     case "read_file":
@@ -163,14 +168,16 @@ function InlineTextarea({ ariaLabel, disabled, placeholder, update, value }: Inl
   );
 }
 
-export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
+export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
   const Icon = data.kind.startsWith("workflow:") ? Workflow : (ICONS[data.kind] ?? Box);
-  const inlineFields = data.definition.fields.filter((field) => field.inline);
+  const inlineFields =
+    data.definition.editor === "loom" ? [] : data.definition.fields.filter((field) => field.inline);
   const hasInlineTextarea = inlineFields.some((field) => field.control === "textarea");
   const summaryText = summary(data);
   const hasSummary = inlineFields.length === 0 && summaryText.length > 0;
   const inlineHeight = inlineFields.length > 0 ? inlineControlHeight(inlineFields) : 0;
-  const contentHeight = hasSummary ? 28 : inlineHeight;
+  const editorHeight = data.definition.editor === "loom" ? 38 : 0;
+  const contentHeight = (hasSummary ? 28 : inlineHeight) + editorHeight;
   const portRows = Math.max(data.definition.inputs.length, data.definition.outputs.length, 1);
   const baseHeight = 74 + contentHeight;
   const minimumHeight = baseHeight + portRows * 28;
@@ -186,7 +193,7 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
     <article
       className={cx(
         styles,
-        "loom-node",
+        "workflow-node",
         `category-${categoryClass(data.definition.category)}`,
         selected && "is-selected",
         hasInlineTextarea && "has-inline-textarea",
@@ -201,8 +208,8 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
         minHeight={minimumHeight}
         maxWidth={520}
         maxHeight={520}
-        handleClassName={cx(styles, "loom-resize-handle")}
-        lineClassName={cx(styles, "loom-resize-line")}
+        handleClassName={cx(styles, "workflow-resize-handle")}
+        lineClassName={cx(styles, "workflow-resize-line")}
       />
       <div className={cx(styles, "node-thread")} aria-hidden="true" />
       <header className={cx(styles, "node-header")}>
@@ -223,6 +230,19 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
         </span>
       </header>
       {hasSummary && <p className={cx(styles, "node-summary")}>{summaryText}</p>}
+      {data.definition.editor === "loom" && (
+        <button
+          type="button"
+          className={cx(styles, "node-editor-button", "nodrag", "nopan")}
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onOpenEditor?.();
+          }}
+        >
+          <GitBranch size={14} />
+          Open loom
+        </button>
+      )}
       {inlineFields.length > 0 && (
         <section
           className={cx(styles, "node-inline-fields nodrag nowheel nopan")}
@@ -348,12 +368,12 @@ export function LoomNodeCard({ data, selected }: NodeProps<LoomNode>) {
   );
 }
 
-export function LoomNodeCardWithBoundary(props: NodeProps<LoomNode>) {
+export function WorkflowNodeCardWithBoundary(props: NodeProps<WorkflowNode>) {
   return (
     <ErrorBoundary
       fallback={(error) => <NodeErrorFallback error={error} title={props.data.title} />}
     >
-      <LoomNodeCard {...props} />
+      <WorkflowNodeCard {...props} />
     </ErrorBoundary>
   );
 }

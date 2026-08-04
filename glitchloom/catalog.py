@@ -58,6 +58,30 @@ def _field(
     }
 
 
+def _completion_fields() -> list[dict[str, Any]]:
+    """Controls shared by direct completion and interactive Loom generation."""
+
+    return [
+        _field("temperature", "number", 0.8, inline=True),
+        _field("top_p", "number", 0.95),
+        _field("max_tokens", "number", 96, inline=True),
+        _field("seed", "number_optional", 151, inline=True),
+        _field("stop", "textarea", "", help_text="One stop string per line."),
+        _field("logprobs", "number_optional", None),
+        _field("extra_body", "json", {}, help_text="Provider-specific request fields."),
+        _field(
+            "cache_mode",
+            "select",
+            "use",
+            options=[
+                {"label": "Use exact-request cache", "value": "use"},
+                {"label": "Refresh cached result", "value": "refresh"},
+                {"label": "Do not cache", "value": "off"},
+            ],
+        ),
+    ]
+
+
 NODE_DEFINITIONS: list[dict[str, Any]] = [
     {
         "kind": "text_input",
@@ -337,6 +361,22 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         ],
     },
     {
+        "kind": "loom",
+        "label": "Loom",
+        "category": "Text",
+        "description": (
+            "Select a text value by branching through model-assisted continuations. "
+            "Graph runs emit the selected entry without generating."
+        ),
+        "inputs": [
+            _port("endpoint", "endpoint"),
+            _port("model", "model"),
+        ],
+        "outputs": [_port("text", "text")],
+        "fields": _completion_fields(),
+        "editor": "loom",
+    },
+    {
         "kind": "completion",
         "label": "Generate completion",
         "category": "Models",
@@ -347,25 +387,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
             _port("prompt", "any"),
         ],
         "outputs": [_port("result", "completion")],
-        "fields": [
-            _field("temperature", "number", 0.8, inline=True),
-            _field("top_p", "number", 0.95),
-            _field("max_tokens", "number", 96, inline=True),
-            _field("seed", "number_optional", 151, inline=True),
-            _field("stop", "textarea", "", help_text="One stop string per line."),
-            _field("logprobs", "number_optional", None),
-            _field("extra_body", "json", {}, help_text="Provider-specific request fields."),
-            _field(
-                "cache_mode",
-                "select",
-                "use",
-                options=[
-                    {"label": "Use exact-request cache", "value": "use"},
-                    {"label": "Refresh cached result", "value": "refresh"},
-                    {"label": "Do not cache", "value": "off"},
-                ],
-            ),
-        ],
+        "fields": _completion_fields(),
     },
     {
         "kind": "glitchling",

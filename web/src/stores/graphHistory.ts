@@ -1,17 +1,17 @@
 import { useStore } from "zustand";
 import { serializeGraph } from "../graph";
 import { semanticExecutionFingerprint } from "../graphTraversal";
-import type { LoomNode, NodeRunStatus } from "../types";
+import type { NodeRunStatus, WorkflowNode } from "../types";
 import { type GraphHistoryState, useGraphDocumentStore } from "./graphDocumentStore";
 import { useRunControllerStore } from "./runControllerStore";
 
 type HistoryDirection = "undo" | "redo";
 
 function executionFingerprint(state: GraphHistoryState): string {
-  return semanticExecutionFingerprint(serializeGraph(state.loomName, state.nodes, state.edges));
+  return semanticExecutionFingerprint(serializeGraph(state.graphName, state.nodes, state.edges));
 }
 
-function runStatuses(nodes: LoomNode[]): Map<string, NodeRunStatus> {
+function runStatuses(nodes: WorkflowNode[]): Map<string, NodeRunStatus> {
   return new Map(nodes.map((node) => [node.id, node.data.runStatus]));
 }
 

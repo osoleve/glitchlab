@@ -2,16 +2,16 @@ import { LayoutDashboard, Plus, Workflow, X } from "lucide-react";
 import styles from "../App.module.css";
 import { moduleClassNames as cx } from "../moduleClassNames";
 import type { GraphTab } from "../stores/types";
-import type { LoomSpec, WorkflowSpec } from "../types";
+import type { GraphDocument, WorkflowSpec } from "../types";
 
 interface GraphTabsProps {
-  activeLoom?: LoomSpec;
+  activeGraph?: GraphDocument;
   activeTabId: string;
   activeWorkflow?: WorkflowSpec;
   canOpenGraph: boolean;
   graphBusy: boolean;
   isDirty: boolean;
-  loomName: string;
+  graphName: string;
   running: boolean;
   tabs: GraphTab[];
   onOpenLibrary: () => void;
@@ -20,13 +20,13 @@ interface GraphTabsProps {
 }
 
 export function GraphTabs({
-  activeLoom,
+  activeGraph,
   activeTabId,
   activeWorkflow,
   canOpenGraph,
   graphBusy,
   isDirty,
-  loomName,
+  graphName,
   running,
   tabs,
   onOpenLibrary,
@@ -38,9 +38,9 @@ export function GraphTabs({
       {tabs.map((tab) => {
         const active = tab.id === activeTabId;
         const dirty = active ? isDirty : tab.snapshot.isDirty;
-        const title = active ? loomName : tab.snapshot.loomName;
+        const title = active ? graphName : tab.snapshot.graphName;
         const version = active ? activeWorkflow?.version : tab.workflow?.version;
-        const revision = active ? activeLoom?.revision : tab.loom?.revision;
+        const revision = active ? activeGraph?.revision : tab.graph?.revision;
         return (
           <div className={cx(styles, "graph-tab", active && "is-active")} key={tab.id}>
             <button
@@ -77,8 +77,8 @@ export function GraphTabs({
         className={cx(styles, "graph-tab-add")}
         onClick={onOpenLibrary}
         disabled={running || graphBusy || !canOpenGraph}
-        aria-label="Open loom or template"
-        title="Open loom or template"
+        aria-label="Open graph or template"
+        title="Open graph or template"
       >
         <Plus size={14} />
       </button>

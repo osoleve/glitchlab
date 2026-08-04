@@ -11,13 +11,15 @@ import pytest
 
 from glitchloom.catalog import control_port_name
 from glitchloom.engine import GraphEngine, compute_execution_scope
-from glitchloom.looms import LoomConflictError, LoomStore
+from glitchloom.graphs import GraphConflictError, GraphStore
 from glitchloom.models import (
+    GraphDocumentDraft,
     GraphEdge,
     GraphNode,
     GraphRunFailure,
     GraphSpec,
-    LoomDraft,
+    LoomEntry,
+    LoomState,
     RunScope,
     WorkflowDraft,
     WorkflowInput,
@@ -263,6 +265,81 @@ async def test_passthrough_preserves_any_value(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_loom_node_emits_selected_path_without_generating(tmp_path: Path) -> None:
+    graph = GraphSpec(
+        name="embedded loom",
+        nodes=[
+            node("endpoint", "endpoint", base_url="http://unused.test/v1"),
+            node("model", "model", model_id="unused-model"),
+            GraphNode(
+                id="loom",
+                kind="loom",
+                config={"temperature": 0.8, "max_tokens": 32, "seed": 7},
+                state=LoomState(
+                    entries=[
+                        LoomEntry(
+                            id="root",
+                            text="context ",
+                            created_at="2026-08-03T00:00:00+00:00",
+                        ),
+                        LoomEntry(
+                            id="candidate",
+                            parent_id="root",
+                            text="  selected value  ",
+                            source="model",
+                            created_at="2026-08-03T00:00:01+00:00",
+                        ),
+                    ],
+                    selected_id="candidate",
+                ),
+            ),
+        ],
+        edges=[
+            edge("endpoint", "endpoint", "loom", "endpoint"),
+            edge("model", "model", "loom", "model"),
+        ],
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph)
+
+    assert response.terminal_outputs["loom"] == {"text": "context   selected value  "}
+    assert [result.kind for result in response.nodes] == ["endpoint", "model", "loom"]
+
+
+def test_loom_state_requires_one_connected_acyclic_tree() -> None:
+    with pytest.raises(ValueError, match="missing parent"):
+        LoomState(
+            entries=[
+                LoomEntry(
+                    id="root",
+                    created_at="2026-08-03T00:00:00+00:00",
+                ),
+                LoomEntry(
+                    id="orphan",
+                    parent_id="missing",
+                    created_at="2026-08-03T00:00:01+00:00",
+                ),
+            ],
+            selected_id="orphan",
+        )
+
+    with pytest.raises(ValueError, match="exactly one root"):
+        LoomState(
+            entries=[
+                LoomEntry(
+                    id="first",
+                    created_at="2026-08-03T00:00:00+00:00",
+                ),
+                LoomEntry(
+                    id="second",
+                    created_at="2026-08-03T00:00:01+00:00",
+                ),
+            ],
+            selected_id="first",
+        )
+
+
+@pytest.mark.asyncio
 async def test_trim_removes_only_leading_and_trailing_whitespace(tmp_path: Path) -> None:
     graph = GraphSpec(
         name="trim whitespace",
@@ -377,7 +454,7 @@ async def test_extract_text_requires_at_least_one_marker(tmp_path: Path) -> None
     assert error.value.node_id == "extract"
 
 
-def test_saved_loom_pins_workflow_version_and_blocks_its_deletion(
+def test_saved_graph_pins_workflow_version_and_blocks_its_deletion(
     tmp_path: Path,
 ) -> None:
     workflows = WorkflowStore(tmp_path)
@@ -400,9 +477,9 @@ def test_saved_loom_pins_workflow_version_and_blocks_its_deletion(
             ],
         )
     )
-    looms = LoomStore(tmp_path, workflow_store=workflows)
-    consumer = looms.create(
-        LoomDraft(
+    graphs = GraphStore(tmp_path, workflow_store=workflows)
+    consumer = graphs.create(
+        GraphDocumentDraft(
             graph=GraphSpec(
                 name="Pinned consumer",
                 nodes=[
@@ -437,56 +514,56 @@ def test_saved_loom_pins_workflow_version_and_blocks_its_deletion(
         workflow_id=first.id,
     )
 
-    definitions = looms.definitions(consumer.graph)
+    definitions = graphs.definitions(consumer.graph)
 
     assert definitions[0]["workflow"]["version"] == 1
     assert definitions[0]["outputs"][0]["label"] == "Text"
-    with pytest.raises(WorkflowInUseError, match="Loom Pinned consumer"):
+    with pytest.raises(WorkflowInUseError, match="Graph Pinned consumer"):
         workflows.delete(first.id)
-    looms.delete(consumer.id)
+    graphs.delete(consumer.id)
     assert workflows.delete(first.id)["versions"] == 2
 
 
-def test_concurrent_loom_updates_allow_exactly_one_revision_winner(
+def test_concurrent_graph_updates_allow_exactly_one_revision_winner(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = LoomStore(tmp_path)
+    store = GraphStore(tmp_path)
     created = store.create(
-        LoomDraft(
+        GraphDocumentDraft(
             graph=GraphSpec(
-                name="Concurrent loom",
+                name="Concurrent graph",
                 nodes=[node("text", "text_input", text="original")],
                 edges=[],
             )
         )
     )
-    original_write = LoomStore._write
+    original_write = GraphStore._write
     start = threading.Barrier(2)
 
-    def slow_revision_write(self: LoomStore, record) -> None:
+    def slow_revision_write(self: GraphStore, record) -> None:
         if record.id == created.id and record.revision == 2:
             time.sleep(0.1)
         original_write(self, record)
 
-    monkeypatch.setattr(LoomStore, "_write", slow_revision_write)
+    monkeypatch.setattr(GraphStore, "_write", slow_revision_write)
 
     def update(value: str) -> tuple[str, int]:
         start.wait(timeout=2)
-        draft = LoomDraft(
+        draft = GraphDocumentDraft(
             graph=GraphSpec(
-                name="Concurrent loom",
+                name="Concurrent graph",
                 nodes=[node("text", "text_input", text=value)],
                 edges=[],
             )
         )
         try:
-            saved = LoomStore(tmp_path).update(
+            saved = GraphStore(tmp_path).update(
                 created.id,
                 draft,
                 expected_revision=1,
             )
-        except LoomConflictError as error:
+        except GraphConflictError as error:
             return ("conflict", error.current_revision or 0)
         return ("saved", saved.revision)
 
@@ -494,7 +571,7 @@ def test_concurrent_loom_updates_allow_exactly_one_revision_winner(
         outcomes = list(executor.map(update, ["left", "right"]))
 
     assert sorted(outcomes) == [("conflict", 2), ("saved", 2)]
-    assert LoomStore(tmp_path).get(created.id).revision == 2
+    assert GraphStore(tmp_path).get(created.id).revision == 2
 
 
 @pytest.mark.asyncio

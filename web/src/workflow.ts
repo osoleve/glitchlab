@@ -1,11 +1,11 @@
 import { serializeGraph } from "./graph";
 import type {
-  LoomEdge,
-  LoomFrame,
-  LoomNode,
   PortDefinition,
   WorkflowDraft,
+  WorkflowEdge,
+  WorkflowFrame,
   WorkflowInput,
+  WorkflowNode,
   WorkflowOutput,
   WorkflowSpec,
 } from "./types";
@@ -14,7 +14,7 @@ function portKey(nodeId: string, portName: string): string {
   return `${nodeId}\u0000${portName}`;
 }
 
-function uniqueName(port: PortDefinition, node: LoomNode, used: Set<string>): string {
+function uniqueName(port: PortDefinition, node: WorkflowNode, used: Set<string>): string {
   const clean = (value: string) =>
     value
       .trim()
@@ -36,7 +36,7 @@ function uniqueName(port: PortDefinition, node: LoomNode, used: Set<string>): st
   return candidate;
 }
 
-export function selectedGraphNodes(nodes: LoomNode[]): LoomNode[] {
+export function selectedGraphNodes(nodes: WorkflowNode[]): WorkflowNode[] {
   const selected = nodes.filter((node) => node.selected);
   return selected.length > 0 ? selected : [];
 }
@@ -44,9 +44,9 @@ export function selectedGraphNodes(nodes: LoomNode[]): LoomNode[] {
 export function inferWorkflowDraft(
   name: string,
   description: string,
-  selectedNodes: LoomNode[],
-  edges: LoomEdge[],
-  frames: LoomFrame[] = [],
+  selectedNodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  frames: WorkflowFrame[] = [],
 ): WorkflowDraft {
   if (selectedNodes.length === 0) {
     throw new Error("Select at least one node to save a workflow.");
@@ -166,7 +166,7 @@ function uniqueBindingName(name: string, used: Set<string>): string {
   return candidate;
 }
 
-function conciseLegacyLabel(label: string, node: LoomNode, port: PortDefinition): string {
+function conciseLegacyLabel(label: string, node: WorkflowNode, port: PortDefinition): string {
   const legacyLabel = `${node.data.title} · ${port.label}`;
   return label === legacyLabel ? port.label : label;
 }
@@ -174,10 +174,10 @@ function conciseLegacyLabel(label: string, node: LoomNode, port: PortDefinition)
 export function reviseWorkflowDraft(
   name: string,
   description: string,
-  nodes: LoomNode[],
-  edges: LoomEdge[],
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
   original: WorkflowSpec,
-  frames: LoomFrame[] = [],
+  frames: WorkflowFrame[] = [],
 ): WorkflowDraft {
   const inferred = inferWorkflowDraft(name, description, nodes, edges, frames);
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));

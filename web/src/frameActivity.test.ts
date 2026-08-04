@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { frameAggregate } from "./frameActivity";
-import type { LoomNode } from "./types";
+import type { WorkflowNode } from "./types";
 
-const node = (id: string, runStatus: LoomNode["data"]["runStatus"] = "idle") =>
-  ({ id, data: { title: id, runStatus } }) as LoomNode;
+const node = (id: string, runStatus: WorkflowNode["data"]["runStatus"] = "idle") =>
+  ({ id, data: { title: id, runStatus } }) as WorkflowNode;
 
 describe("frame aggregate status", () => {
   it("reports a partial count when a target run leaves children unscoped", () => {

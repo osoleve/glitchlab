@@ -1,5 +1,11 @@
 # Partial execution and graph legibility handoff
 
+> Historical handoff. As of 2026-08-03, editable top-level documents are named
+> graphs and live under `.glitchloom/graphs`; Loom now refers only to the
+> branching text node. Earlier names, paths, and commit subjects below document
+> the old implementation and are not compatibility contracts. See `README.md`
+> for the current design.
+
 **Prepared:** 2026-07-29
 **Baseline:** Glitchloom 0.6.0, after saved looms, document tabs, expanded
 context menus, and Passthrough wire insertion.

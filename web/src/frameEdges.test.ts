@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { collapseFrameEdges } from "./frameEdges";
-import type { LoomEdge, LoomNode } from "./types";
+import type { WorkflowEdge, WorkflowNode } from "./types";
 
-const node = (id: string, parentId?: string) => ({ id, parentId }) as LoomNode;
+const node = (id: string, parentId?: string) => ({ id, parentId }) as WorkflowNode;
 const edge = (id: string, source: string, target: string) =>
   ({
     id,
@@ -10,7 +10,7 @@ const edge = (id: string, source: string, target: string) =>
     sourceHandle: "out",
     target,
     targetHandle: "in",
-  }) as LoomEdge;
+  }) as WorkflowEdge;
 
 describe("collapsed frame edges", () => {
   it("hides internal edges and proxies boundary connectivity", () => {

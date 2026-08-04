@@ -1,10 +1,10 @@
 import type {
   EdgeRouting,
-  LoomEdge,
-  LoomFrame,
-  LoomNode,
-  LoomSpec,
+  GraphDocument,
   RunResponse,
+  WorkflowEdge,
+  WorkflowFrame,
+  WorkflowNode,
   WorkflowSpec,
 } from "../types";
 
@@ -17,22 +17,22 @@ export interface ExecutionScopeState {
 }
 
 export interface GraphSnapshot {
-  nodes: LoomNode[];
-  edges: LoomEdge[];
-  frames?: LoomFrame[];
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  frames?: WorkflowFrame[];
   edgeRouting?: EdgeRouting;
   run?: RunResponse;
   runError?: string;
   selectedId?: string;
-  loomName: string;
+  graphName: string;
   isDirty: boolean;
   executionScope?: ExecutionScopeState;
 }
 
 export interface GraphTab {
   id: string;
-  type: "loom" | "workflow";
-  loom?: LoomSpec;
+  type: "graph" | "workflow";
+  graph?: GraphDocument;
   sourceTemplateId?: string;
   workflow?: WorkflowSpec;
   snapshot: GraphSnapshot;

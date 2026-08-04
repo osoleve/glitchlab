@@ -24,6 +24,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/graph-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Graph Templates
+         * @description List checked-in graphs that always open as unsaved copies.
+         */
+        get: operations["list_graph_templates_api_graph_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/graph-templates/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Graph Template
+         * @description Load one read-only template and exact definitions for its graph.
+         */
+        get: operations["get_graph_template_api_graph_templates__template_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/graphs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Graphs
+         * @description Return saved editable graph documents without their full graph bodies.
+         */
+        get: operations["list_graphs_api_graphs_get"];
+        put?: never;
+        /**
+         * Create Graph
+         * @description Create a mutable top-level workflow graph document.
+         */
+        post: operations["create_graph_api_graphs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/graphs/{graph_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Graph
+         * @description Load a saved document and exact definitions for its versioned nodes.
+         */
+        get: operations["get_graph_api_graphs__graph_id__get"];
+        /**
+         * Update Graph
+         * @description Update a mutable graph with optimistic revision protection.
+         */
+        put: operations["update_graph_api_graphs__graph_id__put"];
+        post?: never;
+        /**
+         * Delete Graph
+         * @description Move a saved top-level graph to recoverable trash.
+         */
+        delete: operations["delete_graph_api_graphs__graph_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -39,98 +131,6 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/loom-templates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Loom Templates
-         * @description List checked-in graphs that always open as unsaved copies.
-         */
-        get: operations["list_loom_templates_api_loom_templates_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/loom-templates/{template_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Loom Template
-         * @description Load one read-only template and exact definitions for its graph.
-         */
-        get: operations["get_loom_template_api_loom_templates__template_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/looms": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Looms
-         * @description Return saved editable graph documents without their full graph bodies.
-         */
-        get: operations["list_looms_api_looms_get"];
-        put?: never;
-        /**
-         * Create Loom
-         * @description Create a mutable top-level loom document.
-         */
-        post: operations["create_loom_api_looms_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/looms/{loom_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Loom
-         * @description Load a saved document and exact definitions for its versioned nodes.
-         */
-        get: operations["get_loom_api_looms__loom_id__get"];
-        /**
-         * Update Loom
-         * @description Update a mutable loom with optimistic revision protection.
-         */
-        put: operations["update_loom_api_looms__loom_id__put"];
-        post?: never;
-        /**
-         * Delete Loom
-         * @description Move a saved top-level loom to recoverable trash.
-         */
-        delete: operations["delete_loom_api_looms__loom_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -276,11 +276,11 @@ export interface components {
             plugin: components["schemas"]["PluginStatus"];
         };
         /**
-         * DeleteLoomResponse
-         * @description Envelope returned after moving a loom to recoverable trash.
+         * DeleteGraphDocumentResponse
+         * @description Envelope returned after moving a graph to recoverable trash.
          */
-        DeleteLoomResponse: {
-            deleted: components["schemas"]["DeletedLoom"];
+        DeleteGraphDocumentResponse: {
+            deleted: components["schemas"]["DeletedGraphDocument"];
         };
         /**
          * DeleteWorkflowResponse
@@ -290,10 +290,10 @@ export interface components {
             deleted: components["schemas"]["DeletedWorkflow"];
         };
         /**
-         * DeletedLoom
-         * @description Recoverable deletion metadata for one mutable loom.
+         * DeletedGraphDocument
+         * @description Recoverable deletion metadata for one mutable graph.
          */
-        DeletedLoom: {
+        DeletedGraphDocument: {
             /** Id */
             id: string;
             /** Name */
@@ -443,6 +443,74 @@ export interface components {
             required: boolean;
         };
         /**
+         * GraphDocument
+         * @description A mutable top-level graph document stored independently of workflows.
+         */
+        GraphDocument: {
+            /** Created At */
+            created_at: string;
+            /** Digest */
+            digest: string;
+            graph: components["schemas"]["GraphSpec"];
+            /** Id */
+            id: string;
+            /** Revision */
+            revision: number;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * GraphDocumentDraft
+         * @description An editable top-level graph before document identity is assigned.
+         */
+        GraphDocumentDraft: {
+            graph: components["schemas"]["GraphSpec"];
+        };
+        /**
+         * GraphDocumentListResponse
+         * @description Saved mutable graph summaries.
+         */
+        GraphDocumentListResponse: {
+            /** Graphs */
+            graphs: components["schemas"]["GraphDocumentSummary"][];
+        };
+        /**
+         * GraphDocumentResponse
+         * @description Envelope returned after creating or updating a graph.
+         */
+        GraphDocumentResponse: {
+            graph: components["schemas"]["GraphDocument"];
+        };
+        /**
+         * GraphDocumentSummary
+         * @description Compact metadata used by the saved-graph picker.
+         */
+        GraphDocumentSummary: {
+            /** Created At */
+            created_at: string;
+            /** Digest */
+            digest: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Node Count */
+            node_count: number;
+            /** Revision */
+            revision: number;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * GraphDocumentUpdate
+         * @description A guarded update to an existing mutable graph document.
+         */
+        GraphDocumentUpdate: {
+            /** Expected Revision */
+            expected_revision: number;
+            graph: components["schemas"]["GraphSpec"];
+        };
+        /**
          * GraphEdge
          * @description A typed connection between two node ports.
          */
@@ -476,6 +544,7 @@ export interface components {
             /** Kind */
             kind: string;
             position?: components["schemas"]["Position"];
+            state?: components["schemas"]["LoomState"] | null;
             /** Title */
             title?: string | null;
         };
@@ -502,12 +571,41 @@ export interface components {
             edges: components["schemas"]["GraphEdge"][];
             /**
              * Name
-             * @default Untitled loom
+             * @default Untitled graph
              */
             name: string;
             /** Nodes */
             nodes: components["schemas"]["GraphNode"][];
             presentation?: components["schemas"]["GraphPresentation"];
+        };
+        /**
+         * GraphTemplate
+         * @description A checked-in graph example exposed as a read-only starting point.
+         */
+        GraphTemplate: {
+            graph: components["schemas"]["GraphSpec"];
+            /** Id */
+            id: string;
+        };
+        /**
+         * GraphTemplateListResponse
+         * @description Checked-in graph template summaries.
+         */
+        GraphTemplateListResponse: {
+            /** Templates */
+            templates: components["schemas"]["GraphTemplateSummary"][];
+        };
+        /**
+         * GraphTemplateSummary
+         * @description Compact metadata for the template picker.
+         */
+        GraphTemplateSummary: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Node Count */
+            node_count: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -531,22 +629,22 @@ export interface components {
             workspace: string;
         };
         /**
-         * LoadLoomResponse
-         * @description A saved loom plus exact catalog definitions needed to render it.
+         * LoadGraphDocumentResponse
+         * @description A saved graph plus exact catalog definitions needed to render it.
          */
-        LoadLoomResponse: {
+        LoadGraphDocumentResponse: {
             /** Definitions */
             definitions: components["schemas"]["NodeDefinition"][];
-            loom: components["schemas"]["LoomSpec"];
+            graph: components["schemas"]["GraphDocument"];
         };
         /**
-         * LoadLoomTemplateResponse
+         * LoadGraphTemplateResponse
          * @description A checked-in template plus exact definitions needed to render it.
          */
-        LoadLoomTemplateResponse: {
+        LoadGraphTemplateResponse: {
             /** Definitions */
             definitions: components["schemas"]["NodeDefinition"][];
-            template: components["schemas"]["LoomTemplate"];
+            template: components["schemas"]["GraphTemplate"];
         };
         /**
          * LoadWorkflowResponse
@@ -558,101 +656,68 @@ export interface components {
             workflow: components["schemas"]["WorkflowSpec"];
         };
         /**
-         * LoomDraft
-         * @description An editable top-level graph before document identity is assigned.
+         * LoomEntry
+         * @description One ordered text segment in an embedded branching Loom.
          */
-        LoomDraft: {
-            graph: components["schemas"]["GraphSpec"];
-        };
-        /**
-         * LoomListResponse
-         * @description Saved mutable loom summaries.
-         */
-        LoomListResponse: {
-            /** Looms */
-            looms: components["schemas"]["LoomSummary"][];
-        };
-        /**
-         * LoomResponse
-         * @description Envelope returned after creating or updating a loom.
-         */
-        LoomResponse: {
-            loom: components["schemas"]["LoomSpec"];
-        };
-        /**
-         * LoomSpec
-         * @description A mutable top-level graph document stored independently of workflows.
-         */
-        LoomSpec: {
+        LoomEntry: {
+            /** Completion */
+            completion?: {
+                [key: string]: unknown;
+            } | null;
             /** Created At */
             created_at: string;
-            /** Digest */
-            digest: string;
-            graph: components["schemas"]["GraphSpec"];
             /** Id */
             id: string;
-            /** Revision */
-            revision: number;
+            /** Parent Id */
+            parent_id?: string | null;
+            run?: components["schemas"]["LoomRunReference"] | null;
+            /**
+             * Source
+             * @default human
+             * @enum {string}
+             */
+            source: "human" | "model" | "edited";
+            /**
+             * Text
+             * @default
+             */
+            text: string;
             /** Updated At */
-            updated_at: string;
+            updated_at?: string | null;
         };
         /**
-         * LoomSummary
-         * @description Compact metadata used by the saved-loom picker.
+         * LoomRunReference
+         * @description Compact graph-run identity retained with one generated Loom entry.
          */
-        LoomSummary: {
-            /** Created At */
-            created_at: string;
-            /** Digest */
-            digest: string;
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Node Count */
-            node_count: number;
-            /** Revision */
-            revision: number;
-            /** Updated At */
-            updated_at: string;
+        LoomRunReference: {
+            /** Finished At */
+            finished_at: string;
+            /** Graph Digest */
+            graph_digest: string;
+            /** Run Id */
+            run_id: string;
         };
         /**
-         * LoomTemplate
-         * @description A checked-in graph example exposed as a read-only starting point.
+         * LoomState
+         * @description Validated tree state owned by a Loom workflow node.
          */
-        LoomTemplate: {
-            graph: components["schemas"]["GraphSpec"];
-            /** Id */
-            id: string;
-        };
-        /**
-         * LoomTemplateListResponse
-         * @description Checked-in graph template summaries.
-         */
-        LoomTemplateListResponse: {
-            /** Templates */
-            templates: components["schemas"]["LoomTemplateSummary"][];
-        };
-        /**
-         * LoomTemplateSummary
-         * @description Compact metadata for the template picker.
-         */
-        LoomTemplateSummary: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Node Count */
-            node_count: number;
-        };
-        /**
-         * LoomUpdate
-         * @description A guarded update to an existing mutable loom document.
-         */
-        LoomUpdate: {
-            /** Expected Revision */
-            expected_revision: number;
-            graph: components["schemas"]["GraphSpec"];
+        LoomState: {
+            /** Entries */
+            entries: components["schemas"]["LoomEntry"][];
+            /**
+             * Kind
+             * @default loom
+             * @constant
+             */
+            kind: "loom";
+            /** Selected Id */
+            selected_id: string;
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
         };
         /**
          * NodeCompletedEvent
@@ -691,6 +756,8 @@ export interface components {
             category: string;
             /** Description */
             description: string;
+            /** Editor */
+            editor?: "loom" | null;
             /** Fields */
             fields: components["schemas"]["FieldDefinition"][];
             /** Inputs */
@@ -1231,7 +1298,7 @@ export interface operations {
             };
         };
     };
-    health_api_health_get: {
+    list_graph_templates_api_graph_templates_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1246,32 +1313,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    "application/json": components["schemas"]["GraphTemplateListResponse"];
                 };
             };
         };
     };
-    list_loom_templates_api_loom_templates_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoomTemplateListResponse"];
-                };
-            };
-        };
-    };
-    get_loom_template_api_loom_templates__template_id__get: {
+    get_graph_template_api_graph_templates__template_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1288,7 +1335,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoadLoomTemplateResponse"];
+                    "application/json": components["schemas"]["LoadGraphTemplateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1302,7 +1349,7 @@ export interface operations {
             };
         };
     };
-    list_looms_api_looms_get: {
+    list_graphs_api_graphs_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1317,12 +1364,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoomListResponse"];
+                    "application/json": components["schemas"]["GraphDocumentListResponse"];
                 };
             };
         };
     };
-    create_loom_api_looms_post: {
+    create_graph_api_graphs_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1331,7 +1378,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["LoomDraft"];
+                "application/json": components["schemas"]["GraphDocumentDraft"];
             };
         };
         responses: {
@@ -1341,7 +1388,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoomResponse"];
+                    "application/json": components["schemas"]["GraphDocumentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1355,12 +1402,12 @@ export interface operations {
             };
         };
     };
-    get_loom_api_looms__loom_id__get: {
+    get_graph_api_graphs__graph_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                loom_id: string;
+                graph_id: string;
             };
             cookie?: never;
         };
@@ -1372,7 +1419,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoadLoomResponse"];
+                    "application/json": components["schemas"]["LoadGraphDocumentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1386,18 +1433,18 @@ export interface operations {
             };
         };
     };
-    update_loom_api_looms__loom_id__put: {
+    update_graph_api_graphs__graph_id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                loom_id: string;
+                graph_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["LoomUpdate"];
+                "application/json": components["schemas"]["GraphDocumentUpdate"];
             };
         };
         responses: {
@@ -1407,7 +1454,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoomResponse"];
+                    "application/json": components["schemas"]["GraphDocumentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1421,12 +1468,12 @@ export interface operations {
             };
         };
     };
-    delete_loom_api_looms__loom_id__delete: {
+    delete_graph_api_graphs__graph_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                loom_id: string;
+                graph_id: string;
             };
             cookie?: never;
         };
@@ -1438,7 +1485,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeleteLoomResponse"];
+                    "application/json": components["schemas"]["DeleteGraphDocumentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1448,6 +1495,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_api_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
         };

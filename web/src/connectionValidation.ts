@@ -1,12 +1,12 @@
 import type { Connection, Edge } from "@xyflow/react";
-import type { LoomEdge, LoomNode } from "./types";
+import type { WorkflowEdge, WorkflowNode } from "./types";
 
 type CandidateConnection = Connection | Edge;
 
 function wouldCreateCycle(
   source: string,
   target: string,
-  edges: readonly LoomEdge[],
+  edges: readonly WorkflowEdge[],
   ignoredEdgeId?: string,
 ): boolean {
   const outgoing = new Map<string, string[]>();
@@ -31,8 +31,8 @@ function wouldCreateCycle(
 
 export function isGraphConnectionValid(
   connection: CandidateConnection,
-  nodes: readonly LoomNode[],
-  edges: readonly LoomEdge[],
+  nodes: readonly WorkflowNode[],
+  edges: readonly WorkflowEdge[],
 ): boolean {
   const { source, target, sourceHandle: sourcePortName, targetHandle: targetPortName } = connection;
   if (!source || !target || !sourcePortName || !targetPortName || source === target) {

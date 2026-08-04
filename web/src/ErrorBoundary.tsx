@@ -53,7 +53,7 @@ export function PreviewErrorFallback({ error }: { error: Error }) {
   return (
     <div className={cx(styles, "preview-error")} role="alert">
       <strong>Output could not be rendered</strong>
-      <span>The run is still available. Try another node or run the loom again.</span>
+      <span>The run is still available. Try another node or run the graph again.</span>
       <code>{errorMessage(error)}</code>
     </div>
   );

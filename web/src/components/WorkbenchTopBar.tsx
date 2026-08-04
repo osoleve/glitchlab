@@ -11,10 +11,10 @@ import {
 } from "lucide-react";
 import styles from "../App.module.css";
 import { moduleClassNames as cx } from "../moduleClassNames";
-import type { CatalogResponse, LoomSpec, WorkflowSpec } from "../types";
+import type { CatalogResponse, GraphDocument, WorkflowSpec } from "../types";
 
 interface WorkbenchTopBarProps {
-  activeLoom?: LoomSpec;
+  activeGraph?: GraphDocument;
   activeTabId: string;
   activeWorkflow?: WorkflowSpec;
   afterHours: boolean;
@@ -23,16 +23,16 @@ interface WorkbenchTopBarProps {
   catalog?: CatalogResponse;
   graphBusy: boolean;
   isDirty: boolean;
-  loomName: string;
+  graphName: string;
   nodeCount: number;
   running: boolean;
-  savingLoom: boolean;
+  savingGraph: boolean;
   savingWorkflow: boolean;
   onExecute: () => void;
-  onLoomNameChange: (name: string) => void;
+  onGraphNameChange: (name: string) => void;
   onOpenEditSaveDialog: () => void;
   onOpenLibrary: () => void;
-  onRequestSaveLoom: (saveAs: boolean) => void;
+  onRequestSaveGraph: (saveAs: boolean) => void;
   onRequestStarterReset: () => void;
   onRedo: () => void;
   onToggleAfterHours: () => void;
@@ -40,7 +40,7 @@ interface WorkbenchTopBarProps {
 }
 
 export function WorkbenchTopBar({
-  activeLoom,
+  activeGraph,
   activeTabId,
   activeWorkflow,
   afterHours,
@@ -49,16 +49,16 @@ export function WorkbenchTopBar({
   catalog,
   graphBusy,
   isDirty,
-  loomName,
+  graphName,
   nodeCount,
   running,
-  savingLoom,
+  savingGraph,
   savingWorkflow,
   onExecute,
-  onLoomNameChange,
+  onGraphNameChange,
   onOpenEditSaveDialog,
   onOpenLibrary,
-  onRequestSaveLoom,
+  onRequestSaveGraph,
   onRequestStarterReset,
   onRedo,
   onToggleAfterHours,
@@ -84,19 +84,19 @@ export function WorkbenchTopBar({
           <small>{afterHours ? "the loom hums back" : "after hours"}</small>
         </span>
       </button>
-      <div className={cx(styles, "loom-title")}>
-        <span className={cx(styles, "loom-title-label")}>
+      <div className={cx(styles, "graph-title")}>
+        <span className={cx(styles, "graph-title-label")}>
           {activeWorkflow
             ? "workflow"
-            : activeLoom
-              ? `saved loom · r${activeLoom.revision}`
-              : "loom draft"}
+            : activeGraph
+              ? `saved graph · r${activeGraph.revision}`
+              : "graph draft"}
         </span>
         <input
-          aria-label={activeWorkflow ? "Workflow name" : "Loom name"}
-          value={loomName}
-          disabled={savingLoom || running}
-          onChange={(event) => onLoomNameChange(event.target.value)}
+          aria-label={activeWorkflow ? "Workflow name" : "Graph name"}
+          value={graphName}
+          disabled={savingGraph || running}
+          onChange={(event) => onGraphNameChange(event.target.value)}
         />
         {isDirty && (
           <span
@@ -147,7 +147,7 @@ export function WorkbenchTopBar({
           className={cx(styles, "secondary-button")}
           onClick={onOpenLibrary}
           disabled={running || graphBusy || !catalog}
-          title="Open a saved loom or template"
+          title="Open a saved graph or template"
         >
           <FolderOpen size={15} />
           Open
@@ -168,11 +168,11 @@ export function WorkbenchTopBar({
             <button
               type="button"
               className={cx(styles, "secondary-button")}
-              onClick={() => onRequestSaveLoom(false)}
-              disabled={savingLoom || running || !catalog}
-              title="Save loom (Ctrl+S)"
+              onClick={() => onRequestSaveGraph(false)}
+              disabled={savingGraph || running || !catalog}
+              title="Save graph (Ctrl+S)"
             >
-              {savingLoom ? (
+              {savingGraph ? (
                 <LoaderCircle className={cx(styles, "spin-icon")} size={15} />
               ) : (
                 <Save size={15} />
@@ -182,19 +182,19 @@ export function WorkbenchTopBar({
             <button
               type="button"
               className={cx(styles, "secondary-button compact-action-button")}
-              onClick={() => onRequestSaveLoom(true)}
-              disabled={savingLoom || running || !catalog}
-              title="Save as a new loom (Ctrl+Shift+S)"
-              aria-label="Save as a new loom"
+              onClick={() => onRequestSaveGraph(true)}
+              disabled={savingGraph || running || !catalog}
+              title="Save as a new graph (Ctrl+Shift+S)"
+              aria-label="Save as a new graph"
             >
               <FilePlus2 size={15} />
             </button>
-            {activeTabId === "main" && !activeLoom && (
+            {activeTabId === "main" && !activeGraph && (
               <button
                 type="button"
                 className={cx(styles, "secondary-button compact-action-button")}
                 onClick={onRequestStarterReset}
-                disabled={savingLoom || running || !catalog}
+                disabled={savingGraph || running || !catalog}
                 title="Reset to the starter graph"
                 aria-label="Reset to starter graph"
               >
@@ -207,15 +207,15 @@ export function WorkbenchTopBar({
           type="button"
           className={cx(styles, "run-button")}
           onClick={onExecute}
-          disabled={running || savingLoom || nodeCount === 0}
-          title="Run loom (Ctrl+Enter)"
+          disabled={running || savingGraph || nodeCount === 0}
+          title="Run graph (Ctrl+Enter)"
         >
           {running ? (
             <LoaderCircle className={cx(styles, "spin-icon")} size={16} />
           ) : (
             <Play size={16} fill="currentColor" />
           )}
-          {running ? "Running…" : "Run loom"}
+          {running ? "Running…" : "Run graph"}
         </button>
       </div>
     </header>

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { LoomNode } from "../types";
+import type { WorkflowNode } from "../types";
 import { useGraphDocumentStore } from "./graphDocumentStore";
 
 const node = (id: string, value = "before") =>
   ({
     id,
-    type: "loomNode",
+    type: "workflowNode",
     position: { x: 0, y: 0 },
     data: {
       kind: "test",
@@ -32,7 +32,7 @@ const node = (id: string, value = "before") =>
       controlPorts: {},
       runStatus: "completed",
     },
-  }) as unknown as LoomNode;
+  }) as unknown as WorkflowNode;
 
 describe("graph document store", () => {
   beforeEach(() => {
@@ -42,7 +42,7 @@ describe("graph document store", () => {
       frames: [],
       edgeRouting: "smoothstep",
       selectedId: "one",
-      loomName: "Test graph",
+      graphName: "Test graph",
       isDirty: false,
     });
     useGraphDocumentStore.temporal.getState().resume();
@@ -118,7 +118,7 @@ describe("graph document store", () => {
       frames: [
         {
           id: "frame-one",
-          type: "loomFrame",
+          type: "workflowFrame",
           position: { x: 100, y: 200 },
           width: 400,
           height: 260,

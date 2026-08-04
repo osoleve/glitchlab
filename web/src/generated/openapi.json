@@ -30,17 +30,17 @@
         "title": "CatalogResponse",
         "type": "object"
       },
-      "DeleteLoomResponse": {
-        "description": "Envelope returned after moving a loom to recoverable trash.",
+      "DeleteGraphDocumentResponse": {
+        "description": "Envelope returned after moving a graph to recoverable trash.",
         "properties": {
           "deleted": {
-            "$ref": "#/components/schemas/DeletedLoom"
+            "$ref": "#/components/schemas/DeletedGraphDocument"
           }
         },
         "required": [
           "deleted"
         ],
-        "title": "DeleteLoomResponse",
+        "title": "DeleteGraphDocumentResponse",
         "type": "object"
       },
       "DeleteWorkflowResponse": {
@@ -56,8 +56,8 @@
         "title": "DeleteWorkflowResponse",
         "type": "object"
       },
-      "DeletedLoom": {
-        "description": "Recoverable deletion metadata for one mutable loom.",
+      "DeletedGraphDocument": {
+        "description": "Recoverable deletion metadata for one mutable graph.",
         "properties": {
           "id": {
             "title": "Id",
@@ -82,7 +82,7 @@
           "revision",
           "recoverable_path"
         ],
-        "title": "DeletedLoom",
+        "title": "DeletedGraphDocument",
         "type": "object"
       },
       "DeletedWorkflow": {
@@ -402,6 +402,150 @@
         "title": "GlitchlingParameter",
         "type": "object"
       },
+      "GraphDocument": {
+        "description": "A mutable top-level graph document stored independently of workflows.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "graph",
+          "id",
+          "revision",
+          "digest",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GraphDocument",
+        "type": "object"
+      },
+      "GraphDocumentDraft": {
+        "description": "An editable top-level graph before document identity is assigned.",
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          }
+        },
+        "required": [
+          "graph"
+        ],
+        "title": "GraphDocumentDraft",
+        "type": "object"
+      },
+      "GraphDocumentListResponse": {
+        "description": "Saved mutable graph summaries.",
+        "properties": {
+          "graphs": {
+            "items": {
+              "$ref": "#/components/schemas/GraphDocumentSummary"
+            },
+            "title": "Graphs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "graphs"
+        ],
+        "title": "GraphDocumentListResponse",
+        "type": "object"
+      },
+      "GraphDocumentResponse": {
+        "description": "Envelope returned after creating or updating a graph.",
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/GraphDocument"
+          }
+        },
+        "required": [
+          "graph"
+        ],
+        "title": "GraphDocumentResponse",
+        "type": "object"
+      },
+      "GraphDocumentSummary": {
+        "description": "Compact metadata used by the saved-graph picker.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "revision",
+          "digest",
+          "created_at",
+          "updated_at",
+          "node_count"
+        ],
+        "title": "GraphDocumentSummary",
+        "type": "object"
+      },
+      "GraphDocumentUpdate": {
+        "description": "A guarded update to an existing mutable graph document.",
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          }
+        },
+        "required": [
+          "graph",
+          "expected_revision"
+        ],
+        "title": "GraphDocumentUpdate",
+        "type": "object"
+      },
       "GraphEdge": {
         "description": "A typed connection between two node ports.",
         "properties": {
@@ -467,6 +611,16 @@
           "position": {
             "$ref": "#/components/schemas/Position"
           },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoomState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "title": {
             "anyOf": [
               {
@@ -520,7 +674,7 @@
             "type": "array"
           },
           "name": {
-            "default": "Untitled loom",
+            "default": "Untitled graph",
             "title": "Name",
             "type": "string"
           },
@@ -540,6 +694,65 @@
           "edges"
         ],
         "title": "GraphSpec",
+        "type": "object"
+      },
+      "GraphTemplate": {
+        "description": "A checked-in graph example exposed as a read-only starting point.",
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/GraphSpec"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "graph"
+        ],
+        "title": "GraphTemplate",
+        "type": "object"
+      },
+      "GraphTemplateListResponse": {
+        "description": "Checked-in graph template summaries.",
+        "properties": {
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/GraphTemplateSummary"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates"
+        ],
+        "title": "GraphTemplateListResponse",
+        "type": "object"
+      },
+      "GraphTemplateSummary": {
+        "description": "Compact metadata for the template picker.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "node_count"
+        ],
+        "title": "GraphTemplateSummary",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -584,8 +797,8 @@
         "title": "HealthResponse",
         "type": "object"
       },
-      "LoadLoomResponse": {
-        "description": "A saved loom plus exact catalog definitions needed to render it.",
+      "LoadGraphDocumentResponse": {
+        "description": "A saved graph plus exact catalog definitions needed to render it.",
         "properties": {
           "definitions": {
             "items": {
@@ -594,18 +807,18 @@
             "title": "Definitions",
             "type": "array"
           },
-          "loom": {
-            "$ref": "#/components/schemas/LoomSpec"
+          "graph": {
+            "$ref": "#/components/schemas/GraphDocument"
           }
         },
         "required": [
-          "loom",
+          "graph",
           "definitions"
         ],
-        "title": "LoadLoomResponse",
+        "title": "LoadGraphDocumentResponse",
         "type": "object"
       },
-      "LoadLoomTemplateResponse": {
+      "LoadGraphTemplateResponse": {
         "description": "A checked-in template plus exact definitions needed to render it.",
         "properties": {
           "definitions": {
@@ -616,14 +829,14 @@
             "type": "array"
           },
           "template": {
-            "$ref": "#/components/schemas/LoomTemplate"
+            "$ref": "#/components/schemas/GraphTemplate"
           }
         },
         "required": [
           "template",
           "definitions"
         ],
-        "title": "LoadLoomTemplateResponse",
+        "title": "LoadGraphTemplateResponse",
         "type": "object"
       },
       "LoadWorkflowResponse": {
@@ -647,207 +860,140 @@
         "title": "LoadWorkflowResponse",
         "type": "object"
       },
-      "LoomDraft": {
-        "description": "An editable top-level graph before document identity is assigned.",
+      "LoomEntry": {
+        "description": "One ordered text segment in an embedded branching Loom.",
         "properties": {
-          "graph": {
-            "$ref": "#/components/schemas/GraphSpec"
-          }
-        },
-        "required": [
-          "graph"
-        ],
-        "title": "LoomDraft",
-        "type": "object"
-      },
-      "LoomListResponse": {
-        "description": "Saved mutable loom summaries.",
-        "properties": {
-          "looms": {
-            "items": {
-              "$ref": "#/components/schemas/LoomSummary"
-            },
-            "title": "Looms",
-            "type": "array"
-          }
-        },
-        "required": [
-          "looms"
-        ],
-        "title": "LoomListResponse",
-        "type": "object"
-      },
-      "LoomResponse": {
-        "description": "Envelope returned after creating or updating a loom.",
-        "properties": {
-          "loom": {
-            "$ref": "#/components/schemas/LoomSpec"
-          }
-        },
-        "required": [
-          "loom"
-        ],
-        "title": "LoomResponse",
-        "type": "object"
-      },
-      "LoomSpec": {
-        "description": "A mutable top-level graph document stored independently of workflows.",
-        "properties": {
+          "completion": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completion"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
           },
-          "digest": {
-            "title": "Digest",
-            "type": "string"
-          },
-          "graph": {
-            "$ref": "#/components/schemas/GraphSpec"
-          },
           "id": {
             "title": "Id",
             "type": "string"
           },
-          "revision": {
-            "title": "Revision",
-            "type": "integer"
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoomRunReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "default": "human",
+            "enum": [
+              "human",
+              "model",
+              "edited"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
           },
           "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "graph",
-          "id",
-          "revision",
-          "digest",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "LoomSpec",
-        "type": "object"
-      },
-      "LoomSummary": {
-        "description": "Compact metadata used by the saved-loom picker.",
-        "properties": {
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "digest": {
-            "title": "Digest",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "node_count": {
-            "title": "Node Count",
-            "type": "integer"
-          },
-          "revision": {
-            "title": "Revision",
-            "type": "integer"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
         "required": [
           "id",
-          "name",
-          "revision",
-          "digest",
-          "created_at",
-          "updated_at",
-          "node_count"
+          "created_at"
         ],
-        "title": "LoomSummary",
+        "title": "LoomEntry",
         "type": "object"
       },
-      "LoomTemplate": {
-        "description": "A checked-in graph example exposed as a read-only starting point.",
+      "LoomRunReference": {
+        "description": "Compact graph-run identity retained with one generated Loom entry.",
         "properties": {
-          "graph": {
-            "$ref": "#/components/schemas/GraphSpec"
+          "finished_at": {
+            "title": "Finished At",
+            "type": "string"
           },
-          "id": {
-            "title": "Id",
+          "graph_digest": {
+            "title": "Graph Digest",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
             "type": "string"
           }
         },
         "required": [
-          "id",
-          "graph"
+          "run_id",
+          "graph_digest",
+          "finished_at"
         ],
-        "title": "LoomTemplate",
+        "title": "LoomRunReference",
         "type": "object"
       },
-      "LoomTemplateListResponse": {
-        "description": "Checked-in graph template summaries.",
+      "LoomState": {
+        "description": "Validated tree state owned by a Loom workflow node.",
         "properties": {
-          "templates": {
+          "entries": {
             "items": {
-              "$ref": "#/components/schemas/LoomTemplateSummary"
+              "$ref": "#/components/schemas/LoomEntry"
             },
-            "title": "Templates",
+            "title": "Entries",
             "type": "array"
-          }
-        },
-        "required": [
-          "templates"
-        ],
-        "title": "LoomTemplateListResponse",
-        "type": "object"
-      },
-      "LoomTemplateSummary": {
-        "description": "Compact metadata for the template picker.",
-        "properties": {
-          "id": {
-            "title": "Id",
+          },
+          "kind": {
+            "const": "loom",
+            "default": "loom",
+            "title": "Kind",
             "type": "string"
           },
-          "name": {
-            "title": "Name",
+          "selected_id": {
+            "title": "Selected Id",
             "type": "string"
           },
-          "node_count": {
-            "title": "Node Count",
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
             "type": "integer"
           }
         },
         "required": [
-          "id",
-          "name",
-          "node_count"
+          "entries",
+          "selected_id"
         ],
-        "title": "LoomTemplateSummary",
-        "type": "object"
-      },
-      "LoomUpdate": {
-        "description": "A guarded update to an existing mutable loom document.",
-        "properties": {
-          "expected_revision": {
-            "minimum": 1.0,
-            "title": "Expected Revision",
-            "type": "integer"
-          },
-          "graph": {
-            "$ref": "#/components/schemas/GraphSpec"
-          }
-        },
-        "required": [
-          "graph",
-          "expected_revision"
-        ],
-        "title": "LoomUpdate",
+        "title": "LoomState",
         "type": "object"
       },
       "NodeCompletedEvent": {
@@ -912,6 +1058,18 @@
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "editor": {
+            "anyOf": [
+              {
+                "const": "loom",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editor"
           },
           "fields": {
             "items": {
@@ -2102,6 +2260,247 @@
         "summary": "Catalog"
       }
     },
+    "/api/graph-templates": {
+      "get": {
+        "description": "List checked-in graphs that always open as unsaved copies.",
+        "operationId": "list_graph_templates_api_graph_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphTemplateListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Graph Templates"
+      }
+    },
+    "/api/graph-templates/{template_id}": {
+      "get": {
+        "description": "Load one read-only template and exact definitions for its graph.",
+        "operationId": "get_graph_template_api_graph_templates__template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadGraphTemplateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Graph Template"
+      }
+    },
+    "/api/graphs": {
+      "get": {
+        "description": "Return saved editable graph documents without their full graph bodies.",
+        "operationId": "list_graphs_api_graphs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphDocumentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Graphs"
+      },
+      "post": {
+        "description": "Create a mutable top-level workflow graph document.",
+        "operationId": "create_graph_api_graphs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphDocumentDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Graph"
+      }
+    },
+    "/api/graphs/{graph_id}": {
+      "delete": {
+        "description": "Move a saved top-level graph to recoverable trash.",
+        "operationId": "delete_graph_api_graphs__graph_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "graph_id",
+            "required": true,
+            "schema": {
+              "title": "Graph Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteGraphDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Graph"
+      },
+      "get": {
+        "description": "Load a saved document and exact definitions for its versioned nodes.",
+        "operationId": "get_graph_api_graphs__graph_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "graph_id",
+            "required": true,
+            "schema": {
+              "title": "Graph Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadGraphDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Graph"
+      },
+      "put": {
+        "description": "Update a mutable graph with optimistic revision protection.",
+        "operationId": "update_graph_api_graphs__graph_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "graph_id",
+            "required": true,
+            "schema": {
+              "title": "Graph Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphDocumentUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Graph"
+      }
+    },
     "/api/health": {
       "get": {
         "description": "Return backend and plugin health.",
@@ -2119,247 +2518,6 @@
           }
         },
         "summary": "Health"
-      }
-    },
-    "/api/loom-templates": {
-      "get": {
-        "description": "List checked-in graphs that always open as unsaved copies.",
-        "operationId": "list_loom_templates_api_loom_templates_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoomTemplateListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Loom Templates"
-      }
-    },
-    "/api/loom-templates/{template_id}": {
-      "get": {
-        "description": "Load one read-only template and exact definitions for its graph.",
-        "operationId": "get_loom_template_api_loom_templates__template_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "template_id",
-            "required": true,
-            "schema": {
-              "title": "Template Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoadLoomTemplateResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Loom Template"
-      }
-    },
-    "/api/looms": {
-      "get": {
-        "description": "Return saved editable graph documents without their full graph bodies.",
-        "operationId": "list_looms_api_looms_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoomListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Looms"
-      },
-      "post": {
-        "description": "Create a mutable top-level loom document.",
-        "operationId": "create_loom_api_looms_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoomDraft"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoomResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Loom"
-      }
-    },
-    "/api/looms/{loom_id}": {
-      "delete": {
-        "description": "Move a saved top-level loom to recoverable trash.",
-        "operationId": "delete_loom_api_looms__loom_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "loom_id",
-            "required": true,
-            "schema": {
-              "title": "Loom Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeleteLoomResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Loom"
-      },
-      "get": {
-        "description": "Load a saved document and exact definitions for its versioned nodes.",
-        "operationId": "get_loom_api_looms__loom_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "loom_id",
-            "required": true,
-            "schema": {
-              "title": "Loom Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoadLoomResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Loom"
-      },
-      "put": {
-        "description": "Update a mutable loom with optimistic revision protection.",
-        "operationId": "update_loom_api_looms__loom_id__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "loom_id",
-            "required": true,
-            "schema": {
-              "title": "Loom Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoomUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoomResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Loom"
       }
     },
     "/api/runs": {

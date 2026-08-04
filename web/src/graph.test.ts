@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hydrateGraph, serializeGraph } from "./graph";
-import type { LoomFrame, LoomNode, NodeDefinition } from "./types";
+import type { NodeDefinition, WorkflowFrame, WorkflowNode } from "./types";
 
 const definition = {
   kind: "test",
@@ -12,18 +12,18 @@ const definition = {
   fields: [],
 } as unknown as NodeDefinition;
 
-const frame: LoomFrame = {
+const frame: WorkflowFrame = {
   id: "frame-a",
-  type: "loomFrame",
+  type: "workflowFrame",
   position: { x: 80, y: 120 },
   width: 520,
   height: 320,
   data: { title: "Inputs", color: "amber", collapsed: true },
 };
 
-const node: LoomNode = {
+const node: WorkflowNode = {
   id: "node-a",
-  type: "loomNode",
+  type: "workflowNode",
   parentId: frame.id,
   extent: "parent",
   position: { x: 36, y: 72 },
@@ -79,5 +79,47 @@ describe("graph presentation", () => {
     const hydrated = hydrateGraph(legacy, [definition]);
     expect(hydrated.frames).toEqual([]);
     expect(hydrated.edgeRouting).toBe("smoothstep");
+  });
+});
+
+describe("Loom graph state", () => {
+  it("round-trips the selected branch as semantic node state", () => {
+    const loomDefinition: NodeDefinition = {
+      ...definition,
+      kind: "loom",
+      label: "Loom",
+      editor: "loom",
+    };
+    const loomNode: WorkflowNode = {
+      ...node,
+      id: "loom-a",
+      parentId: undefined,
+      extent: undefined,
+      data: {
+        ...node.data,
+        kind: "loom",
+        definition: loomDefinition,
+        state: {
+          kind: "loom",
+          version: 1,
+          selected_id: "child",
+          entries: [
+            { id: "root", text: "root", source: "human", created_at: "2026-08-03T00:00:00Z" },
+            {
+              id: "child",
+              parent_id: "root",
+              text: "  selected  ",
+              source: "model",
+              created_at: "2026-08-03T00:00:01Z",
+            },
+          ],
+        },
+      },
+    };
+
+    const graph = serializeGraph("Loom", [loomNode], []);
+    expect(graph.nodes[0]?.state?.selected_id).toBe("child");
+    const hydrated = hydrateGraph(graph, [loomDefinition]);
+    expect(hydrated.nodes[0]?.data.state?.entries[1]?.text).toBe("  selected  ");
   });
 });

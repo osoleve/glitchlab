@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isGraphConnectionValid } from "./connectionValidation";
-import type { LoomEdge, LoomNode, NodeDefinition, ValueType } from "./types";
+import type { NodeDefinition, ValueType, WorkflowEdge, WorkflowNode } from "./types";
 
 function definition(
   kind: string,
@@ -28,10 +28,10 @@ function definition(
   };
 }
 
-function node(id: string, nodeDefinition: NodeDefinition): LoomNode {
+function node(id: string, nodeDefinition: NodeDefinition): WorkflowNode {
   return {
     id,
-    type: "loomNode",
+    type: "workflowNode",
     position: { x: 0, y: 0 },
     data: {
       kind: nodeDefinition.kind,
@@ -129,7 +129,7 @@ describe("isGraphConnectionValid", () => {
   });
 
   it("enforces input multiplicity while allowing an edge to reconnect in place", () => {
-    const existing: LoomEdge = {
+    const existing: WorkflowEdge = {
       id: "edge-1",
       source: "collect",
       sourceHandle: "items",
@@ -152,7 +152,7 @@ describe("isGraphConnectionValid", () => {
   });
 
   it("rejects connections that would create a cycle", () => {
-    const existing: LoomEdge[] = [
+    const existing: WorkflowEdge[] = [
       {
         id: "edge-1",
         source: "collect",

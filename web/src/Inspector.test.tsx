@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Inspector } from "./Inspector";
-import type { LoomNode, NodeDefinition, RunResponse } from "./types";
+import type { NodeDefinition, RunResponse, WorkflowNode } from "./types";
 
 const definition: NodeDefinition = {
   kind: "preview",
@@ -14,10 +14,10 @@ const definition: NodeDefinition = {
   fields: [],
 };
 
-function node(id: string, kind = "text"): LoomNode {
+function node(id: string, kind = "text"): WorkflowNode {
   return {
     id,
-    type: "loomNode",
+    type: "workflowNode",
     position: { x: 0, y: 0 },
     data: {
       kind,
@@ -130,6 +130,6 @@ describe("Inspector output selection", () => {
     );
 
     expect(screen.getByRole("tab", { name: "Output" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Run the loom to inspect this node’s output.")).toBeInTheDocument();
+    expect(screen.getByText("Run the graph to inspect this node’s output.")).toBeInTheDocument();
   });
 });

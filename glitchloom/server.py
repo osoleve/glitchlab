@@ -20,21 +20,21 @@ from . import __version__
 from .catalog import get_catalog
 from .engine import GraphEngine
 from .glitchlings_adapter import discover_glitchlings, plugin_status
-from .looms import LoomConflictError, LoomStore, LoomTemplateStore
+from .graphs import GraphConflictError, GraphStore, GraphTemplateStore
 from .models import (
     CatalogResponse,
-    DeleteLoomResponse,
+    DeleteGraphDocumentResponse,
     DeleteWorkflowResponse,
+    GraphDocumentDraft,
+    GraphDocumentListResponse,
+    GraphDocumentResponse,
+    GraphDocumentUpdate,
     GraphRunFailure,
+    GraphTemplateListResponse,
     HealthResponse,
-    LoadLoomResponse,
-    LoadLoomTemplateResponse,
+    LoadGraphDocumentResponse,
+    LoadGraphTemplateResponse,
     LoadWorkflowResponse,
-    LoomDraft,
-    LoomListResponse,
-    LoomResponse,
-    LoomTemplateListResponse,
-    LoomUpdate,
     RunErrorResponse,
     RunEvent,
     RunRequest,
@@ -107,24 +107,24 @@ def catalog() -> dict[str, Any]:
     }
 
 
-@app.get("/api/looms", response_model=LoomListResponse)
-def list_looms() -> dict[str, Any]:
+@app.get("/api/graphs", response_model=GraphDocumentListResponse)
+def list_graphs() -> dict[str, Any]:
     """Return saved editable graph documents without their full graph bodies."""
 
-    store = LoomStore(GraphEngine().workspace)
+    store = GraphStore(GraphEngine().workspace)
     return {
-        "looms": [loom.model_dump(mode="json") for loom in store.list()]
+        "graphs": [graph.model_dump(mode="json") for graph in store.list()]
     }
 
 
-@app.post("/api/looms", status_code=201, response_model=LoomResponse)
-def create_loom(draft: LoomDraft) -> dict[str, Any]:
-    """Create a mutable top-level loom document."""
+@app.post("/api/graphs", status_code=201, response_model=GraphDocumentResponse)
+def create_graph(draft: GraphDocumentDraft) -> dict[str, Any]:
+    """Create a mutable top-level workflow graph document."""
 
-    store = LoomStore(GraphEngine().workspace)
+    store = GraphStore(GraphEngine().workspace)
     try:
-        loom = store.create(draft)
-    except LoomConflictError as exc:
+        graph = store.create(draft)
+    except GraphConflictError as exc:
         raise HTTPException(
             status_code=409,
             detail={
@@ -135,37 +135,37 @@ def create_loom(draft: LoomDraft) -> dict[str, Any]:
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
-    return {"loom": loom.model_dump(mode="json")}
+    return {"graph": graph.model_dump(mode="json")}
 
 
-@app.get("/api/looms/{loom_id}", response_model=LoadLoomResponse)
-def get_loom(loom_id: str) -> dict[str, Any]:
+@app.get("/api/graphs/{graph_id}", response_model=LoadGraphDocumentResponse)
+def get_graph(graph_id: str) -> dict[str, Any]:
     """Load a saved document and exact definitions for its versioned nodes."""
 
-    store = LoomStore(GraphEngine().workspace)
+    store = GraphStore(GraphEngine().workspace)
     try:
-        loom = store.get(loom_id)
-        definitions = store.definitions(loom.graph)
+        graph = store.get(graph_id)
+        definitions = store.definitions(graph.graph)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
     return {
-        "loom": loom.model_dump(mode="json"),
+        "graph": graph.model_dump(mode="json"),
         "definitions": definitions,
     }
 
 
-@app.put("/api/looms/{loom_id}", response_model=LoomResponse)
-def update_loom(loom_id: str, draft: LoomUpdate) -> dict[str, Any]:
-    """Update a mutable loom with optimistic revision protection."""
+@app.put("/api/graphs/{graph_id}", response_model=GraphDocumentResponse)
+def update_graph(graph_id: str, draft: GraphDocumentUpdate) -> dict[str, Any]:
+    """Update a mutable graph with optimistic revision protection."""
 
-    store = LoomStore(GraphEngine().workspace)
+    store = GraphStore(GraphEngine().workspace)
     try:
-        loom = store.update(
-            loom_id,
-            LoomDraft(graph=draft.graph),
+        graph = store.update(
+            graph_id,
+            GraphDocumentDraft(graph=draft.graph),
             expected_revision=draft.expected_revision,
         )
-    except LoomConflictError as exc:
+    except GraphConflictError as exc:
         raise HTTPException(
             status_code=409,
             detail={
@@ -176,26 +176,26 @@ def update_loom(loom_id: str, draft: LoomUpdate) -> dict[str, Any]:
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
-    return {"loom": loom.model_dump(mode="json")}
+    return {"graph": graph.model_dump(mode="json")}
 
 
-@app.delete("/api/looms/{loom_id}", response_model=DeleteLoomResponse)
-def delete_loom(loom_id: str) -> dict[str, Any]:
-    """Move a saved top-level loom to recoverable trash."""
+@app.delete("/api/graphs/{graph_id}", response_model=DeleteGraphDocumentResponse)
+def delete_graph(graph_id: str) -> dict[str, Any]:
+    """Move a saved top-level graph to recoverable trash."""
 
-    store = LoomStore(GraphEngine().workspace)
+    store = GraphStore(GraphEngine().workspace)
     try:
-        deleted = store.delete(loom_id)
+        deleted = store.delete(graph_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
     return {"deleted": deleted}
 
 
-@app.get("/api/loom-templates", response_model=LoomTemplateListResponse)
-def list_loom_templates() -> dict[str, Any]:
+@app.get("/api/graph-templates", response_model=GraphTemplateListResponse)
+def list_graph_templates() -> dict[str, Any]:
     """List checked-in graphs that always open as unsaved copies."""
 
-    store = LoomTemplateStore(GraphEngine().workspace)
+    store = GraphTemplateStore(GraphEngine().workspace)
     return {
         "templates": [
             template.model_dump(mode="json") for template in store.list()
@@ -204,13 +204,13 @@ def list_loom_templates() -> dict[str, Any]:
 
 
 @app.get(
-    "/api/loom-templates/{template_id}",
-    response_model=LoadLoomTemplateResponse,
+    "/api/graph-templates/{template_id}",
+    response_model=LoadGraphTemplateResponse,
 )
-def get_loom_template(template_id: str) -> dict[str, Any]:
+def get_graph_template(template_id: str) -> dict[str, Any]:
     """Load one read-only template and exact definitions for its graph."""
 
-    store = LoomTemplateStore(GraphEngine().workspace)
+    store = GraphTemplateStore(GraphEngine().workspace)
     try:
         template = store.get(template_id)
         definitions = store.definitions(template.graph)

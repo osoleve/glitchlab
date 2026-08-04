@@ -1,4 +1,4 @@
-import type { LoomNode } from "./types";
+import type { WorkflowNode } from "./types";
 
 export interface FrameAggregate {
   status?: "active" | "completed" | "failed" | "partial" | "target";
@@ -8,7 +8,7 @@ export interface FrameAggregate {
 }
 
 export function frameAggregate(
-  children: LoomNode[],
+  children: WorkflowNode[],
   scopedNodeIds: ReadonlySet<string>,
   targetNodeIds: ReadonlySet<string>,
   activeNodeId?: string,

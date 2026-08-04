@@ -1,4 +1,4 @@
-import type { GraphSpec, LoomEdge } from "./types";
+import type { GraphSpec, WorkflowEdge } from "./types";
 
 export interface GraphTraversalIndex {
   incoming: Map<string, string[]>;
@@ -7,7 +7,7 @@ export interface GraphTraversalIndex {
 
 export function buildGraphTraversalIndex(
   nodeIds: readonly string[],
-  edges: readonly Pick<LoomEdge, "source" | "target">[],
+  edges: readonly Pick<WorkflowEdge, "source" | "target">[],
 ): GraphTraversalIndex {
   const incoming = new Map(nodeIds.map((nodeId) => [nodeId, [] as string[]]));
   const outgoing = new Map(nodeIds.map((nodeId) => [nodeId, [] as string[]]));
@@ -38,7 +38,7 @@ function closure(
 
 export function upstreamClosure(
   nodeIds: readonly string[],
-  edges: readonly Pick<LoomEdge, "source" | "target">[],
+  edges: readonly Pick<WorkflowEdge, "source" | "target">[],
   targetIds: readonly string[],
 ): string[] {
   const index = buildGraphTraversalIndex(nodeIds, edges);
@@ -47,7 +47,7 @@ export function upstreamClosure(
 
 export function downstreamClosure(
   nodeIds: readonly string[],
-  edges: readonly Pick<LoomEdge, "source" | "target">[],
+  edges: readonly Pick<WorkflowEdge, "source" | "target">[],
   sourceIds: readonly string[],
 ): string[] {
   const index = buildGraphTraversalIndex(nodeIds, edges);
@@ -55,7 +55,7 @@ export function downstreamClosure(
 }
 
 export function inducedEdgeIds(
-  edges: readonly Pick<LoomEdge, "id" | "source" | "target">[],
+  edges: readonly Pick<WorkflowEdge, "id" | "source" | "target">[],
   nodeIds: readonly string[],
 ): string[] {
   const included = new Set(nodeIds);

@@ -1,6 +1,6 @@
 # Talkie serving on elsie-1
 
-Verified 2026-07-27.
+Verified 2026-08-03.
 
 ## Active service
 
@@ -61,9 +61,11 @@ Implemented request fields:
 - `stop`
 - `n`
 - `echo`
+- `logprobs` from `0` through `20`, returned in the legacy completion shape;
+  requested top-token rows use the raw base-model distribution
 
-`stream`, `logprobs`, and non-zero `frequency_penalty` are rejected explicitly
-instead of being silently ignored.
+`stream` and non-zero `frequency_penalty` are rejected explicitly instead of
+being silently ignored.
 
 ## Prior J-Lens service and rollback
 

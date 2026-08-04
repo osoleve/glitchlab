@@ -1,16 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
-import { LoomFrameNode } from "./FrameNode";
+import { WorkflowFrameNode } from "./FrameNode";
 
 describe("collapsed frame activity", () => {
   it("keeps the active child legible without motion", () => {
     render(
       <ReactFlowProvider>
-        <LoomFrameNode
+        <WorkflowFrameNode
           {...({
             id: "frame",
-            type: "loomFrame",
+            type: "workflowFrame",
             selected: false,
             dragging: false,
             zIndex: 0,
@@ -24,7 +24,7 @@ describe("collapsed frame activity", () => {
               aggregateStatus: "active",
               activeChildTitle: "Vintage completion",
             },
-          } as Parameters<typeof LoomFrameNode>[0])}
+          } as Parameters<typeof WorkflowFrameNode>[0])}
         />
       </ReactFlowProvider>,
     );
@@ -36,10 +36,10 @@ describe("collapsed frame activity", () => {
   it("announces partial completion with a truthful count", () => {
     render(
       <ReactFlowProvider>
-        <LoomFrameNode
+        <WorkflowFrameNode
           {...({
             id: "frame",
-            type: "loomFrame",
+            type: "workflowFrame",
             selected: false,
             dragging: false,
             zIndex: 0,
@@ -54,7 +54,7 @@ describe("collapsed frame activity", () => {
               aggregateCompletedCount: 1,
               aggregateTotalCount: 3,
             },
-          } as Parameters<typeof LoomFrameNode>[0])}
+          } as Parameters<typeof WorkflowFrameNode>[0])}
         />
       </ReactFlowProvider>,
     );

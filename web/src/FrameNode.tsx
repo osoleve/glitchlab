@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Frame } from "lucide-react";
 import type { CSSProperties } from "react";
 import styles from "./FrameNode.module.css";
 import { moduleClassNames as cx } from "./moduleClassNames";
-import type { FrameColor, LoomFrame } from "./types";
+import type { FrameColor, WorkflowFrame } from "./types";
 
 const COLORS: Array<{ name: FrameColor; value: string }> = [
   { name: "violet", value: "#a98bf4" },
@@ -13,7 +13,7 @@ const COLORS: Array<{ name: FrameColor; value: string }> = [
   { name: "slate", value: "#8492ad" },
 ];
 
-export function LoomFrameNode({ data, selected }: NodeProps<LoomFrame>) {
+export function WorkflowFrameNode({ data, selected }: NodeProps<WorkflowFrame>) {
   const color = COLORS.find((item) => item.name === data.color)?.value ?? COLORS[0].value;
   const frameStyle = { "--frame-color": color } as CSSProperties;
   return (

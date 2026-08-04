@@ -4,13 +4,13 @@ import type {
   EdgeRouting,
   GraphPresentation,
   GraphSpec,
-  LoomEdge,
-  LoomFrame,
-  LoomNode,
   NodeDefinition,
+  WorkflowEdge,
+  WorkflowFrame,
+  WorkflowNode,
 } from "./types";
 
-function frameSize(frame: LoomFrame): { width: number; height: number } {
+function frameSize(frame: WorkflowFrame): { width: number; height: number } {
   return {
     width: frame.measured?.width ?? frame.width ?? 420,
     height: frame.measured?.height ?? frame.height ?? 260,
@@ -18,8 +18,8 @@ function frameSize(frame: LoomFrame): { width: number; height: number } {
 }
 
 export function serializePresentation(
-  nodes: LoomNode[],
-  frames: LoomFrame[],
+  nodes: WorkflowNode[],
+  frames: WorkflowFrame[],
   edgeRouting: EdgeRouting,
 ): GraphPresentation {
   return {
@@ -38,9 +38,9 @@ export function serializePresentation(
 
 export function serializeGraph(
   name: string,
-  nodes: LoomNode[],
-  edges: LoomEdge[],
-  frames: LoomFrame[] = [],
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  frames: WorkflowFrame[] = [],
   edgeRouting: EdgeRouting = "smoothstep",
 ): GraphSpec {
   const frameMap = new Map(frames.map((frame) => [frame.id, frame]));
@@ -52,6 +52,7 @@ export function serializeGraph(
       title: node.data.title,
       config: node.data.config,
       control_ports: node.data.controlPorts,
+      ...(node.data.state ? { state: node.data.state } : {}),
       position: node.parentId
         ? {
             x: node.position.x + (frameMap.get(node.parentId)?.position.x ?? 0),
@@ -74,7 +75,12 @@ export function hydrateGraph(
   graph: GraphSpec,
   catalogDefinitions: NodeDefinition[],
   exactDefinitions: NodeDefinition[] = [],
-): { nodes: LoomNode[]; edges: LoomEdge[]; frames: LoomFrame[]; edgeRouting: EdgeRouting } {
+): {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  frames: WorkflowFrame[];
+  edgeRouting: EdgeRouting;
+} {
   const definitions = new Map(
     catalogDefinitions.map((definition) => [definition.kind, definition]),
   );
@@ -82,9 +88,9 @@ export function hydrateGraph(
     definitions.set(definition.kind, definition);
   }
   const presentation = graph.presentation;
-  const frames: LoomFrame[] = (presentation?.frames ?? []).map((frame) => ({
+  const frames: WorkflowFrame[] = (presentation?.frames ?? []).map((frame) => ({
     id: frame.id,
-    type: "loomFrame",
+    type: "workflowFrame",
     position: frame.position,
     width: frame.width,
     height: frame.height,
@@ -94,14 +100,14 @@ export function hydrateGraph(
       collapsed: frame.collapsed,
     },
   }));
-  const memberships = new Map<string, LoomFrame>();
+  const memberships = new Map<string, WorkflowFrame>();
   for (const frame of frames) {
     const spec = presentation?.frames.find((item) => item.id === frame.id);
     for (const nodeId of spec?.node_ids ?? []) {
       if (!memberships.has(nodeId)) memberships.set(nodeId, frame);
     }
   }
-  const nodes: LoomNode[] = graph.nodes.map((node) => {
+  const nodes: WorkflowNode[] = graph.nodes.map((node) => {
     const definition = definitions.get(node.kind);
     if (!definition) {
       throw new Error(`No definition is available for ${node.kind}.`);
@@ -110,7 +116,7 @@ export function hydrateGraph(
     const parent = memberships.get(node.id);
     return {
       id: node.id,
-      type: "loomNode",
+      type: "workflowNode",
       position: parent
         ? { x: node.position.x - parent.position.x, y: node.position.y - parent.position.y }
         : node.position,
@@ -123,11 +129,12 @@ export function hydrateGraph(
         definition: withControlPorts(definition, controlPorts),
         config: node.config,
         controlPorts,
+        ...(node.state ? { state: node.state } : {}),
         runStatus: "idle",
       },
     };
   });
-  const edges: LoomEdge[] = graph.edges.map((edge) => ({
+  const edges: WorkflowEdge[] = graph.edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     sourceHandle: edge.source_port,

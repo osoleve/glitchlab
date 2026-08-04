@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { LoomNode, RunResponse } from "../types";
+import type { RunResponse, WorkflowNode } from "../types";
 import { useGraphDocumentStore } from "./graphDocumentStore";
 import { clearGraphHistory, redoGraphDocument, undoGraphDocument } from "./graphHistory";
 import { useRunControllerStore } from "./runControllerStore";
 import type { ExecutionScopeState } from "./types";
 
-const node = (value = "before", runStatus: LoomNode["data"]["runStatus"] = "idle") =>
+const node = (value = "before", runStatus: WorkflowNode["data"]["runStatus"] = "idle") =>
   ({
     id: "one",
-    type: "loomNode",
+    type: "workflowNode",
     position: { x: 0, y: 0 },
     data: {
       kind: "test",
@@ -26,7 +26,7 @@ const node = (value = "before", runStatus: LoomNode["data"]["runStatus"] = "idle
       controlPorts: {},
       runStatus,
     },
-  }) as unknown as LoomNode;
+  }) as unknown as WorkflowNode;
 
 const scope: ExecutionScopeState = {
   mode: "full",
@@ -59,7 +59,7 @@ describe("graph document history", () => {
       nodes: [node()],
       edges: [],
       selectedId: undefined,
-      loomName: "History test",
+      graphName: "History test",
       isDirty: false,
     });
     clearGraphHistory();
