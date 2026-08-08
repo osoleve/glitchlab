@@ -21,9 +21,9 @@ exists, not in special node kinds.
 - `tests/`: backend and integration-contract tests.
 - `examples/`: checked-in graph examples.
 - `remote/`: source-of-truth copy of the optional Talkie completion service and
-  its user systemd unit for `elsie-1`.
+  its reusable user systemd unit template.
 - `scripts/`: operational smoke-test helpers.
-- `REMOTE_SERVING.md`: current remote deployment and rollback contract.
+- `REMOTE_SERVING.md`: optional deployment, safety, verification, and rollback contract.
 
 ## Setup and Quality Gates
 
@@ -45,8 +45,8 @@ npm run build
 npm run test:e2e
 ```
 
-The real Glitchlings integration test runs when
-`%USERPROFILE%\primestuff\glitchlings` exists. Otherwise it skips cleanly.
+The real Glitchlings integration test runs when `GLITCHLOOM_GLITCHLINGS_PATH`
+points to a compatible checkout. Otherwise it skips cleanly.
 
 For an end-to-end Windows launch:
 
@@ -91,15 +91,15 @@ The app is served at `http://127.0.0.1:8788`.
 
 ## Remote Talkie Service
 
-The optional native base-completion service is currently deployed on
-`elsie-1:8790`. The active unit is `talkie-openai.service`; the retained
-`talkie-jlens.service` rollback unit should remain disabled unless explicitly
-restored.
+The optional native base-completion service uses `talkie-openai.service`. Treat
+the host, paths, firewall, authentication proxy, and any retained rollback unit
+as deployment-specific configuration; do not assume the example template is a
+safe public-network deployment.
 
 - Treat `remote/glitchloom_talkie_api.py` and
   `remote/talkie-openai.service` as deployment sources.
-- Before changing or restarting the remote service, inspect current unit state,
-  active GPU work, and model residency.
+- Before changing or restarting a remote service, inspect current unit state,
+  active GPU work, model residency, and network exposure.
 - Expect a cold restart to unload both models and make the next requests slow.
 - Deploy deliberately, compare local and remote SHA-256 hashes, then verify
   `/health`, `/v1/models`, and a seeded completion from each model.
@@ -111,5 +111,5 @@ restored.
 - Use focused commits and keep the README, examples, and operational docs in
   sync with behavior.
 - For backend changes, run Ruff and pytest. For frontend changes, also run the
-  production build. For serving changes, run live checks against the named
-  target host.
+  production build. For serving changes, run live checks against the explicitly
+  named target host.

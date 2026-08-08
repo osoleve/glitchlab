@@ -1,4 +1,4 @@
-"""Optional bridge to the user's local ``osoleve/glitchlings`` checkout."""
+"""Optional bridge to an installed package or configured Glitchlings checkout."""
 
 from __future__ import annotations
 
@@ -23,17 +23,8 @@ _IMPORT_ERROR: str | None = None
 
 def _candidate_source_path() -> Path | None:
     configured = os.getenv("GLITCHLOOM_GLITCHLINGS_PATH", "").strip()
-    candidates: list[Path] = []
     if configured:
-        candidates.append(Path(configured).expanduser())
-
-    candidates.extend(
-        [
-            Path.home() / "primestuff" / "glitchlings",
-            Path.home() / "Documents" / "glitchlings",
-        ]
-    )
-    for candidate in candidates:
+        candidate = Path(configured).expanduser()
         source = candidate / "src" if (candidate / "src" / "glitchlings").is_dir() else candidate
         if (source / "glitchlings").is_dir():
             return source.resolve()
@@ -41,7 +32,7 @@ def _candidate_source_path() -> Path | None:
 
 
 def load_glitchlings() -> Any:
-    """Load Glitchlings from the environment, installed package, or common checkout."""
+    """Load Glitchlings from an explicit checkout or installed package."""
 
     global _IMPORT_ERROR, _MODULE
     if _MODULE is not None:

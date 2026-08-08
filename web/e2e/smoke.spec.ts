@@ -850,7 +850,7 @@ test("a staged run stream exposes incremental node and edge activity", async ({ 
   await page.locator('.react-flow__node[data-id="loom"] header').click({ button: "right" });
   await page.getByRole("menuitem", { name: "Run to here" }).click();
 
-  await expect(page.getByText("Running Elsie completion API")).toBeVisible();
+  await expect(page.getByText("Running Local completion API")).toBeVisible();
   await expect(page.getByText("Running Branching draft")).toBeVisible();
   await expect(page.locator('.react-flow__edge[data-id="endpoint-loom"]')).toHaveClass(
     /edge-transfer-pulse/,

@@ -4,13 +4,29 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$GlitchlingsCheckout = Join-Path $env:USERPROFILE "primestuff\glitchlings"
+$EnvironmentFile = Join-Path $ProjectRoot ".env"
 
-if (-not $env:GLITCHLOOM_GLITCHLINGS_PATH -and (Test-Path -LiteralPath $GlitchlingsCheckout)) {
-    $env:GLITCHLOOM_GLITCHLINGS_PATH = $GlitchlingsCheckout
+if (Test-Path -LiteralPath $EnvironmentFile) {
+    foreach ($Line in Get-Content -LiteralPath $EnvironmentFile) {
+        if ($Line -notmatch '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
+            continue
+        }
+        $Name = $Matches[1]
+        $Value = $Matches[2]
+        if (
+            $Value.Length -ge 2 -and
+            (($Value.StartsWith('"') -and $Value.EndsWith('"')) -or
+             ($Value.StartsWith("'") -and $Value.EndsWith("'")))
+        ) {
+            $Value = $Value.Substring(1, $Value.Length - 2)
+        }
+        if (-not (Test-Path -LiteralPath "Env:$Name")) {
+            Set-Item -LiteralPath "Env:$Name" -Value $Value
+        }
+    }
 }
 if (-not $env:GLITCHLOOM_WORKSPACE) {
-    $env:GLITCHLOOM_WORKSPACE = Split-Path -Parent $ProjectRoot
+    $env:GLITCHLOOM_WORKSPACE = $ProjectRoot
 }
 
 Push-Location $ProjectRoot
@@ -19,7 +35,7 @@ try {
         uv sync --python 3.12
         Push-Location (Join-Path $ProjectRoot "web")
         try {
-            npm install
+            npm ci
             npm run build
         }
         finally {

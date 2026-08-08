@@ -16,7 +16,7 @@
       "id": "endpoint",
       "kind": "endpoint",
       "config": {
-        "base_url": "http://elsie-1:8790/v1",
+        "base_url": "http://127.0.0.1:8790/v1",
         "api_key_env": "",
         "timeout_seconds": 180
       },

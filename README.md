@@ -1,18 +1,62 @@
 # Glitchloom
 
+[![CI](https://github.com/osoleve/glitchlab/actions/workflows/ci.yml/badge.svg)](https://github.com/osoleve/glitchlab/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Glitchloom is a local-first inference workbench: a typed node canvas for composing
 base-model calls, deterministic text transformations, collection operations, and
 self-describing experiment outputs.
 
-The 0.8 version-zero milestone ships with a live vertical slice for:
+Glitchloom is alpha research software. Graph formats and provider contracts are
+typed and versioned, but the interface and package surface are still evolving.
+
+The current alpha includes:
 
 - `talkie-1930-13b-base`
 - `talkie-web-13b-base`
-- the native base-completion service on `elsie-1`
-- the local `osoleve/glitchlings` checkout
+- an optional native Talkie base-completion service
+- optional local [Glitchlings](https://github.com/osoleve/glitchlings) corruption operations
 - generic OpenAI-compatible `/v1/completions` endpoints
 - OpenRouter's raw `/api/v1/completions` transport
 - commit-pinned, bounded Hugging Face Hub dataset slices
+
+The Talkie models are the work of Nick Levine, David Duvenaud, and Alec Radford;
+see the official [project report](https://talkie-lm.com/introducing-talkie),
+[inference code](https://github.com/talkie-lm/talkie), and Hugging Face model cards
+for [talkie-1930](https://huggingface.co/talkie-lm/talkie-1930-13b-base) and its
+[modern twin](https://huggingface.co/talkie-lm/talkie-web-13b-base). Glitchloom is
+an independent experiment workbench, not an official Talkie project. Historical
+model outputs can reproduce offensive language and values from their training data.
+
+## Quick start
+
+Install [uv](https://docs.astral.sh/uv/), Python 3.12, and Node.js 22, then run:
+
+```powershell
+git clone https://github.com/osoleve/glitchlab.git
+Set-Location glitchlab
+.\run.ps1
+```
+
+The app opens at <http://127.0.0.1:8788>. The starter graph points to a local
+OpenAI-compatible completions service at `http://127.0.0.1:8790/v1`; edit its
+endpoint and model nodes to use another provider. The canvas itself works without
+a model service, but generation requires one.
+
+On macOS or Linux, use the equivalent manual launch:
+
+```bash
+uv sync --python 3.12
+npm --prefix web ci
+npm --prefix web run build
+uv run glitchloom
+```
+
+Optional configuration is listed in `.env.example`. The PowerShell launcher loads
+a local `.env` file when present; for a manual launch, export the same variables in
+your shell. Provider credentials remain environment variables and are never stored
+in graphs.
 
 The starter graph is a compact Loom workshop: one OpenAI-compatible endpoint and
 one model feed a Loom node, whose selected text is sent to a preview. Opening the
@@ -277,7 +321,7 @@ From this directory:
 The script:
 
 1. creates the Python 3.12 environment with `uv`;
-2. discovers `%USERPROFILE%\primestuff\glitchlings` when present;
+2. loads optional settings from `.env`;
 3. installs and builds the React canvas;
 4. starts Glitchloom at <http://127.0.0.1:8788>.
 
@@ -288,22 +332,22 @@ After the first setup, skip dependency installation and rebuilding with:
 ```
 
 File nodes are scoped to `GLITCHLOOM_WORKSPACE`. The launcher defaults that to
-the parent of this project. Copy `.env.example` or set environment variables
-before launch to override it.
+this project directory. Copy `.env.example` to `.env` and adjust it before launch
+to use another workspace or enable optional integrations.
 
-## Live Talkie service
+## Connect a Talkie service
 
 The starter's ordinary **Completion endpoint** node targets:
 
 ```text
-http://elsie-1:8790/v1/completions
+http://127.0.0.1:8790/v1/completions
 ```
 
-This is the currently deployed OpenAI-compatible base-model service. It loads
-each selected Talkie lazily and keeps it resident. Consequently, the first
-request for each model after a restart can take substantially longer and
-allocate model memory on elsie-1. The former J-Lens systemd unit remains present
-but disabled, so the previous service can be restored without rebuilding it.
+The optional service under `remote/` exposes the two Talkie base models through
+that OpenAI-compatible legacy completion API. It loads each selected model lazily
+and keeps it resident, so the first request after a restart can be substantially
+slower and allocate significant GPU memory. See [REMOTE_SERVING.md](REMOTE_SERVING.md)
+for dependencies, deployment, network-safety guidance, and verification.
 
 For another provider, use:
 
@@ -313,6 +357,13 @@ Completion endpoint → Model → Generate completion
 
 Endpoint nodes store the *name* of an API-key environment variable, never the
 secret itself.
+
+## Contributing and security
+
+Bug reports and focused pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md)
+for the development workflow. Please report suspected vulnerabilities privately
+as described in [SECURITY.md](SECURITY.md). Glitchloom is available under the
+[MIT License](LICENSE).
 
 ## Execution contract
 

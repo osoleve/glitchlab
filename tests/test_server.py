@@ -401,17 +401,17 @@ async def test_two_source_nodes_save_as_a_zero_input_workflow(
 ) -> None:
     monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
     payload = {
-        "name": "Vintage Talkie (elsie-1)",
+        "name": "Local Vintage Talkie",
         "description": "Bundle an endpoint and model reference.",
         "graph": {
-            "name": "Vintage Talkie (elsie-1)",
+            "name": "Local Vintage Talkie",
             "nodes": [
                 {
                     "id": "endpoint",
                     "kind": "endpoint",
-                    "title": "Elsie completion API",
+                    "title": "Local completion API",
                     "config": {
-                        "base_url": "http://elsie-1:8790/v1",
+                        "base_url": "http://127.0.0.1:8790/v1",
                         "api_key_env": "",
                         "timeout_seconds": 120,
                     },
@@ -431,7 +431,7 @@ async def test_two_source_nodes_save_as_a_zero_input_workflow(
         "outputs": [
             {
                 "name": "endpoint",
-                "label": "Elsie completion API · Endpoint",
+                "label": "Local completion API · Endpoint",
                 "type": "endpoint",
                 "node_id": "endpoint",
                 "node_port": "endpoint",
@@ -489,9 +489,7 @@ async def test_two_source_nodes_save_as_a_zero_input_workflow(
         "Model",
     ]
     assert loaded.status_code == 200
-    assert loaded.json()["workflow"]["graph"]["nodes"][0]["title"] == (
-        "Elsie completion API"
-    )
+    assert loaded.json()["workflow"]["graph"]["nodes"][0]["title"] == "Local completion API"
     assert updated.status_code == 201
     assert updated.json()["workflow"]["id"] == workflow_id
     assert updated.json()["workflow"]["version"] == 2

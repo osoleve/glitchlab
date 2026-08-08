@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-07-28  
 **Scope:** backend, frontend, tests, examples, packaging, local launcher, cache/file
-behavior, and the `elsie-1` serving sources. This audit includes the uncommitted
+behavior, and the private Talkie serving sources. This audit includes the uncommitted
 preview/inspector/layout work present in the working tree on the audit date.
 Line references capture that audit snapshot and may shift as the same-session UI
 iteration continues.
@@ -537,7 +537,7 @@ retains the titles the user saw.
 - When discovery is unavailable, the catalog still supplies Typogre as a
   fallback option (`glitchloom/catalog.py:310-320`), so the graph looks
   configurable but fails only at runtime.
-- The same starter hard-codes `http://elsie-1:8790/v1`
+- The same starter hard-coded a private deployment hostname
   (`web/src/starter.ts:69-77`).
 - README says to copy `.env.example` (`README.md:45-47`), but the launcher does
   not load a `.env` file (`run.ps1:1-33`) and the Python dependencies include no
@@ -563,7 +563,7 @@ behavior differs between local launch and CI.
 - Use `npm ci` by default; make dependency update an explicit maintenance
   action.
 - Choose a starter based on capability checks: a generic local/example graph
-  when Glitchlings or `elsie-1` are unavailable, and a clear selectable Talkie
+  when Glitchlings or a Talkie service are unavailable, and a clear selectable Talkie
   template when they are.
 - Do not present fallback plugin choices as available operations; show a
   disabled node with the concrete install/configuration action.

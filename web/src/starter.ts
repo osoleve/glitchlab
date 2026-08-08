@@ -53,8 +53,8 @@ export function createStarterGraph(definitions: NodeDefinition[]): {
   });
   loom.data.state = starterLoomState();
   const nodes = [
-    makeNode("endpoint", "endpoint", "Elsie completion API", { x: 0, y: 0 }, byKind, {
-      base_url: "http://elsie-1:8790/v1",
+    makeNode("endpoint", "endpoint", "Local completion API", { x: 0, y: 0 }, byKind, {
+      base_url: "http://127.0.0.1:8790/v1",
       timeout_seconds: 180,
     }),
     makeNode("model", "model", "Vintage Talkie", { x: 0, y: 220 }, byKind, {

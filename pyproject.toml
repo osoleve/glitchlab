@@ -3,7 +3,17 @@ name = "glitchloom"
 version = "0.9.0"
 description = "A local-first typed inference loom for base-model experiments."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
+keywords = ["language-models", "local-first", "research", "synthetic-data", "workflow"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
   "datasets>=4,<5",
   "fastapi>=0.116,<1",
@@ -15,6 +25,11 @@ dependencies = [
 
 [project.scripts]
 glitchloom = "glitchloom.server:main"
+
+[project.urls]
+Homepage = "https://github.com/osoleve/glitchlab"
+Repository = "https://github.com/osoleve/glitchlab.git"
+Issues = "https://github.com/osoleve/glitchlab/issues"
 
 [dependency-groups]
 dev = [

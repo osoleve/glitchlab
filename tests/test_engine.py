@@ -1015,7 +1015,7 @@ async def test_completion_exact_request_cache_avoids_duplicate_calls(tmp_path: P
 async def test_generic_completion_branches_collect_talkie_results(tmp_path: Path) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
-        assert request.url == "http://elsie.test:8790/v1/completions"
+        assert request.url == "http://completion.test:8790/v1/completions"
         assert body["model"] in {
             "talkie-1930-13b-base",
             "talkie-web-13b-base",
@@ -1049,7 +1049,7 @@ async def test_generic_completion_branches_collect_talkie_results(tmp_path: Path
                 node(
                     "endpoint",
                     "endpoint",
-                    base_url="http://elsie.test:8790/v1",
+                    base_url="http://completion.test:8790/v1",
                     api_key_env="",
                     timeout_seconds=5,
                 ),
