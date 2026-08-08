@@ -561,6 +561,12 @@ export interface components {
             edge_routing: "smoothstep" | "bezier";
             /** Frames */
             frames?: components["schemas"]["FramePresentation"][];
+            /** Node Previews */
+            node_previews?: components["schemas"]["NodePreviewPresentation"][];
+            /** Wire Bundles */
+            wire_bundles?: components["schemas"]["WireBundlePresentation"][];
+            /** Wires */
+            wires?: components["schemas"]["WirePresentation"][];
         };
         /**
          * GraphSpec
@@ -799,6 +805,19 @@ export interface components {
             run_id: string;
             /** Sequence */
             sequence: number;
+        };
+        /**
+         * NodePreviewPresentation
+         * @description Canvas visibility for an inspect node's presentation-only value preview.
+         */
+        NodePreviewPresentation: {
+            /** Node Id */
+            node_id: string;
+            /**
+             * Visible
+             * @default true
+             */
+            visible: boolean;
         };
         /**
          * NodeRunResult
@@ -1156,6 +1175,35 @@ export interface components {
             msg: string;
             /** Type */
             type: string;
+        };
+        /**
+         * WireBundlePresentation
+         * @description A visual-only routed bundle of graph edges.
+         */
+        WireBundlePresentation: {
+            /**
+             * Collapsed
+             * @default false
+             */
+            collapsed: boolean;
+            /** Edge Ids */
+            edge_ids: string[];
+            /** Id */
+            id: string;
+            /** Label */
+            label?: string | null;
+            /** Waypoints */
+            waypoints: components["schemas"]["Position"][];
+        };
+        /**
+         * WirePresentation
+         * @description Visual overrides for one semantic graph edge.
+         */
+        WirePresentation: {
+            /** Color */
+            color?: ("slate" | "amber" | "cyan" | "teal" | "violet" | "coral" | "blue" | "rose") | null;
+            /** Edge Id */
+            edge_id: string;
         };
         /**
          * WorkflowDraft

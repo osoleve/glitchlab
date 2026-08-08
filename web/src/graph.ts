@@ -5,6 +5,8 @@ import type {
   GraphPresentation,
   GraphSpec,
   NodeDefinition,
+  WireBundle,
+  WirePresentation,
   WorkflowEdge,
   WorkflowFrame,
   WorkflowNode,
@@ -21,6 +23,8 @@ export function serializePresentation(
   nodes: WorkflowNode[],
   frames: WorkflowFrame[],
   edgeRouting: EdgeRouting,
+  wires: WirePresentation[],
+  wireBundles: WireBundle[],
 ): GraphPresentation {
   return {
     edge_routing: edgeRouting,
@@ -33,7 +37,47 @@ export function serializePresentation(
       collapsed: frame.data.collapsed,
       node_ids: nodes.filter((node) => node.parentId === frame.id).map((node) => node.id),
     })),
+    wires: wires.map((wire) => ({
+      edge_id: wire.edgeId,
+      ...(wire.color ? { color: wire.color } : {}),
+    })),
+    wire_bundles: wireBundles.map((bundle) => ({
+      id: bundle.id,
+      edge_ids: bundle.edgeIds,
+      waypoints: bundle.waypoints,
+      collapsed: bundle.collapsed,
+      ...(bundle.label ? { label: bundle.label } : {}),
+    })),
+    node_previews: nodes
+      .filter(
+        (node) =>
+          (node.data.kind === "preview" || node.data.kind === "compare_preview") &&
+          node.data.canvasPreviewVisible === false,
+      )
+      .map((node) => ({ node_id: node.id, visible: false })),
   };
+}
+
+export function assertWirePresentationPreserved(requested: GraphSpec, saved: GraphSpec): void {
+  const requestedPresentation = requested.presentation;
+  if (
+    !requestedPresentation ||
+    (requestedPresentation.wires.length === 0 && requestedPresentation.wire_bundles.length === 0)
+  ) {
+    return;
+  }
+
+  const savedPresentation = saved.presentation;
+  const wiresMatch =
+    JSON.stringify(savedPresentation?.wires ?? []) === JSON.stringify(requestedPresentation.wires);
+  const bundlesMatch =
+    JSON.stringify(savedPresentation?.wire_bundles ?? []) ===
+    JSON.stringify(requestedPresentation.wire_bundles);
+  if (!wiresMatch || !bundlesMatch) {
+    throw new Error(
+      "The server did not preserve wire colors and cable ties. Keep this tab open, restart the server, then save again.",
+    );
+  }
 }
 
 export function serializeGraph(
@@ -42,6 +86,8 @@ export function serializeGraph(
   edges: WorkflowEdge[],
   frames: WorkflowFrame[] = [],
   edgeRouting: EdgeRouting = "smoothstep",
+  wires: WirePresentation[] = [],
+  wireBundles: WireBundle[] = [],
 ): GraphSpec {
   const frameMap = new Map(frames.map((frame) => [frame.id, frame]));
   return {
@@ -67,7 +113,7 @@ export function serializeGraph(
       target: edge.target,
       target_port: edge.targetHandle!,
     })),
-    presentation: serializePresentation(nodes, frames, edgeRouting),
+    presentation: serializePresentation(nodes, frames, edgeRouting, wires, wireBundles),
   };
 }
 
@@ -80,6 +126,8 @@ export function hydrateGraph(
   edges: WorkflowEdge[];
   frames: WorkflowFrame[];
   edgeRouting: EdgeRouting;
+  wires: WirePresentation[];
+  wireBundles: WireBundle[];
 } {
   const definitions = new Map(
     catalogDefinitions.map((definition) => [definition.kind, definition]),
@@ -88,6 +136,9 @@ export function hydrateGraph(
     definitions.set(definition.kind, definition);
   }
   const presentation = graph.presentation;
+  const previewVisibility = new Map(
+    (presentation?.node_previews ?? []).map((item) => [item.node_id, item.visible]),
+  );
   const frames: WorkflowFrame[] = (presentation?.frames ?? []).map((frame) => ({
     id: frame.id,
     type: "workflowFrame",
@@ -131,6 +182,9 @@ export function hydrateGraph(
         controlPorts,
         ...(node.state ? { state: node.state } : {}),
         runStatus: "idle",
+        ...((node.kind === "preview" || node.kind === "compare_preview") && {
+          canvasPreviewVisible: previewVisibility.get(node.id) ?? true,
+        }),
       },
     };
   });
@@ -151,5 +205,16 @@ export function hydrateGraph(
     edges,
     frames,
     edgeRouting: presentation?.edge_routing ?? "smoothstep",
+    wires: (presentation?.wires ?? []).map((wire) => ({
+      edgeId: wire.edge_id,
+      ...(wire.color ? { color: wire.color } : {}),
+    })),
+    wireBundles: (presentation?.wire_bundles ?? []).map((bundle) => ({
+      id: bundle.id,
+      edgeIds: bundle.edge_ids,
+      waypoints: bundle.waypoints,
+      collapsed: bundle.collapsed,
+      ...(bundle.label ? { label: bundle.label } : {}),
+    })),
   };
 }

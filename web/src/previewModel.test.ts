@@ -108,6 +108,25 @@ describe("normalizePreviewValue", () => {
     });
   });
 
+  it("preserves visible group boundaries for nested completion collections", () => {
+    const model = normalizePreviewValue({
+      items: [
+        [
+          { kind: "completion_result", text: "left one", request_id: "left-1" },
+          { kind: "completion_result", text: "left two", request_id: "left-2" },
+        ],
+        [{ kind: "completion_result", text: "right one", request_id: "right-1" }],
+      ],
+    });
+
+    expect(model).toMatchObject({
+      kind: "completion",
+      entryGroups: [2, 1],
+      shapeLabel: "2 groups · 3 completions",
+      readableText: "left one\n\nleft two\n\nright one",
+    });
+  });
+
   it("normalizes corruption records and preserves their provenance", () => {
     expect(
       normalizePreviewValue({

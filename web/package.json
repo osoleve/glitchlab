@@ -16,8 +16,8 @@
     "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^3.0.0",
     "@xyflow/react": "^12.8.2",
+    "elkjs": "^0.12.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

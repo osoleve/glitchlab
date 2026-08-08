@@ -10,6 +10,7 @@ import {
   Database,
   Eraser,
   Eye,
+  EyeOff,
   FileInput,
   FileOutput,
   GitBranch,
@@ -28,11 +29,14 @@ import {
   Workflow,
 } from "lucide-react";
 import { type ComponentType, type CSSProperties, useEffect, useState } from "react";
+import { CanvasPreviewValue } from "./CanvasPreviewValue";
+import { ComparePreviewValue } from "./ComparePreviewValue";
 import { ErrorBoundary, NodeErrorFallback } from "./ErrorBoundary";
 import { selectedLoomText } from "./loom";
 import { moduleClassNames as cx } from "./moduleClassNames";
 import type { FieldDefinition, WorkflowNode, WorkflowNodeData } from "./types";
 import styles from "./WorkflowNode.module.css";
+import { WIRE_COLOR_VALUES, wireColorForValueType } from "./wireAppearance";
 
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
   text_input: TextCursorInput,
@@ -61,6 +65,8 @@ const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number 
   read_file: FileInput,
   write_file: FileOutput,
   preview: Eye,
+  compare_preview: Eye,
+  flatten: List,
 };
 
 function summary(data: WorkflowNodeData): string {
@@ -173,11 +179,14 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
   const inlineFields =
     data.definition.editor === "loom" ? [] : data.definition.fields.filter((field) => field.inline);
   const hasInlineTextarea = inlineFields.some((field) => field.control === "textarea");
+  const isPreviewNode = data.kind === "preview" || data.kind === "compare_preview";
+  const showCanvasPreview = isPreviewNode && data.canvasPreviewVisible !== false;
   const summaryText = summary(data);
   const hasSummary = inlineFields.length === 0 && summaryText.length > 0;
   const inlineHeight = inlineFields.length > 0 ? inlineControlHeight(inlineFields) : 0;
   const editorHeight = data.definition.editor === "loom" ? 38 : 0;
-  const contentHeight = (hasSummary ? 28 : inlineHeight) + editorHeight;
+  const previewHeight = showCanvasPreview ? (data.kind === "compare_preview" ? 164 : 112) : 0;
+  const contentHeight = (hasSummary ? 28 : inlineHeight) + editorHeight + previewHeight;
   const portRows = Math.max(data.definition.inputs.length, data.definition.outputs.length, 1);
   const baseHeight = 74 + contentHeight;
   const minimumHeight = baseHeight + portRows * 28;
@@ -197,6 +206,8 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
         `category-${categoryClass(data.definition.category)}`,
         selected && "is-selected",
         hasInlineTextarea && "has-inline-textarea",
+        showCanvasPreview && "has-canvas-preview",
+        data.kind === "compare_preview" && "is-compare-preview",
         `status-${data.runStatus}`,
         data.executionScopeRole && `execution-scope-${data.executionScopeRole}`,
       )}
@@ -204,10 +215,10 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
     >
       <NodeResizer
         isVisible={selected}
-        minWidth={220}
+        minWidth={data.kind === "compare_preview" ? 330 : 220}
         minHeight={minimumHeight}
-        maxWidth={520}
-        maxHeight={520}
+        maxWidth={data.kind === "compare_preview" ? 820 : 620}
+        maxHeight={720}
         handleClassName={cx(styles, "workflow-resize-handle")}
         lineClassName={cx(styles, "workflow-resize-line")}
       />
@@ -220,16 +231,53 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
           <span>{data.definition.category}</span>
           <strong>{data.title}</strong>
         </div>
-        <span
-          className={cx(styles, "node-status")}
-          role="status"
-          aria-label={`Run status: ${data.runStatus}`}
-        >
-          <i aria-hidden="true" />
-          <b>{data.runStatus === "completed" ? "done" : data.runStatus}</b>
-        </span>
+        <div className={cx(styles, "node-header-actions")}>
+          {isPreviewNode && (
+            <button
+              type="button"
+              className={cx(styles, "canvas-preview-toggle", "nodrag", "nopan")}
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onToggleCanvasPreview?.();
+              }}
+              aria-label={`${showCanvasPreview ? "Hide" : "Show"} value on canvas`}
+              title={`${showCanvasPreview ? "Hide" : "Show"} value on canvas`}
+            >
+              {showCanvasPreview ? <EyeOff size={13} /> : <Eye size={13} />}
+            </button>
+          )}
+          <span
+            className={cx(styles, "node-status")}
+            role="status"
+            aria-label={`Run status: ${data.runStatus}`}
+          >
+            <i aria-hidden="true" />
+            <b>{data.runStatus === "completed" ? "done" : data.runStatus}</b>
+          </span>
+        </div>
       </header>
       {hasSummary && <p className={cx(styles, "node-summary")}>{summaryText}</p>}
+      {showCanvasPreview && (
+        <section
+          className={cx(styles, "node-canvas-preview", "nodrag", "nowheel", "nopan")}
+          aria-label={`Canvas preview for ${data.title}`}
+        >
+          <ErrorBoundary fallback={() => <p role="alert">Preview value unavailable.</p>}>
+            {data.canvasPreviewValue === undefined ? (
+              <p>Run this path to display its value.</p>
+            ) : data.kind === "compare_preview" ? (
+              <ComparePreviewValue
+                value={data.canvasPreviewValue}
+                labels={data.canvasPreviewLabels}
+                compact
+                stale={data.canvasPreviewStale}
+              />
+            ) : (
+              <CanvasPreviewValue value={data.canvasPreviewValue} stale={data.canvasPreviewStale} />
+            )}
+          </ErrorBoundary>
+        </section>
+      )}
       {data.definition.editor === "loom" && (
         <button
           type="button"
@@ -336,7 +384,15 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
               "node-port",
               "node-port-input",
               port.control && "is-control-port",
+              data.wireHover?.direction === "input" &&
+                data.wireHover.portName === port.name &&
+                "is-wire-hovered",
             )}
+            style={
+              {
+                "--port-color": WIRE_COLOR_VALUES[wireColorForValueType(port.type)],
+              } as CSSProperties
+            }
             key={port.name}
             title={port.control ? `${port.label} control input` : undefined}
           >
@@ -354,7 +410,15 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
               "node-port",
               "node-port-output",
               port.control && "is-control-port",
+              data.wireHover?.direction === "output" &&
+                data.wireHover.portName === port.name &&
+                "is-wire-hovered",
             )}
+            style={
+              {
+                "--port-color": WIRE_COLOR_VALUES[wireColorForValueType(port.type)],
+              } as CSSProperties
+            }
             key={port.name}
             title={port.control ? `${port.label} control output` : undefined}
           >

@@ -239,6 +239,76 @@ async def test_graph_documents_roundtrip_revision_guard_and_trash(
 
 
 @pytest.mark.asyncio
+async def test_saved_graph_round_trips_wire_colors_and_bundles(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    graph = {
+        "name": "Wire presentation",
+        "nodes": [
+            {"id": "a", "kind": "text_input", "config": {"text": "a"}},
+            {"id": "b", "kind": "text_input", "config": {"text": "b"}},
+            {"id": "collect", "kind": "collect", "config": {}},
+        ],
+        "edges": [
+            {
+                "id": "edge-a",
+                "source": "a",
+                "source_port": "text",
+                "target": "collect",
+                "target_port": "item",
+            },
+            {
+                "id": "edge-b",
+                "source": "b",
+                "source_port": "text",
+                "target": "collect",
+                "target_port": "item",
+            },
+        ],
+        "presentation": {
+            "edge_routing": "bezier",
+            "wires": [
+                {"edge_id": "edge-a", "color": "rose"},
+                {"edge_id": "edge-b", "color": "cyan"},
+            ],
+            "wire_bundles": [
+                {
+                    "id": "bundle-a",
+                    "edge_ids": ["edge-a", "edge-b"],
+                    "waypoints": [{"x": 120, "y": 80}, {"x": 260, "y": 140}],
+                    "label": "Talkie pair",
+                }
+            ],
+        },
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        created = await client.post("/api/graphs", json={"graph": graph})
+        graph_id = created.json()["graph"]["id"]
+        loaded = await client.get(f"/api/graphs/{graph_id}")
+
+    presentation = loaded.json()["graph"]["graph"]["presentation"]
+    assert presentation["edge_routing"] == "bezier"
+    assert presentation["wires"] == [
+        {"edge_id": "edge-a", "color": "rose"},
+        {"edge_id": "edge-b", "color": "cyan"},
+    ]
+    assert presentation["wire_bundles"] == [
+        {
+            "id": "bundle-a",
+            "edge_ids": ["edge-a", "edge-b"],
+            "waypoints": [{"x": 120.0, "y": 80.0}, {"x": 260.0, "y": 140.0}],
+            "collapsed": False,
+            "label": "Talkie pair",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_checked_in_graph_templates_are_read_only(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,

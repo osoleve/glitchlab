@@ -199,6 +199,30 @@
   gap: 9px;
 }
 
+.node-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-preview-toggle {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  color: #8c8291;
+  background: #171319;
+  border: 1px solid #3b3340;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.canvas-preview-toggle:hover {
+  color: #eee5f0;
+  border-color: color-mix(in srgb, var(--accent) 64%, #4e4553);
+}
+
 .node-icon {
   display: grid;
   width: 32px;
@@ -331,6 +355,33 @@
   margin-right: 5px;
   color: #5f5864;
   content: "›";
+}
+
+.node-canvas-preview {
+  position: absolute;
+  top: 52px;
+  right: 14px;
+  bottom: calc(10px + var(--port-area-height));
+  left: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.node-canvas-preview > p {
+  display: grid;
+  height: 100%;
+  margin: 0;
+  place-items: center;
+  color: #756c79;
+  background: #100d12;
+  border: 1px dashed #39313d;
+  border-radius: 3px 3px 8px 3px;
+  font-family: var(--mono);
+  font-size: 7px;
+}
+
+.workflow-node.is-compare-preview {
+  width: 360px;
 }
 
 .node-inline-fields {
@@ -536,10 +587,10 @@
   width: 18px;
   height: 18px;
   background: #18141b;
-  border: 2px solid color-mix(in srgb, var(--accent) 72%, #d8ceda);
+  border: 2px solid color-mix(in srgb, var(--port-color, var(--accent)) 78%, #f0e8f1);
   box-shadow:
     0 0 0 2px #151118,
-    0 0 8px color-mix(in srgb, var(--accent) 24%, transparent);
+    0 0 8px color-mix(in srgb, var(--port-color, var(--accent)) 28%, transparent);
   transition:
     width 110ms ease,
     height 110ms ease,
@@ -551,7 +602,21 @@
 :global(.react-flow__handle.connectingfrom) {
   width: 22px;
   height: 22px;
-  background: var(--accent);
+  background: var(--port-color, var(--accent));
+}
+
+.node-port.is-wire-hovered {
+  color: #fff8ee;
+  background: color-mix(in srgb, var(--port-color) 18%, transparent);
+}
+
+.node-port.is-wire-hovered :global(.react-flow__handle) {
+  width: 22px;
+  height: 22px;
+  background: var(--port-color);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--port-color) 22%, transparent),
+    0 0 14px color-mix(in srgb, var(--port-color) 58%, transparent);
 }
 
 :global(.react-flow__handle.connectingto:not(.valid)) {

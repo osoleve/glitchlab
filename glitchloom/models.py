@@ -166,11 +166,50 @@ class FramePresentation(BaseModel):
     node_ids: list[str] = Field(default_factory=list)
 
 
+WireColor = Literal[
+    "slate",
+    "amber",
+    "cyan",
+    "teal",
+    "violet",
+    "coral",
+    "blue",
+    "rose",
+]
+
+
+class WirePresentation(BaseModel):
+    """Visual overrides for one semantic graph edge."""
+
+    edge_id: str
+    color: WireColor | None = None
+
+
+class WireBundlePresentation(BaseModel):
+    """A visual-only routed bundle of graph edges."""
+
+    id: str
+    edge_ids: list[str] = Field(min_length=2)
+    waypoints: list[Position] = Field(min_length=2)
+    collapsed: bool = False
+    label: str | None = None
+
+
+class NodePreviewPresentation(BaseModel):
+    """Canvas visibility for an inspect node's presentation-only value preview."""
+
+    node_id: str
+    visible: bool = True
+
+
 class GraphPresentation(BaseModel):
     """Visual graph preferences that do not change execution semantics."""
 
     edge_routing: Literal["smoothstep", "bezier"] = "smoothstep"
     frames: list[FramePresentation] = Field(default_factory=list)
+    wires: list[WirePresentation] = Field(default_factory=list)
+    wire_bundles: list[WireBundlePresentation] = Field(default_factory=list)
+    node_previews: list[NodePreviewPresentation] = Field(default_factory=list)
 
 
 class LoomRunReference(BaseModel):
@@ -301,8 +340,8 @@ class GraphSpec(BaseModel):
     presentation: GraphPresentation = Field(default_factory=GraphPresentation)
 
     @model_validator(mode="after")
-    def validate_frame_membership(self) -> GraphSpec:
-        """Keep visual frame identity and node membership unambiguous."""
+    def validate_presentation(self) -> GraphSpec:
+        """Keep visual grouping identity and membership unambiguous."""
 
         semantic_node_ids = {node.id for node in self.nodes}
         frame_ids: set[str] = set()
@@ -325,6 +364,63 @@ class GraphSpec(BaseModel):
                         f"Node {node_id!r} cannot belong to more than one frame."
                     )
                 framed_node_ids.add(node_id)
+
+        semantic_edge_ids = {edge.id for edge in self.edges}
+        wire_edge_ids: set[str] = set()
+        for wire in self.presentation.wires:
+            if wire.edge_id in wire_edge_ids:
+                raise ValueError(
+                    f"Wire presentation edge IDs must be unique; duplicate {wire.edge_id!r}."
+                )
+            wire_edge_ids.add(wire.edge_id)
+            if wire.edge_id not in semantic_edge_ids:
+                raise ValueError(
+                    f"Wire presentation references unknown edge {wire.edge_id!r}."
+                )
+
+        wire_bundle_ids: set[str] = set()
+        bundled_edge_ids: set[str] = set()
+        for wire_bundle in self.presentation.wire_bundles:
+            if wire_bundle.id in wire_bundle_ids:
+                raise ValueError(
+                    f"Wire bundle IDs must be unique; duplicate {wire_bundle.id!r}."
+                )
+            wire_bundle_ids.add(wire_bundle.id)
+            unique_edge_ids = set(wire_bundle.edge_ids)
+            if len(unique_edge_ids) != len(wire_bundle.edge_ids):
+                raise ValueError(
+                    f"Wire bundle {wire_bundle.id!r} cannot repeat an edge."
+                )
+            unknown_edge_ids = unique_edge_ids - semantic_edge_ids
+            if unknown_edge_ids:
+                unknown = sorted(unknown_edge_ids)[0]
+                raise ValueError(
+                    f"Wire bundle {wire_bundle.id!r} references unknown edge {unknown!r}."
+                )
+            reused_edge_ids = unique_edge_ids & bundled_edge_ids
+            if reused_edge_ids:
+                reused = sorted(reused_edge_ids)[0]
+                raise ValueError(
+                    f"Edge {reused!r} cannot belong to more than one wire bundle."
+                )
+            bundled_edge_ids.update(unique_edge_ids)
+
+        preview_node_ids: set[str] = set()
+        node_kinds = {node.id: node.kind for node in self.nodes}
+        for node_preview in self.presentation.node_previews:
+            if node_preview.node_id in preview_node_ids:
+                raise ValueError(
+                    f"Node preview IDs must be unique; duplicate {node_preview.node_id!r}."
+                )
+            preview_node_ids.add(node_preview.node_id)
+            if node_preview.node_id not in semantic_node_ids:
+                raise ValueError(
+                    f"Node preview references unknown node {node_preview.node_id!r}."
+                )
+            if node_kinds[node_preview.node_id] not in {"preview", "compare_preview"}:
+                raise ValueError(
+                    f"Node preview {node_preview.node_id!r} must reference an inspect node."
+                )
         return self
 
 

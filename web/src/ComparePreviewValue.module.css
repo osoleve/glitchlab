@@ -1,0 +1,145 @@
+.comparison-preview {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.comparison-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #7f7684;
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.comparison-rows {
+  display: grid;
+  gap: 5px;
+}
+
+.comparison-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 24px repeat(var(--comparison-columns), minmax(0, 1fr));
+  gap: 5px;
+}
+
+.comparison-heading {
+  align-items: end;
+}
+
+.comparison-heading > span,
+.comparison-heading > strong {
+  overflow: hidden;
+  padding: 0 5px 2px;
+  color: #a99caf;
+  font-family: var(--mono);
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparison-heading > span {
+  color: #625a66;
+  text-align: center;
+}
+
+.comparison-index {
+  display: grid;
+  min-height: 42px;
+  place-items: start center;
+  padding-top: 8px;
+  color: #6f6674;
+  font-family: var(--mono);
+  font-size: 7px;
+}
+
+.comparison-row pre,
+.comparison-row em {
+  min-width: 0;
+  min-height: 42px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  color: #eee7f0;
+  background: #0e0b10;
+  border: 1px solid #352e39;
+  border-radius: 3px 3px 7px 3px;
+  font-family: "Segoe UI Variable", "Aptos", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 10.5px;
+  font-style: normal;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comparison-row em {
+  color: #685f6d;
+  font-family: var(--mono);
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.comparison-provenance {
+  margin-top: 3px;
+  background: #0f0c11;
+  border: 1px solid #302a34;
+  border-radius: 4px;
+}
+
+.comparison-provenance summary {
+  padding: 9px 11px;
+  color: #7f7684;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 7.5px;
+}
+
+.comparison-provenance pre {
+  max-height: 280px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  color: #bdb3c1;
+  border-top: 1px solid #2d2731;
+  font-family: var(--mono);
+  font-size: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.is-compact {
+  height: 100%;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.is-compact .comparison-summary,
+.is-compact .comparison-heading > span,
+.is-compact .comparison-heading > strong,
+.is-compact .comparison-index {
+  font-size: 6px;
+}
+
+.is-compact .comparison-rows {
+  min-height: 0;
+  gap: 3px;
+  overflow: auto;
+}
+
+.is-compact .comparison-row {
+  grid-template-columns: 18px repeat(var(--comparison-columns), minmax(0, 1fr));
+  gap: 3px;
+}
+
+.is-compact .comparison-row pre,
+.is-compact .comparison-row em {
+  min-height: 30px;
+  padding: 5px;
+  overflow: hidden;
+  font-size: 8px;
+  line-height: 1.35;
+}

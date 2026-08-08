@@ -658,6 +658,27 @@
             },
             "title": "Frames",
             "type": "array"
+          },
+          "node_previews": {
+            "items": {
+              "$ref": "#/components/schemas/NodePreviewPresentation"
+            },
+            "title": "Node Previews",
+            "type": "array"
+          },
+          "wire_bundles": {
+            "items": {
+              "$ref": "#/components/schemas/WireBundlePresentation"
+            },
+            "title": "Wire Bundles",
+            "type": "array"
+          },
+          "wires": {
+            "items": {
+              "$ref": "#/components/schemas/WirePresentation"
+            },
+            "title": "Wires",
+            "type": "array"
           }
         },
         "title": "GraphPresentation",
@@ -1178,6 +1199,25 @@
           "error"
         ],
         "title": "NodeFailedEvent",
+        "type": "object"
+      },
+      "NodePreviewPresentation": {
+        "description": "Canvas visibility for an inspect node's presentation-only value preview.",
+        "properties": {
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "visible": {
+            "default": true,
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "node_id"
+        ],
+        "title": "NodePreviewPresentation",
         "type": "object"
       },
       "NodeRunResult": {
@@ -1988,6 +2028,89 @@
         "title": "ValidationIssue",
         "type": "object"
       },
+      "WireBundlePresentation": {
+        "description": "A visual-only routed bundle of graph edges.",
+        "properties": {
+          "collapsed": {
+            "default": false,
+            "title": "Collapsed",
+            "type": "boolean"
+          },
+          "edge_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "title": "Edge Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "waypoints": {
+            "items": {
+              "$ref": "#/components/schemas/Position"
+            },
+            "minItems": 2,
+            "title": "Waypoints",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "edge_ids",
+          "waypoints"
+        ],
+        "title": "WireBundlePresentation",
+        "type": "object"
+      },
+      "WirePresentation": {
+        "description": "Visual overrides for one semantic graph edge.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "enum": [
+                  "slate",
+                  "amber",
+                  "cyan",
+                  "teal",
+                  "violet",
+                  "coral",
+                  "blue",
+                  "rose"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "edge_id": {
+            "title": "Edge Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "edge_id"
+        ],
+        "title": "WirePresentation",
+        "type": "object"
+      },
       "WorkflowDraft": {
         "description": "A named reusable graph before immutable identity and version assignment.",
         "properties": {
@@ -2237,7 +2360,7 @@
   },
   "info": {
     "title": "Glitchloom",
-    "version": "0.8.0"
+    "version": "0.9.0"
   },
   "openapi": "3.1.0",
   "paths": {

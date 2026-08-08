@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type LayoutEdge, type LayoutNode, tidyNodeLayout } from "./graphLayout";
+import {
+  type LayoutEdge,
+  type LayoutFrame,
+  type LayoutNode,
+  tidyGraphLayout,
+  tidyNodeLayout,
+} from "./graphLayout";
 
 const nodes: LayoutNode[] = [
   {
@@ -62,8 +68,8 @@ function overlaps(
 }
 
 describe("tidy node layout", () => {
-  it("lays out a branching graph left-to-right without overlap", () => {
-    const positions = tidyNodeLayout(nodes, edges);
+  it("lays out a branching graph left-to-right without overlap", async () => {
+    const positions = await tidyNodeLayout(nodes, edges);
 
     expect(positions.get("source")!.x).toBeLessThan(positions.get("left")!.x);
     expect(positions.get("left")!.x).toBeLessThan(positions.get("merge")!.x);
@@ -75,16 +81,16 @@ describe("tidy node layout", () => {
     }
   });
 
-  it("is deterministic and ignores edges outside the supplied nodes", () => {
-    const first = tidyNodeLayout(nodes, [...edges, { source: "outside", target: "merge" }]);
-    const reordered = tidyNodeLayout([...nodes].reverse(), [...edges].reverse());
+  it("is deterministic and ignores edges outside the supplied nodes", async () => {
+    const first = await tidyNodeLayout(nodes, [...edges, { source: "outside", target: "merge" }]);
+    const reordered = await tidyNodeLayout([...nodes].reverse(), [...edges].reverse());
 
     expect(Object.fromEntries(first)).toEqual(Object.fromEntries(reordered));
   });
 
-  it("preserves the visual center of the arranged nodes", () => {
+  it("preserves the visual center of the arranged nodes", async () => {
     const originalPositions = new Map(nodes.map((node) => [node.id, node.position]));
-    const positions = tidyNodeLayout(nodes, edges);
+    const positions = await tidyNodeLayout(nodes, edges);
     const before = boundsCenter(nodes, originalPositions);
     const after = boundsCenter(nodes, positions);
 
@@ -92,15 +98,154 @@ describe("tidy node layout", () => {
     expect(after.y).toBeCloseTo(before.y, 8);
   });
 
-  it("can tidy a cyclic draft deterministically", () => {
+  it("can tidy a cyclic draft deterministically", async () => {
     const cycleEdges = [
       { source: "left", target: "right" },
       { source: "right", target: "left" },
     ];
 
-    expect(() => tidyNodeLayout(nodes.slice(1, 3), cycleEdges)).not.toThrow();
-    expect(Object.fromEntries(tidyNodeLayout(nodes.slice(1, 3), cycleEdges))).toEqual(
-      Object.fromEntries(tidyNodeLayout(nodes.slice(1, 3).reverse(), cycleEdges.reverse())),
+    await expect(tidyNodeLayout(nodes.slice(1, 3), cycleEdges)).resolves.toBeDefined();
+    expect(Object.fromEntries(await tidyNodeLayout(nodes.slice(1, 3), cycleEdges))).toEqual(
+      Object.fromEntries(await tidyNodeLayout(nodes.slice(1, 3).reverse(), cycleEdges.reverse())),
+    );
+  });
+
+  it("lays out wire bundles as multiplex and demultiplex routing nodes", async () => {
+    const tiedEdges = edges.slice(2).map((edge, index) => ({ ...edge, id: `edge-${index}` }));
+    const result = await tidyGraphLayout(nodes, tiedEdges, [
+      { id: "bundle", edgeIds: tiedEdges.map((edge) => edge.id) },
+    ]);
+    const waypoints = result.wireBundleWaypoints.get("bundle")!;
+    const sourceRight = Math.max(
+      result.nodePositions.get("left")!.x + nodes[1].width,
+      result.nodePositions.get("right")!.x + nodes[2].width,
+    );
+    const targetLeft = result.nodePositions.get("merge")!.x;
+
+    expect(waypoints[0].x).toBeGreaterThan(sourceRight);
+    expect(waypoints[0].x).toBeLessThan(waypoints[1].x);
+    expect(waypoints[1].x).toBeLessThan(targetLeft);
+  });
+
+  it("lays out tied graphs deterministically and ignores partial ties", async () => {
+    const tiedEdges = edges.map((edge, index) => ({ ...edge, id: `edge-${index}` }));
+    const tie = { id: "bundle", edgeIds: tiedEdges.map((edge) => edge.id) };
+    const first = await tidyGraphLayout(nodes, tiedEdges, [tie]);
+    const reordered = await tidyGraphLayout([...nodes].reverse(), [...tiedEdges].reverse(), [tie]);
+    const partial = await tidyGraphLayout(nodes.slice(0, 3), tiedEdges, [tie]);
+
+    expect(Object.fromEntries(first.nodePositions)).toEqual(
+      Object.fromEntries(reordered.nodePositions),
+    );
+    expect(Object.fromEntries(first.wireBundleWaypoints)).toEqual(
+      Object.fromEntries(reordered.wireBundleWaypoints),
+    );
+    expect(partial.wireBundleWaypoints.size).toBe(0);
+  });
+
+  it("lays out frame children locally and treats the sized frame as an outer supernode", async () => {
+    const compoundNodes: LayoutNode[] = [
+      { ...nodes[0], id: "before" },
+      { ...nodes[1], id: "inside-a", parentId: "frame" },
+      { ...nodes[2], id: "inside-b", parentId: "frame" },
+      { ...nodes[3], id: "after" },
+    ];
+    const frame: LayoutFrame = {
+      id: "frame",
+      position: { x: 440, y: 180 },
+      width: 420,
+      height: 260,
+      collapsed: false,
+    };
+    const result = await tidyGraphLayout(
+      compoundNodes,
+      [
+        { source: "before", target: "inside-a" },
+        { source: "inside-a", target: "inside-b" },
+        { source: "inside-b", target: "after" },
+      ],
+      [],
+      [frame],
+    );
+    const framePosition = result.framePositions.get(frame.id)!;
+    const frameSize = result.frameSizes.get(frame.id)!;
+    const before = result.nodePositions.get("before")!;
+    const insideA = result.nodePositions.get("inside-a")!;
+    const insideB = result.nodePositions.get("inside-b")!;
+    const after = result.nodePositions.get("after")!;
+
+    expect(before.x + compoundNodes[0].width).toBeLessThan(framePosition.x);
+    expect(framePosition.x + frameSize.width).toBeLessThan(after.x);
+    expect(insideA.x).toBeGreaterThanOrEqual(28);
+    expect(insideA.y).toBeGreaterThanOrEqual(62);
+    expect(insideA.x).toBeLessThan(insideB.x);
+    expect(insideB.x + compoundNodes[2].width).toBeLessThanOrEqual(frameSize.width - 28);
+  });
+
+  it("keeps a mixed-source fan-in tie inside its targets' frame", async () => {
+    const compoundNodes: LayoutNode[] = [
+      { ...nodes[0], id: "external-endpoint" },
+      { ...nodes[1], id: "external-prompt" },
+      { ...nodes[2], id: "internal-model", parentId: "frame" },
+      { ...nodes[3], id: "internal-completion", parentId: "frame" },
+    ];
+    const frame: LayoutFrame = {
+      id: "frame",
+      position: { x: 440, y: 180 },
+      width: 520,
+      height: 360,
+      collapsed: false,
+    };
+    const fanInEdges = [
+      { id: "endpoint-input", source: "external-endpoint", target: "internal-completion" },
+      { id: "model-input", source: "internal-model", target: "internal-completion" },
+      { id: "prompt-input", source: "external-prompt", target: "internal-completion" },
+    ];
+    const result = await tidyGraphLayout(
+      compoundNodes,
+      fanInEdges,
+      [{ id: "fan-in", edgeIds: fanInEdges.map((edge) => edge.id) }],
+      [frame],
+    );
+    const framePosition = result.framePositions.get(frame.id)!;
+    const frameSize = result.frameSizes.get(frame.id)!;
+    const waypoints = result.wireBundleWaypoints.get("fan-in")!;
+
+    for (const waypoint of waypoints) {
+      expect(waypoint.x).toBeGreaterThan(framePosition.x);
+      expect(waypoint.x).toBeLessThan(framePosition.x + frameSize.width);
+      expect(waypoint.y).toBeGreaterThan(framePosition.y);
+      expect(waypoint.y).toBeLessThan(framePosition.y + frameSize.height);
+    }
+  });
+
+  it("treats a collapsed frame as a leaf while preserving child positions", async () => {
+    const child = { ...nodes[1], id: "inside", parentId: "frame" };
+    const frame: LayoutFrame = {
+      id: "frame",
+      position: { x: 440, y: 180 },
+      width: 420,
+      height: 260,
+      collapsed: true,
+    };
+    const result = await tidyGraphLayout(
+      [{ ...nodes[0], id: "before" }, child, { ...nodes[3], id: "after" }],
+      [
+        { source: "before", target: "inside" },
+        { source: "inside", target: "after" },
+      ],
+      [],
+      [frame],
+    );
+
+    expect(result.nodePositions.has(child.id)).toBe(false);
+    expect(result.framePositions.has(frame.id)).toBe(true);
+    expect(result.frameSizes.has(frame.id)).toBe(false);
+    expect(result.nodePositions.get("before")!.x).toBeLessThan(
+      result.framePositions.get(frame.id)!.x,
+    );
+    expect(result.framePositions.get(frame.id)!.x + frame.width).toBeLessThan(
+      result.nodePositions.get("after")!.x,
     );
   });
 });

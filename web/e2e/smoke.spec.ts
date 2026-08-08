@@ -11,6 +11,19 @@ function watchPageErrors(page: Page): string[] {
   return errors;
 }
 
+async function clickWireAt(page: Page, edgeId: string, fraction: number, additive = false) {
+  const point = await page
+    .locator(`.react-flow__edge[data-id="${edgeId}"] .react-flow__edge-interaction`)
+    .evaluate((element: SVGPathElement, pathFraction) => {
+      const pathPoint = element.getPointAtLength(element.getTotalLength() * pathFraction);
+      const screenPoint = pathPoint.matrixTransform(element.getScreenCTM() ?? new DOMMatrix());
+      return { x: screenPoint.x, y: screenPoint.y };
+    }, fraction);
+  if (additive) await page.keyboard.down("Control");
+  await page.mouse.click(point.x, point.y);
+  if (additive) await page.keyboard.up("Control");
+}
+
 async function useLegacyRunEndpoint(page: Page): Promise<void> {
   // Exercise the client capability fallback without issuing an expected failing
   // request that would mask unrelated 404s in the console assertions below.
@@ -308,6 +321,27 @@ test("modifier selection groups two nodes into a collapsible frame", async ({ pa
   await expect(endpoint).toBeVisible();
   await expect(model).toBeVisible();
 
+  await page.locator(".react-flow__pane").click({
+    button: "right",
+    position: { x: 400, y: 20 },
+  });
+  await page.getByRole("menuitem", { name: "Tidy graph" }).click();
+  await expect
+    .poll(async () => {
+      const frameBox = await frame.boundingBox();
+      const endpointBox = await endpoint.boundingBox();
+      const modelBox = await model.boundingBox();
+      const loomBox = await page.locator('.react-flow__node[data-id="loom"]').boundingBox();
+      if (!frameBox || !endpointBox || !modelBox || !loomBox) return false;
+      const contains = (box: typeof endpointBox) =>
+        box.x >= frameBox.x &&
+        box.y >= frameBox.y + 32 &&
+        box.x + box.width <= frameBox.x + frameBox.width &&
+        box.y + box.height <= frameBox.y + frameBox.height;
+      return contains(endpointBox) && contains(modelBox) && frameBox.x + frameBox.width < loomBox.x;
+    })
+    .toBe(true);
+
   await frame.getByRole("button", { name: "Collapse frame" }).click();
   await expect(frame.getByRole("button", { name: "Expand frame" })).toBeVisible();
   await expect(endpoint).toBeHidden();
@@ -316,6 +350,302 @@ test("modifier selection groups two nodes into a collapsible frame", async ({ pa
   await expect
     .poll(() => page.locator('.react-flow__edge[data-id^="proxy:"]').count())
     .toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test("marquee selection latches to nodes or rendered wire paths", async ({ page }) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  const endpoint = page.locator('.react-flow__node[data-id="endpoint"]');
+  const model = page.locator('.react-flow__node[data-id="model"]');
+  const loom = page.locator('.react-flow__node[data-id="loom"]');
+  const canvas = page
+    .locator("section")
+    .filter({ has: page.locator(".react-flow") })
+    .first();
+  const endpointBox = await endpoint.boundingBox();
+  const modelBox = await model.boundingBox();
+  const canvasBox = await canvas.boundingBox();
+  expect(endpointBox).not.toBeNull();
+  expect(modelBox).not.toBeNull();
+  expect(canvasBox).not.toBeNull();
+  if (!endpointBox || !modelBox || !canvasBox) return;
+
+  const nodeStart = {
+    x: Math.max(canvasBox.x + 6, Math.min(endpointBox.x, modelBox.x) - 18),
+    y: Math.max(canvasBox.y + 6, Math.min(endpointBox.y, modelBox.y) - 18),
+  };
+  const nodeEnd = {
+    x: Math.max(endpointBox.x + endpointBox.width, modelBox.x + modelBox.width) + 18,
+    y: Math.max(endpointBox.y + endpointBox.height, modelBox.y + modelBox.height) + 18,
+  };
+  await page.mouse.move(nodeStart.x, nodeStart.y);
+  await page.mouse.down();
+  await page.mouse.move(nodeEnd.x, nodeEnd.y, { steps: 10 });
+  await page.mouse.up();
+  await expect(endpoint).toHaveClass(/selected/);
+  await expect(model).toHaveClass(/selected/);
+
+  await page.waitForTimeout(150);
+  const clearPoint = await page.evaluate(() => {
+    const root = document.querySelector<HTMLElement>(".react-flow")!;
+    const bounds = root.getBoundingClientRect();
+    const blocked =
+      ".react-flow__node, .react-flow__edge, .react-flow__handle, .react-flow__controls, .react-flow__minimap, button, input, select, textarea";
+    for (let y = bounds.top + 20; y < bounds.bottom - 20; y += 24) {
+      for (let x = bounds.left + 20; x < bounds.right - 20; x += 24) {
+        const target = document.elementFromPoint(x, y);
+        if (target?.closest(".react-flow__pane") && !target.closest(blocked)) return { x, y };
+      }
+    }
+    throw new Error("Could not find an empty pane point");
+  });
+  await page.mouse.click(clearPoint.x, clearPoint.y);
+  await expect(endpoint).not.toHaveClass(/selected/);
+  await expect(model).not.toHaveClass(/selected/);
+  const [endpointSource, modelSource, endpointTarget, modelTarget] = await Promise.all([
+    endpoint.locator(".react-flow__handle.source").boundingBox(),
+    model.locator(".react-flow__handle.source").boundingBox(),
+    loom.locator('.react-flow__handle.target[data-handleid="endpoint"]').boundingBox(),
+    loom.locator('.react-flow__handle.target[data-handleid="model"]').boundingBox(),
+  ]);
+  expect(endpointSource).not.toBeNull();
+  expect(modelSource).not.toBeNull();
+  expect(endpointTarget).not.toBeNull();
+  expect(modelTarget).not.toBeNull();
+  if (!endpointSource || !modelSource || !endpointTarget || !modelTarget) return;
+  const center = (box: NonNullable<typeof endpointSource>) => ({
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2,
+  });
+  const wireBoundsPoints = [
+    [center(endpointSource), center(endpointTarget)],
+    [center(modelSource), center(modelTarget)],
+  ].map(([source, target]) => ({
+    x: source.x + (target.x - source.x) * 0.35,
+    y: source.y + (target.y - source.y) * 0.35,
+  }));
+  const wireGesture = await page.evaluate((points) => {
+    const pane = document.querySelector<HTMLElement>(".react-flow__pane")!;
+    const paneBounds = pane.getBoundingClientRect();
+    const minX = Math.min(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxX = Math.max(...points.map((point) => point.x));
+    const maxY = Math.max(...points.map((point) => point.y));
+    const marginX = 30;
+    const marginY = 50;
+    const clampX = (value: number) =>
+      Math.max(paneBounds.left + 4, Math.min(paneBounds.right - 4, value));
+    const clampY = (value: number) =>
+      Math.max(paneBounds.top + 4, Math.min(paneBounds.bottom - 4, value));
+    const candidates = [
+      {
+        start: { x: clampX(minX - marginX), y: clampY(minY - marginY) },
+        end: { x: clampX(maxX + marginX), y: clampY(maxY + marginY) },
+      },
+      {
+        start: { x: clampX(minX - marginX), y: clampY(maxY + marginY) },
+        end: { x: clampX(maxX + marginX), y: clampY(minY - marginY) },
+      },
+      {
+        start: { x: clampX(maxX + marginX), y: clampY(minY - marginY) },
+        end: { x: clampX(minX - marginX), y: clampY(maxY + marginY) },
+      },
+      {
+        start: { x: clampX(maxX + marginX), y: clampY(maxY + marginY) },
+        end: { x: clampX(minX - marginX), y: clampY(minY - marginY) },
+      },
+    ];
+    const gesture = candidates.find(({ start }) => {
+      const target = document.elementFromPoint(start.x, start.y);
+      return (
+        target?.closest(".react-flow__pane") === pane &&
+        !target.closest(
+          ".react-flow__node, .react-flow__edge, .react-flow__handle, .react-flow__controls, .react-flow__minimap, button, input, select, textarea",
+        )
+      );
+    });
+    if (!gesture) throw new Error("Could not find an empty pane origin for wire marquee");
+    return gesture;
+  }, wireBoundsPoints);
+  const { start: wireStart, end: wireEnd } = wireGesture;
+  await page.mouse.move(wireStart.x, wireStart.y);
+  await page.mouse.down();
+  await page.mouse.move(wireEnd.x, wireEnd.y, { steps: 10 });
+  await expect(page.getByText("Selecting wires · 2", { exact: true })).toBeVisible();
+  await expect(page.locator('.react-flow__edge[data-id="endpoint-loom"]')).toHaveClass(/selected/);
+  await expect(page.locator('.react-flow__edge[data-id="model-loom"]')).toHaveClass(/selected/);
+  await page.mouse.up();
+
+  await expect(page.locator('.react-flow__edge[data-id="endpoint-loom"]')).toHaveClass(/selected/);
+  await expect(page.locator('.react-flow__edge[data-id="model-loom"]')).toHaveClass(/selected/);
+  await expect(endpoint).not.toHaveClass(/selected/);
+  await expect(model).not.toHaveClass(/selected/);
+  expect(errors).toEqual([]);
+});
+
+test("modifier-selected wires can be bundled, moved, recolored, and unbundled", async ({
+  page,
+}) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  const endpointWire = page.locator('.react-flow__edge[data-id="endpoint-loom"]');
+  const modelWire = page.locator('.react-flow__edge[data-id="model-loom"]');
+  await clickWireAt(page, "endpoint-loom", 0.34);
+  await clickWireAt(page, "model-loom", 0.34, true);
+
+  await expect(endpointWire).toHaveClass(/selected/);
+  await expect(modelWire).toHaveClass(/selected/);
+  await expect(page.getByText("2 wires", { exact: true })).toBeVisible();
+  await page.getByLabel("Wire color").selectOption("rose");
+  await expect(endpointWire.locator(".react-flow__edge-path")).toHaveCSS(
+    "stroke",
+    "rgb(217, 134, 174)",
+  );
+  await page.getByRole("button", { name: "Bundle" }).click();
+
+  const startWaypoint = page.getByRole("button", {
+    name: "Move bundle waypoint 1 for 2 wires",
+  });
+  const endWaypoint = page.getByRole("button", {
+    name: "Move bundle waypoint 2 for 2 wires",
+  });
+  await expect(startWaypoint).toBeVisible();
+  await expect(endWaypoint).toBeVisible();
+  await expect(page.getByRole("button", { name: "Unbundle" })).toBeHidden();
+
+  const trunk = page.locator('path[class*="bundleTrunkHitArea"]').last();
+  const trunkBox = await trunk.boundingBox();
+  const trunkStartBefore = Number(await startWaypoint.getAttribute("data-flow-x"));
+  const trunkEndBefore = Number(await endWaypoint.getAttribute("data-flow-x"));
+  expect(trunkBox).not.toBeNull();
+  if (trunkBox) {
+    const center = {
+      x: trunkBox.x + trunkBox.width / 2,
+      y: trunkBox.y + trunkBox.height / 2,
+    };
+    expect(
+      await page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute("class"),
+        center,
+      ),
+    ).toContain("bundleTrunkHitArea");
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.move(center.x + 42, center.y + 24, { steps: 8 });
+    await page.mouse.up();
+    expect(
+      Number(await startWaypoint.getAttribute("data-flow-x")) - trunkStartBefore,
+    ).toBeGreaterThan(30);
+    expect(Number(await endWaypoint.getAttribute("data-flow-x")) - trunkEndBefore).toBeGreaterThan(
+      30,
+    );
+  }
+
+  const before = await endWaypoint.boundingBox();
+  const beforeFlow = {
+    x: Number(await endWaypoint.getAttribute("data-flow-x")),
+    y: Number(await endWaypoint.getAttribute("data-flow-y")),
+  };
+  expect(before).not.toBeNull();
+  if (before) {
+    const center = { x: before.x + before.width / 2, y: before.y + before.height / 2 };
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.move(center.x + 54, center.y - 36, { steps: 8 });
+    await page.mouse.up();
+    const after = await endWaypoint.boundingBox();
+    const afterFlow = {
+      x: Number(await endWaypoint.getAttribute("data-flow-x")),
+      y: Number(await endWaypoint.getAttribute("data-flow-y")),
+    };
+    expect(after).not.toBeNull();
+    if (after) {
+      expect(afterFlow.x - beforeFlow.x).toBeGreaterThan(42);
+      expect(beforeFlow.y - afterFlow.y).toBeGreaterThan(24);
+      expect(after.x - before.x).toBeGreaterThan(32);
+      expect(before.y - after.y).toBeGreaterThan(18);
+    }
+  }
+
+  const manuallyMovedFlow = {
+    x: Number(await endWaypoint.getAttribute("data-flow-x")),
+    y: Number(await endWaypoint.getAttribute("data-flow-y")),
+  };
+  await page.locator(".react-flow__pane").click({
+    button: "right",
+    position: { x: 400, y: 20 },
+  });
+  await page.getByRole("menuitem", { name: "Tidy graph" }).click();
+  await expect
+    .poll(async () => ({
+      x: Number(await endWaypoint.getAttribute("data-flow-x")),
+      y: Number(await endWaypoint.getAttribute("data-flow-y")),
+    }))
+    .not.toEqual(manuallyMovedFlow);
+  const tidiedStartX = Number(await startWaypoint.getAttribute("data-flow-x"));
+  const tidiedEndX = Number(await endWaypoint.getAttribute("data-flow-x"));
+  expect(tidiedStartX).toBeLessThan(tidiedEndX);
+
+  await clickWireAt(page, "endpoint-loom", 0.08);
+  await clickWireAt(page, "model-loom", 0.08, true);
+  await expect(page.getByRole("button", { name: "Unbundle" })).toBeVisible();
+  await page.getByRole("button", { name: "Unbundle" }).click();
+  await expect(startWaypoint).toBeHidden();
+  await expect(endWaypoint).toBeHidden();
+  await expect(endpointWire).toHaveCount(1);
+  await expect(modelWire).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("tidy graph keeps a mixed-source fan-in cable tie inside its target frame", async ({
+  page,
+}) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  const model = page.locator('.react-flow__node[data-id="model"]');
+  const loom = page.locator('.react-flow__node[data-id="loom"]');
+  await model.locator("header").click();
+  await page.keyboard.down("Control");
+  await loom.locator("header").click();
+  await page.keyboard.up("Control");
+  await model.locator("header").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Group in collapsible frame" }).click();
+
+  await clickWireAt(page, "endpoint-loom", 0.34);
+  await clickWireAt(page, "model-loom", 0.34, true);
+  await expect(page.getByText("2 wires", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Bundle" }).press("Enter");
+
+  const frame = page.locator('.react-flow__node[data-id^="frame-"]');
+  const trunk = page.locator('path[class*="bundleTrunkHitArea"]').last();
+  await expect(trunk).toBeVisible();
+  await page.locator(".react-flow__pane").click({
+    button: "right",
+    position: { x: 400, y: 20 },
+  });
+  await page.getByRole("menuitem", { name: "Tidy graph" }).click();
+
+  await expect
+    .poll(async () => {
+      const frameBox = await frame.boundingBox();
+      const trunkBox = await trunk.boundingBox();
+      if (!frameBox || !trunkBox) return false;
+      const center = {
+        x: trunkBox.x + trunkBox.width / 2,
+        y: trunkBox.y + trunkBox.height / 2,
+      };
+      return (
+        center.x >= frameBox.x &&
+        center.y >= frameBox.y &&
+        center.x <= frameBox.x + frameBox.width &&
+        center.y <= frameBox.y + frameBox.height
+      );
+    })
+    .toBe(true);
   expect(errors).toEqual([]);
 });
 
@@ -368,13 +698,18 @@ test("a successful run selects and renders deterministic output", async ({ page 
 
   await page.getByRole("button", { name: "Run graph" }).click();
 
-  await expect(page.getByText("stubbed completion", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 completion", { exact: true })).toBeVisible();
+  const previewNode = page.locator('.react-flow__node[data-id="preview"]');
+  await expect(previewNode.getByText("stubbed completion", { exact: true })).toBeVisible();
+  await expect(previewNode.getByText("1 completion", { exact: true })).toBeVisible();
   await expect(page.getByText("Full graph run")).toBeVisible();
   await expect(page.getByText(/4 nodes · completed/)).toBeVisible();
   await expect(page.locator('.react-flow__node[data-id="preview"] article')).toHaveClass(
     /status-completed/,
   );
+  await previewNode.getByRole("button", { name: "Hide value on canvas" }).click();
+  await expect(previewNode.getByText("stubbed completion", { exact: true })).toHaveCount(0);
+  await previewNode.getByRole("button", { name: "Show value on canvas" }).click();
+  await expect(previewNode.getByText("stubbed completion", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -548,7 +883,7 @@ test("a poisoned preview output degrades inline while the canvas stays live", as
 
   await page.getByRole("button", { name: "Run graph" }).click();
 
-  await expect(page.getByRole("alert")).toContainText("Output could not be rendered");
+  await expect(page.getByRole("alert").last()).toContainText("Output could not be rendered");
   await expect(page.locator(".react-flow__node")).toHaveCount(4);
   await expect(page.getByRole("button", { name: "Run graph" })).toBeVisible();
   expect(errors.filter((message) => !message.includes("Synthetic preview render failure"))).toEqual(

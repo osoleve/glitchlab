@@ -13,8 +13,13 @@ import { downstreamClosure, upstreamClosure } from "../graphTraversal";
 import type {
   ControlPortMode,
   EdgeRouting,
+  FlowPosition,
   FrameColor,
   LoomState,
+  SelectionKind,
+  WireBundle,
+  WireColor,
+  WirePresentation,
   WorkflowEdge,
   WorkflowFrame,
   WorkflowNode,
@@ -23,7 +28,7 @@ import type {
 type Updater<T> = T | ((current: T) => T);
 type GraphDocumentFields = Pick<
   GraphDocumentState,
-  "nodes" | "edges" | "frames" | "edgeRouting" | "graphName" | "isDirty"
+  "nodes" | "edges" | "frames" | "edgeRouting" | "wires" | "wireBundles" | "graphName" | "isDirty"
 >;
 type GraphDocumentUpdate = Partial<GraphDocumentFields>;
 
@@ -34,6 +39,9 @@ export interface GraphDocumentState {
   edges: WorkflowEdge[];
   frames: WorkflowFrame[];
   edgeRouting: EdgeRouting;
+  wires: WirePresentation[];
+  wireBundles: WireBundle[];
+  selectionKind?: SelectionKind;
   selectedId?: string;
   graphName: string;
   isDirty: boolean;
@@ -41,6 +49,17 @@ export interface GraphDocumentState {
   setEdges: (edges: Updater<WorkflowEdge[]>) => void;
   setFrames: (frames: Updater<WorkflowFrame[]>) => void;
   setEdgeRouting: (edgeRouting: EdgeRouting) => void;
+  bundleEdges: (
+    edgeIds: string[],
+    start: FlowPosition,
+    end: FlowPosition,
+    createId?: () => string,
+  ) => string | undefined;
+  addEdgesToBundle: (bundleId: string, edgeIds: string[]) => void;
+  moveWireBundleWaypoint: (bundleId: string, waypointIndex: number, position: FlowPosition) => void;
+  translateWireBundle: (bundleId: string, delta: FlowPosition) => void;
+  unbundleEdges: (edgeIds: string[]) => void;
+  setWireColor: (edgeIds: string[], color?: WireColor) => void;
   setSelectedId: (selectedId?: string) => void;
   setGraphName: (graphName: string) => void;
   setIsDirty: (isDirty: boolean) => void;
@@ -60,8 +79,10 @@ export interface GraphDocumentState {
   updateControlPort: (nodeId: string, fieldName: string, mode?: ControlPortMode) => void;
   removeNodes: (nodeIds: string[]) => void;
   removeEdge: (edgeId: string) => void;
+  removeEdges: (edgeIds: string[]) => void;
   selectNode: (nodeId: string, additive?: boolean) => string | undefined;
   selectNodes: (nodeIds: string[], anchorId?: string) => string | undefined;
+  selectEdges: (edgeIds: string[], additive?: boolean) => void;
   setSelectionAnchor: (preferredId?: string) => string | undefined;
   selectAllNodes: () => string | undefined;
   selectRelatedNodes: (
@@ -84,7 +105,22 @@ export interface GraphDocumentState {
     isDirty: boolean,
     frames?: WorkflowFrame[],
     edgeRouting?: EdgeRouting,
+    wires?: WirePresentation[],
+    wireBundles?: WireBundle[],
   ) => void;
+}
+
+function reconcileWireBundles(wireBundles: WireBundle[], edges: WorkflowEdge[]): WireBundle[] {
+  const edgeIds = new Set(edges.map((edge) => edge.id));
+  return wireBundles.flatMap((bundle) => {
+    const retainedEdgeIds = bundle.edgeIds.filter((edgeId) => edgeIds.has(edgeId));
+    return retainedEdgeIds.length >= 2 ? [{ ...bundle, edgeIds: retainedEdgeIds }] : [];
+  });
+}
+
+function reconcileWires(wires: WirePresentation[], edges: WorkflowEdge[]): WirePresentation[] {
+  const edgeIds = new Set(edges.map((edge) => edge.id));
+  return wires.filter((wire) => edgeIds.has(wire.edgeId));
 }
 
 function resetRunStatuses(nodes: WorkflowNode[]): WorkflowNode[] {
@@ -141,6 +177,12 @@ function graphHistoryState(state: GraphDocumentState): GraphHistoryState {
     edges: state.edges.map(historyEdge),
     frames: state.frames.map(historyFrame),
     edgeRouting: state.edgeRouting,
+    wires: state.wires.map((wire) => ({ ...wire })),
+    wireBundles: state.wireBundles.map((bundle) => ({
+      ...bundle,
+      edgeIds: [...bundle.edgeIds],
+      waypoints: bundle.waypoints.map((waypoint) => ({ ...waypoint })),
+    })),
     graphName: state.graphName,
     isDirty: state.isDirty,
   };
@@ -155,6 +197,8 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
   edges: [],
   frames: [],
   edgeRouting: "smoothstep",
+  wires: [],
+  wireBundles: [],
   graphName: "Loom workshop",
   isDirty: false,
   setNodes: (nodes) =>
@@ -164,6 +208,102 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
   setFrames: (frames) =>
     set((state) => ({ frames: typeof frames === "function" ? frames(state.frames) : frames })),
   setEdgeRouting: (edgeRouting) => set({ edgeRouting, isDirty: true }),
+  bundleEdges: (edgeIds, start, end, createId = () => crypto.randomUUID()) => {
+    let createdId: string | undefined;
+    set((state) => {
+      const available = new Set(state.edges.map((edge) => edge.id));
+      const uniqueEdgeIds = [...new Set(edgeIds)].filter((edgeId) => available.has(edgeId));
+      if (uniqueEdgeIds.length < 2) return state;
+      const selectedIds = new Set(uniqueEdgeIds);
+      const retainedBundles = state.wireBundles.flatMap((bundle) => {
+        const retainedEdgeIds = bundle.edgeIds.filter((edgeId) => !selectedIds.has(edgeId));
+        return retainedEdgeIds.length >= 2 ? [{ ...bundle, edgeIds: retainedEdgeIds }] : [];
+      });
+      createdId = `bundle-${createId().slice(0, 8)}`;
+      return {
+        edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+        wireBundles: [
+          ...retainedBundles,
+          {
+            id: createdId,
+            edgeIds: uniqueEdgeIds,
+            waypoints: [{ ...start }, { ...end }],
+            collapsed: false,
+          },
+        ],
+        selectionKind: undefined,
+        isDirty: true,
+      };
+    });
+    return createdId;
+  },
+  addEdgesToBundle: (bundleId, edgeIds) =>
+    set((state) => {
+      const available = new Set(state.edges.map((edge) => edge.id));
+      const requested = new Set(edgeIds.filter((edgeId) => available.has(edgeId)));
+      if (requested.size === 0) return state;
+      return {
+        wireBundles: state.wireBundles.flatMap((bundle) => {
+          if (bundle.id === bundleId) {
+            return [{ ...bundle, edgeIds: [...new Set([...bundle.edgeIds, ...requested])] }];
+          }
+          const retained = bundle.edgeIds.filter((edgeId) => !requested.has(edgeId));
+          return retained.length >= 2 ? [{ ...bundle, edgeIds: retained }] : [];
+        }),
+        isDirty: true,
+      };
+    }),
+  moveWireBundleWaypoint: (bundleId, waypointIndex, position) =>
+    set((state) => ({
+      wireBundles: state.wireBundles.map((bundle) =>
+        bundle.id === bundleId
+          ? {
+              ...bundle,
+              waypoints: bundle.waypoints.map((waypoint, index) =>
+                index === waypointIndex ? { ...position } : waypoint,
+              ),
+            }
+          : bundle,
+      ),
+      isDirty: true,
+    })),
+  translateWireBundle: (bundleId, delta) =>
+    set((state) => ({
+      wireBundles: state.wireBundles.map((bundle) =>
+        bundle.id === bundleId
+          ? {
+              ...bundle,
+              waypoints: bundle.waypoints.map((waypoint) => ({
+                x: waypoint.x + delta.x,
+                y: waypoint.y + delta.y,
+              })),
+            }
+          : bundle,
+      ),
+      isDirty: true,
+    })),
+  unbundleEdges: (edgeIds) =>
+    set((state) => {
+      const selectedIds = new Set(edgeIds);
+      return {
+        wireBundles: state.wireBundles.flatMap((bundle) => {
+          const retainedEdgeIds = bundle.edgeIds.filter((edgeId) => !selectedIds.has(edgeId));
+          return retainedEdgeIds.length >= 2 ? [{ ...bundle, edgeIds: retainedEdgeIds }] : [];
+        }),
+        isDirty: true,
+      };
+    }),
+  setWireColor: (edgeIds, color) =>
+    set((state) => {
+      const selectedIds = new Set(edgeIds);
+      const retained = state.wires.filter((wire) => !selectedIds.has(wire.edgeId));
+      return {
+        wires: color
+          ? [...retained, ...[...selectedIds].map((edgeId) => ({ edgeId, color }))]
+          : retained,
+        isDirty: true,
+      };
+    }),
   setSelectedId: (selectedId) => set({ selectedId }),
   setGraphName: (graphName) => set({ graphName }),
   setIsDirty: (isDirty) => set({ isDirty }),
@@ -181,12 +321,17 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         edges: state.edges,
         frames: state.frames,
         edgeRouting: state.edgeRouting,
+        wires: state.wires,
+        wireBundles: state.wireBundles,
         graphName: state.graphName,
         isDirty: state.isDirty,
       });
       const nodes = update.nodes ?? state.nodes;
+      const edges = update.edges ?? state.edges;
       return {
         ...update,
+        wires: reconcileWires(update.wires ?? state.wires, edges),
+        wireBundles: reconcileWireBundles(update.wireBundles ?? state.wireBundles, edges),
         nodes: semantic ? resetRunStatuses(nodes) : nodes,
         isDirty: update.isDirty ?? true,
       };
@@ -208,8 +353,20 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
           ? state.selectedId
           : selectedIds.at(-1)
         : state.selectedId;
+      const hasSelectedNodes = selectedIds.length > 0;
       return {
         nodes: semantic ? resetRunStatuses(nodes) : nodes,
+        edges:
+          selectionChanged && hasSelectedNodes
+            ? state.edges.map((edge) => ({ ...edge, selected: false }))
+            : state.edges,
+        selectionKind: selectionChanged
+          ? hasSelectedNodes
+            ? "node"
+            : state.selectionKind === "node"
+              ? undefined
+              : state.selectionKind
+          : state.selectionKind,
         selectedId,
         isDirty: state.isDirty || semantic || layout,
       };
@@ -249,9 +406,27 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
   applyEdgeChanges: (changes) =>
     set((state) => {
       const semantic = changes.some((change) => change.type !== "select");
+      const edges = applyEdgeChanges(changes, state.edges);
+      const selectionChanged = changes.some((change) => change.type === "select");
+      const hasSelectedEdges = edges.some((edge) => edge.selected);
       return {
-        edges: applyEdgeChanges(changes, state.edges),
-        nodes: semantic ? resetRunStatuses(state.nodes) : state.nodes,
+        edges,
+        selectionKind: selectionChanged
+          ? hasSelectedEdges
+            ? "wire"
+            : state.selectionKind === "wire"
+              ? undefined
+              : state.selectionKind
+          : state.selectionKind,
+        selectedId: selectionChanged && hasSelectedEdges ? undefined : state.selectedId,
+        wires: reconcileWires(state.wires, edges),
+        wireBundles: reconcileWireBundles(state.wireBundles, edges),
+        nodes:
+          selectionChanged && hasSelectedEdges
+            ? state.nodes.map((node) => ({ ...node, selected: false }))
+            : semantic
+              ? resetRunStatuses(state.nodes)
+              : state.nodes,
         isDirty: state.isDirty || semantic,
       };
     }),
@@ -318,29 +493,59 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
           },
         };
       });
-      return { edges, nodes, isDirty: true };
+      return {
+        edges,
+        wires: reconcileWires(state.wires, edges),
+        wireBundles: reconcileWireBundles(state.wireBundles, edges),
+        nodes,
+        isDirty: true,
+      };
     }),
   removeNodes: (nodeIds) =>
     set((state) => {
       const ids = new Set(nodeIds);
+      const edges = state.edges.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target));
       return {
         nodes: resetRunStatuses(state.nodes.filter((node) => !ids.has(node.id))),
-        edges: state.edges.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target)),
+        edges,
+        wires: reconcileWires(state.wires, edges),
+        wireBundles: reconcileWireBundles(state.wireBundles, edges),
         selectedId: undefined,
+        selectionKind: undefined,
         isDirty: true,
       };
     }),
   removeEdge: (edgeId) =>
-    set((state) => ({
-      edges: state.edges.filter((edge) => edge.id !== edgeId),
-      isDirty: true,
-      nodes: resetRunStatuses(state.nodes),
-    })),
+    set((state) => {
+      const edges = state.edges.filter((edge) => edge.id !== edgeId);
+      return {
+        edges,
+        wires: reconcileWires(state.wires, edges),
+        wireBundles: reconcileWireBundles(state.wireBundles, edges),
+        isDirty: true,
+        nodes: resetRunStatuses(state.nodes),
+      };
+    }),
+  removeEdges: (edgeIds) =>
+    set((state) => {
+      const ids = new Set(edgeIds);
+      const edges = state.edges.filter((edge) => !ids.has(edge.id));
+      if (edges.length === state.edges.length) return state;
+      return {
+        edges,
+        wires: reconcileWires(state.wires, edges),
+        wireBundles: reconcileWireBundles(state.wireBundles, edges),
+        isDirty: true,
+        nodes: resetRunStatuses(state.nodes),
+      };
+    }),
   selectNode: (nodeId, additive = false) => {
     let selectedId: string | undefined;
     set((state) => {
       const selectedIds = new Set(
-        state.nodes.filter((node) => node.selected).map((node) => node.id),
+        state.selectionKind === "node"
+          ? state.nodes.filter((node) => node.selected).map((node) => node.id)
+          : [],
       );
       if (additive) {
         if (selectedIds.has(nodeId)) selectedIds.delete(nodeId);
@@ -352,7 +557,9 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       selectedId = selectedIds.has(nodeId) ? nodeId : [...selectedIds].at(-1);
       return {
         selectedId,
+        selectionKind: selectedIds.size > 0 ? "node" : undefined,
         nodes: state.nodes.map((node) => ({ ...node, selected: selectedIds.has(node.id) })),
+        edges: state.edges.map((edge) => ({ ...edge, selected: false })),
       };
     });
     return selectedId;
@@ -362,10 +569,30 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     const selectedId = anchorId && selectedIds.has(anchorId) ? anchorId : nodeIds.at(-1);
     set((state) => ({
       selectedId,
+      selectionKind: selectedIds.size > 0 ? "node" : undefined,
       nodes: state.nodes.map((node) => ({ ...node, selected: selectedIds.has(node.id) })),
+      edges: state.edges.map((edge) => ({ ...edge, selected: false })),
     }));
     return selectedId;
   },
+  selectEdges: (edgeIds, additive = false) =>
+    set((state) => {
+      const selectedIds = new Set(
+        additive && state.selectionKind === "wire"
+          ? state.edges.filter((edge) => edge.selected).map((edge) => edge.id)
+          : [],
+      );
+      for (const edgeId of edgeIds) {
+        if (additive && selectedIds.has(edgeId)) selectedIds.delete(edgeId);
+        else selectedIds.add(edgeId);
+      }
+      return {
+        selectionKind: selectedIds.size > 0 ? "wire" : undefined,
+        selectedId: undefined,
+        nodes: state.nodes.map((node) => ({ ...node, selected: false })),
+        edges: state.edges.map((edge) => ({ ...edge, selected: selectedIds.has(edge.id) })),
+      };
+    }),
   setSelectionAnchor: (preferredId) => {
     let selectedId: string | undefined;
     set((state) => {
@@ -386,7 +613,9 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       selectedId = state.nodes.at(-1)?.id;
       return {
         selectedId,
+        selectionKind: "node",
         nodes: state.nodes.map((node) => ({ ...node, selected: true })),
+        edges: state.edges.map((edge) => ({ ...edge, selected: false })),
       };
     });
     return selectedId;
@@ -403,15 +632,19 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       selectedId = startIds.at(-1);
       return {
         selectedId,
+        selectionKind: selectedIds.size > 0 ? "node" : undefined,
         nodes: state.nodes.map((node) => ({ ...node, selected: selectedIds.has(node.id) })),
+        edges: state.edges.map((edge) => ({ ...edge, selected: false })),
       };
     });
     return selectedId;
   },
   clearSelection: () =>
     set((state) => ({
+      selectionKind: undefined,
       selectedId: undefined,
       nodes: state.nodes.map((node) => ({ ...node, selected: false })),
+      edges: state.edges.map((edge) => ({ ...edge, selected: false })),
     })),
   duplicateNodes: (nodeIds, createId = () => crypto.randomUUID()) => {
     const duplicatedIds: string[] = [];
@@ -443,15 +676,32 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
           },
         };
       });
+      const edgeReplacements = new Map<string, string>();
       const copiedEdges = state.edges
-        .filter((edge) => sourceIds.has(edge.source) && sourceIds.has(edge.target))
-        .map((edge) => ({
-          ...edge,
-          id: createId(),
-          source: replacements.get(edge.source)!,
-          target: replacements.get(edge.target)!,
-          selected: false,
-        }));
+        .filter((edge) => sourceIds.has(edge.target))
+        .map((edge) => {
+          const id = createId();
+          edgeReplacements.set(edge.id, id);
+          return {
+            ...edge,
+            id,
+            source: replacements.get(edge.source) ?? edge.source,
+            target: replacements.get(edge.target)!,
+            selected: false,
+          };
+        });
+      const copiedWires = state.wires.flatMap((wire) => {
+        const edgeId = edgeReplacements.get(wire.edgeId);
+        return edgeId ? [{ ...wire, edgeId }] : [];
+      });
+      const copiedBundleEdges = new Map<string, string[]>();
+      for (const bundle of state.wireBundles) {
+        const edgeIds = bundle.edgeIds.flatMap((edgeId) => {
+          const replacement = edgeReplacements.get(edgeId);
+          return replacement ? [replacement] : [];
+        });
+        if (edgeIds.length > 0) copiedBundleEdges.set(bundle.id, edgeIds);
+      }
 
       return {
         nodes: [
@@ -462,7 +712,13 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
           })),
           ...copies,
         ],
-        edges: [...state.edges, ...copiedEdges],
+        edges: [...state.edges.map((edge) => ({ ...edge, selected: false })), ...copiedEdges],
+        wires: [...state.wires, ...copiedWires],
+        wireBundles: state.wireBundles.map((bundle) => ({
+          ...bundle,
+          edgeIds: [...bundle.edgeIds, ...(copiedBundleEdges.get(bundle.id) ?? [])],
+        })),
+        selectionKind: "node",
         selectedId: duplicatedIds[0],
         isDirty: true,
       };
@@ -516,6 +772,8 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
             position: { x: item.x - framePosition.x, y: item.y - framePosition.y },
           };
         }),
+        edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+        selectionKind: undefined,
         selectedId: undefined,
         isDirty: true,
       };
@@ -538,6 +796,8 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         },
       ],
       nodes: state.nodes.map((node) => ({ ...node, selected: false })),
+      edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+      selectionKind: undefined,
       selectedId: undefined,
       isDirty: true,
     }));
@@ -575,8 +835,32 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         isDirty: true,
       };
     }),
-  replaceGraph: (nodes, edges, graphName, isDirty, frames = [], edgeRouting = "smoothstep") =>
-    set({ nodes, edges, frames, edgeRouting, selectedId: undefined, graphName, isDirty }),
+  replaceGraph: (
+    nodes,
+    edges,
+    graphName,
+    isDirty,
+    frames = [],
+    edgeRouting = "smoothstep",
+    wires = [],
+    wireBundles = [],
+  ) =>
+    set({
+      nodes,
+      edges,
+      frames,
+      edgeRouting,
+      wires: reconcileWires(wires, edges),
+      wireBundles: reconcileWireBundles(wireBundles, edges),
+      selectionKind: nodes.some((node) => node.selected)
+        ? "node"
+        : edges.some((edge) => edge.selected)
+          ? "wire"
+          : undefined,
+      selectedId: undefined,
+      graphName,
+      isDirty,
+    }),
 });
 
 export const useGraphDocumentStore = create<GraphDocumentState>()(

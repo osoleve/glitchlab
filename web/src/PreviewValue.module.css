@@ -52,6 +52,24 @@
   gap: 10px;
 }
 
+.preview-group {
+  display: grid;
+  gap: 7px;
+  padding: 7px;
+  background: rgba(133, 105, 150, 0.035);
+  border: 1px solid #332b38;
+  border-radius: 4px 4px 9px 4px;
+}
+
+.preview-group > header {
+  padding: 1px 3px;
+  color: #96899d;
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
 .completion-card,
 .text-preview-card {
   overflow: hidden;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hydrateGraph, serializeGraph } from "./graph";
+import { assertWirePresentationPreserved, hydrateGraph, serializeGraph } from "./graph";
 import type { NodeDefinition, WorkflowFrame, WorkflowNode } from "./types";
 
 const definition = {
@@ -38,6 +38,39 @@ const node: WorkflowNode = {
 };
 
 describe("graph presentation", () => {
+  it("rejects a save response that silently drops wire presentation", () => {
+    const requested = serializeGraph(
+      "Guarded",
+      [],
+      [],
+      [],
+      "bezier",
+      [{ edgeId: "edge-a", color: "rose" }],
+      [
+        {
+          id: "bundle-a",
+          edgeIds: ["edge-a"],
+          waypoints: [{ x: 12, y: 24 }],
+          collapsed: true,
+          label: "comparison",
+        },
+      ],
+    );
+    const dropped = {
+      ...requested,
+      presentation: {
+        ...requested.presentation!,
+        wires: [],
+        wire_bundles: [],
+      },
+    };
+
+    expect(() => assertWirePresentationPreserved(requested, requested)).not.toThrow();
+    expect(() => assertWirePresentationPreserved(requested, dropped)).toThrow(
+      "The server did not preserve wire colors and cable ties",
+    );
+  });
+
   it("serializes semantic positions as absolute and round-trips frame presentation", () => {
     const graph = serializeGraph("Grouped", [node], [], [frame], "bezier");
 
@@ -56,6 +89,9 @@ describe("graph presentation", () => {
           node_ids: ["node-a"],
         },
       ],
+      wires: [],
+      wire_bundles: [],
+      node_previews: [],
     });
 
     const hydrated = hydrateGraph(graph, [definition]);
@@ -79,6 +115,77 @@ describe("graph presentation", () => {
     const hydrated = hydrateGraph(legacy, [definition]);
     expect(hydrated.frames).toEqual([]);
     expect(hydrated.edgeRouting).toBe("smoothstep");
+    expect(hydrated.wires).toEqual([]);
+    expect(hydrated.wireBundles).toEqual([]);
+  });
+
+  it("round-trips wire styles and movable bundles as presentation-only metadata", () => {
+    const edges = [
+      {
+        id: "edge-a",
+        source: "node-a",
+        sourceHandle: "out-a",
+        target: "node-b",
+        targetHandle: "in-a",
+      },
+      {
+        id: "edge-b",
+        source: "node-a",
+        sourceHandle: "out-b",
+        target: "node-b",
+        targetHandle: "in-b",
+      },
+    ];
+    const wires = [{ edgeId: "edge-a", color: "rose" as const }];
+    const wireBundles = [
+      {
+        id: "bundle-a",
+        edgeIds: ["edge-a", "edge-b"],
+        waypoints: [
+          { x: 180, y: 120 },
+          { x: 320, y: 180 },
+        ],
+        collapsed: false,
+      },
+    ];
+
+    const graph = serializeGraph("Bundled", [node], edges, [], "smoothstep", wires, wireBundles);
+    expect(graph.presentation?.wires).toEqual([{ edge_id: "edge-a", color: "rose" }]);
+    expect(graph.presentation?.wire_bundles).toEqual([
+      {
+        id: "bundle-a",
+        edge_ids: ["edge-a", "edge-b"],
+        waypoints: [
+          { x: 180, y: 120 },
+          { x: 320, y: 180 },
+        ],
+        collapsed: false,
+      },
+    ]);
+    const hydrated = hydrateGraph(graph, [definition]);
+    expect(hydrated.wires).toEqual(wires);
+    expect(hydrated.wireBundles).toEqual(wireBundles);
+  });
+
+  it("persists hidden canvas previews as presentation-only state", () => {
+    const previewDefinition = { ...definition, kind: "preview", label: "Preview" };
+    const previewNode: WorkflowNode = {
+      ...node,
+      id: "preview-a",
+      parentId: undefined,
+      data: {
+        ...node.data,
+        kind: "preview",
+        definition: previewDefinition,
+        canvasPreviewVisible: false,
+      },
+    };
+
+    const graph = serializeGraph("Preview", [previewNode], []);
+    expect(graph.presentation?.node_previews).toEqual([{ node_id: "preview-a", visible: false }]);
+    expect(hydrateGraph(graph, [previewDefinition]).nodes[0]?.data.canvasPreviewVisible).toBe(
+      false,
+    );
   });
 });
 
