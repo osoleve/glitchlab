@@ -22,7 +22,9 @@ The workbench also tracks unsaved graph changes and provides document-wide
 undo/redo from the topbar or `Ctrl`/`Cmd`+`Z` and `Ctrl`/`Cmd`+`Shift`+`Z`.
 History covers graph edits and starter resets while excluding run results and
 selection state. The workbench preserves the current selection while a run
-completes and labels collected completion cards with their source node titles.
+completes. Preview nodes show compact output directly on the canvas, with a
+presentation-only visibility toggle for long values, while the inspector retains
+the complete result.
 Selected canvas nodes have working resize handles, `Ctrl`/`Cmd`+click builds a
 multi-node selection, and `Delete` / `Backspace` removes the current canvas
 selection. Right-clicking nodes, selections, wires, or the canvas opens
@@ -132,7 +134,10 @@ extraction, and deletion. **Tidy selection** and **Tidy graph** apply a
 deterministic left-to-right DAG layout using the nodes' measured sizes, preserve
 the arranged region's visual center, and persist the resulting positions without
 invalidating run freshness. A full-graph tidy also refits the completed layout;
-selection tidy leaves the surrounding spatial context in place. A multi-node
+selection tidy leaves the surrounding spatial context in place. Full-graph layout
+uses ELK's compound-graph support: each expanded frame lays out and sizes its own
+children, then participates in the outer DAG as one supernode; collapsed frames
+participate as leaf nodes without disturbing their hidden children. A multi-node
 selection can also be grouped into a collapsible frame. Frames have editable
 titles and five color choices; membership, bounds, collapse state, and the graph's
 wire-routing preference persist with the graph while remaining presentation-only
@@ -145,23 +150,42 @@ to that family; otherwise the first intersected element decides. Ctrl/Cmd adds a
 Alt removes from the marquee selection. Wire hit-testing follows the rendered path,
 not merely its endpoint nodes.
 
+Duplicating nodes also duplicates every wire entering them. Connections between
+duplicated nodes are remapped to the copies, while incoming external sources stay
+attached and outgoing external effects are not copied.
+
 Select two or more wires to create a routed bundle. Every bundle has extensible
 waypoints: drag a waypoint to reshape the route or drag the shared trunk to move the
 whole bundle. Existing bundles can accept additional selected wires without being
 rebuilt. Bundles participate in **Tidy graph** as virtual multiplex/demultiplex
 routing nodes, then remain freely movable afterward. Wire styles and bundles persist
 with saved graphs and, like frames and routing style, do not change execution
-semantics or run freshness. Hovering a wire highlights its complete route and its
-source and destination ports. Selecting nodes
-emphasizes their complete upstream and downstream wire paths; unrelated wires
-recede while a selected wire remains fully visible. Wires use smooth stepped
-routing by default, with Bezier routing available from the canvas menu. Connection
-ports use enlarged proximity targets and explicit valid/invalid hover feedback.
-A wire can be disconnected or split
-by inserting the one-input, one-output **Passthrough** node. Dragging a new
-output wire onto empty canvas opens a searchable node picker filtered to
-type-compatible input ports. Choosing an entry creates the node at the drop
-point and connects the wire to the exact input named in the picker.
+semantics or run freshness. Compound layout assigns each bundle to the common frame
+on its input side, keeping fan-in ties with the nodes they feed even when their
+sources are outside that frame. Parallel lanes follow their input-side port order
+through the shared trunk so they arrive without avoidable crossings. Hovering a wire
+highlights its complete route and its source and destination ports. Selecting nodes
+emphasizes their complete upstream and downstream wire paths; unrelated wires recede
+while a selected wire remains fully visible. Wires use smooth stepped routing by
+default, with Bezier routing available from the canvas menu. Connection ports use
+enlarged proximity targets and explicit valid/invalid hover feedback. A wire can be
+disconnected or split by inserting the one-input, one-output **Passthrough** node.
+Dragging a new output wire onto empty canvas opens a searchable node picker filtered
+to type-compatible input ports. Choosing an entry creates the node at the drop point
+and connects the wire to the exact input named in the picker.
+
+## Collections and comparison
+
+**Collect** preserves every incoming value as one ordered item, including a whole
+collection received on one wire. **Flatten one level** is the explicit operation
+for replacing nested collection items with their immediate contents. Preview
+shape labels and group boundaries keep that distinction visible. Saved graphs
+that already contain the former Collect flatten flag retain their prior execution
+behavior, but newly authored graphs use the explicit node.
+
+**Compare Preview** accepts two or more scalar values or sequences, aligns them by
+index, and labels columns from their source nodes. Reading text stays adjacent;
+raw values and provenance remain available in a collapsed inspector section.
 
 ## OpenRouter and Hugging Face datasets
 

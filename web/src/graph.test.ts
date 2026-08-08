@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hydrateGraph, serializeGraph } from "./graph";
+import { assertWirePresentationPreserved, hydrateGraph, serializeGraph } from "./graph";
 import type { NodeDefinition, WorkflowFrame, WorkflowNode } from "./types";
 
 const definition = {
@@ -38,6 +38,39 @@ const node: WorkflowNode = {
 };
 
 describe("graph presentation", () => {
+  it("rejects a save response that silently drops wire presentation", () => {
+    const requested = serializeGraph(
+      "Guarded",
+      [],
+      [],
+      [],
+      "bezier",
+      [{ edgeId: "edge-a", color: "rose" }],
+      [
+        {
+          id: "bundle-a",
+          edgeIds: ["edge-a"],
+          waypoints: [{ x: 12, y: 24 }],
+          collapsed: true,
+          label: "comparison",
+        },
+      ],
+    );
+    const dropped = {
+      ...requested,
+      presentation: {
+        ...requested.presentation!,
+        wires: [],
+        wire_bundles: [],
+      },
+    };
+
+    expect(() => assertWirePresentationPreserved(requested, requested)).not.toThrow();
+    expect(() => assertWirePresentationPreserved(requested, dropped)).toThrow(
+      "The server did not preserve wire colors and cable ties",
+    );
+  });
+
   it("serializes semantic positions as absolute and round-trips frame presentation", () => {
     const graph = serializeGraph("Grouped", [node], [], [frame], "bezier");
 
@@ -58,6 +91,7 @@ describe("graph presentation", () => {
       ],
       wires: [],
       wire_bundles: [],
+      node_previews: [],
     });
 
     const hydrated = hydrateGraph(graph, [definition]);
@@ -131,6 +165,27 @@ describe("graph presentation", () => {
     const hydrated = hydrateGraph(graph, [definition]);
     expect(hydrated.wires).toEqual(wires);
     expect(hydrated.wireBundles).toEqual(wireBundles);
+  });
+
+  it("persists hidden canvas previews as presentation-only state", () => {
+    const previewDefinition = { ...definition, kind: "preview", label: "Preview" };
+    const previewNode: WorkflowNode = {
+      ...node,
+      id: "preview-a",
+      parentId: undefined,
+      data: {
+        ...node.data,
+        kind: "preview",
+        definition: previewDefinition,
+        canvasPreviewVisible: false,
+      },
+    };
+
+    const graph = serializeGraph("Preview", [previewNode], []);
+    expect(graph.presentation?.node_previews).toEqual([{ node_id: "preview-a", visible: false }]);
+    expect(hydrateGraph(graph, [previewDefinition]).nodes[0]?.data.canvasPreviewVisible).toBe(
+      false,
+    );
   });
 });
 

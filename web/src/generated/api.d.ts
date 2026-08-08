@@ -561,6 +561,8 @@ export interface components {
             edge_routing: "smoothstep" | "bezier";
             /** Frames */
             frames?: components["schemas"]["FramePresentation"][];
+            /** Node Previews */
+            node_previews?: components["schemas"]["NodePreviewPresentation"][];
             /** Wire Bundles */
             wire_bundles?: components["schemas"]["WireBundlePresentation"][];
             /** Wires */
@@ -803,6 +805,19 @@ export interface components {
             run_id: string;
             /** Sequence */
             sequence: number;
+        };
+        /**
+         * NodePreviewPresentation
+         * @description Canvas visibility for an inspect node's presentation-only value preview.
+         */
+        NodePreviewPresentation: {
+            /** Node Id */
+            node_id: string;
+            /**
+             * Visible
+             * @default true
+             */
+            visible: boolean;
         };
         /**
          * NodeRunResult

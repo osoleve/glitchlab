@@ -824,13 +824,25 @@ class GraphEngine:
             return {"items": items}
         if kind == "collect":
             values = list(inputs["item"])
-            if config.get("flatten"):
+            # Preserve the execution contract of saved spike-era graphs while the
+            # catalog routes all new flattening through the explicit node below.
+            if config.get("flatten") is True:
                 values = list(
                     itertools.chain.from_iterable(
-                        value if isinstance(value, list) else [value] for value in values
+                        value if isinstance(value, list) else [value]
+                        for value in values
                     )
                 )
             return {"items": values}
+        if kind == "flatten":
+            return {
+                "items": list(
+                    itertools.chain.from_iterable(
+                        value if isinstance(value, list) else [value]
+                        for value in inputs["items"]
+                    )
+                )
+            }
         if kind == "cartesian":
             return {
                 "items": [
@@ -932,6 +944,11 @@ class GraphEngine:
             return {"file": self._write_value(inputs["value"], config)}
         if kind == "preview":
             return {"value": inputs["value"]}
+        if kind == "compare_preview":
+            values = list(inputs["series"])
+            if len(values) < 2:
+                raise ValueError("Compare Preview requires at least two inputs.")
+            return {"values": values}
         raise ValueError(f"No executor is registered for node kind {kind!r}.")
 
     async def run(

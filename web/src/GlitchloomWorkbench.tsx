@@ -55,7 +55,7 @@ import {
 import { isGraphConnectionValid } from "./connectionValidation";
 import { frameAggregate } from "./frameActivity";
 import { collapseFrameEdges } from "./frameEdges";
-import { hydrateGraph, serializeGraph } from "./graph";
+import { assertWirePresentationPreserved, hydrateGraph, serializeGraph } from "./graph";
 import { tidyGraphLayout } from "./graphLayout";
 import {
   downstreamClosure,
@@ -972,90 +972,127 @@ export function GlitchloomWorkbench() {
     setContextMenu(undefined);
   };
 
-  const tidyNodes = (nodeIds?: string[]) => {
+  const tidyNodes = async (nodeIds?: string[]) => {
     const included = nodeIds ? new Set(nodeIds) : undefined;
-    const targets = included
-      ? nodes.filter((node) => included.has(node.id))
-      : nodes.filter((node) => !node.parentId);
-    if (targets.length < 2) {
-      setContextMenu(undefined);
-      return;
-    }
-    if (new Set(targets.map((node) => node.parentId ?? "")).size > 1) {
-      setContextMenu(undefined);
-      return;
-    }
-    const layout = tidyGraphLayout(
-      targets.map((node) => ({
-        id: node.id,
-        position: node.position,
-        ...nodeSize(node),
-      })),
-      edges,
-      wireBundles,
-    );
-    const positions = layout.nodePositions;
-    const parentId = targets[0]?.parentId;
-    const parentPosition = parentId
-      ? (frames.find((frame) => frame.id === parentId)?.position ?? { x: 0, y: 0 })
-      : { x: 0, y: 0 };
-    const positionedWireBundles = new Map(
-      [...layout.wireBundleWaypoints].map(([bundleId, waypoints]) => [
-        bundleId,
-        waypoints.map((waypoint) => ({
-          x: waypoint.x + parentPosition.x,
-          y: waypoint.y + parentPosition.y,
-        })),
-      ]),
-    );
-    const changed =
-      targets.some((node) => {
-        const position = positions.get(node.id);
-        return (
-          position !== undefined &&
-          (Math.abs(position.x - node.position.x) > 0.01 ||
-            Math.abs(position.y - node.position.y) > 0.01)
-        );
-      }) ||
-      wireBundles.some((wireBundle) => {
-        const waypoints = positionedWireBundles.get(wireBundle.id);
-        return Boolean(
-          waypoints?.some((waypoint, index) => {
-            const current = wireBundle.waypoints[index];
-            return (
-              !current ||
-              Math.abs(waypoint.x - current.x) > 0.01 ||
-              Math.abs(waypoint.y - current.y) > 0.01
-            );
-          }),
-        );
-      });
-    if (changed) {
-      updateDocument(
-        ({ nodes: current, wireBundles: currentWireBundles }) => ({
-          nodes: current.map((node) => {
-            const position = positions.get(node.id);
-            return position ? { ...node, position } : node;
-          }),
-          wireBundles: currentWireBundles.map((wireBundle) => {
-            const waypoints = positionedWireBundles.get(wireBundle.id);
-            return waypoints ? { ...wireBundle, waypoints } : wireBundle;
-          }),
-        }),
-        false,
-      );
-      if (!included) {
-        window.setTimeout(() => {
-          void fitView({
-            padding: 0.08,
-            minZoom: 0.25,
-            maxZoom: 1,
-            duration: 300,
-          });
-        }, 0);
-      }
-    }
+    const targets = included ? nodes.filter((node) => included.has(node.id)) : nodes;
     setContextMenu(undefined);
+    if (
+      (included && targets.length < 2) ||
+      (!included && targets.length === 0 && frames.length === 0)
+    ) {
+      return;
+    }
+    if (included && new Set(targets.map((node) => node.parentId ?? "")).size > 1) {
+      return;
+    }
+    try {
+      const layout = await tidyGraphLayout(
+        targets.map((node) => ({
+          id: node.id,
+          position: node.position,
+          ...nodeSize(node),
+          ...(!included && node.parentId ? { parentId: node.parentId } : {}),
+        })),
+        edges,
+        wireBundles,
+        included
+          ? []
+          : frames.map((frame) => ({
+              id: frame.id,
+              position: frame.position,
+              width: frame.measured?.width ?? frame.width ?? 420,
+              height: frame.measured?.height ?? frame.height ?? 260,
+              collapsed: frame.data.collapsed,
+            })),
+      );
+      const positions = layout.nodePositions;
+      const parentId = included ? targets[0]?.parentId : undefined;
+      const parentPosition = parentId
+        ? (frames.find((frame) => frame.id === parentId)?.position ?? { x: 0, y: 0 })
+        : { x: 0, y: 0 };
+      const positionedWireBundles = new Map(
+        [...layout.wireBundleWaypoints].map(([bundleId, waypoints]) => [
+          bundleId,
+          waypoints.map((waypoint) => ({
+            x: waypoint.x + parentPosition.x,
+            y: waypoint.y + parentPosition.y,
+          })),
+        ]),
+      );
+      const changed =
+        targets.some((node) => {
+          const position = positions.get(node.id);
+          return (
+            position !== undefined &&
+            (Math.abs(position.x - node.position.x) > 0.01 ||
+              Math.abs(position.y - node.position.y) > 0.01)
+          );
+        }) ||
+        (!included &&
+          frames.some((frame) => {
+            const position = layout.framePositions.get(frame.id);
+            const size = layout.frameSizes.get(frame.id);
+            return Boolean(
+              (position &&
+                (Math.abs(position.x - frame.position.x) > 0.01 ||
+                  Math.abs(position.y - frame.position.y) > 0.01)) ||
+                (size &&
+                  (Math.abs(size.width - (frame.measured?.width ?? frame.width ?? 420)) > 0.01 ||
+                    Math.abs(size.height - (frame.measured?.height ?? frame.height ?? 260)) >
+                      0.01)),
+            );
+          })) ||
+        wireBundles.some((wireBundle) => {
+          const waypoints = positionedWireBundles.get(wireBundle.id);
+          return Boolean(
+            waypoints?.some((waypoint, index) => {
+              const current = wireBundle.waypoints[index];
+              return (
+                !current ||
+                Math.abs(waypoint.x - current.x) > 0.01 ||
+                Math.abs(waypoint.y - current.y) > 0.01
+              );
+            }),
+          );
+        });
+      if (changed) {
+        updateDocument(
+          ({ nodes: current, frames: currentFrames, wireBundles: currentWireBundles }) => ({
+            nodes: current.map((node) => {
+              const position = positions.get(node.id);
+              return position ? { ...node, position } : node;
+            }),
+            frames: currentFrames.map((frame) => {
+              const position = layout.framePositions.get(frame.id);
+              const size = layout.frameSizes.get(frame.id);
+              if (!position && !size) return frame;
+              return {
+                ...frame,
+                ...(position ? { position } : {}),
+                ...(size ? { width: size.width, height: size.height, measured: undefined } : {}),
+              };
+            }),
+            wireBundles: currentWireBundles.map((wireBundle) => {
+              const waypoints = positionedWireBundles.get(wireBundle.id);
+              return waypoints ? { ...wireBundle, waypoints } : wireBundle;
+            }),
+          }),
+          false,
+        );
+        if (!included) {
+          window.setTimeout(() => {
+            void fitView({
+              padding: 0.08,
+              minZoom: 0.25,
+              maxZoom: 1,
+              duration: 300,
+            });
+          }, 0);
+        }
+      }
+    } catch (error) {
+      setGraphNotice(`Layout failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const insertPassthrough = (edgeId: string, flowPosition: { x: number; y: number }) => {
@@ -1337,6 +1374,7 @@ export function GlitchloomWorkbench() {
         activeGraph && !options.createNew
           ? await updateGraph(activeGraph.id, activeGraph.revision, graph)
           : await createGraph({ graph });
+      assertWirePresentationPreserved(graph, saved.graph);
       const nextSnapshot: GraphSnapshot = {
         ...captureSnapshot(),
         graphName: saved.graph.name,
@@ -2074,6 +2112,43 @@ export function GlitchloomWorkbench() {
   const collapsedFrameIds = new Set(
     frames.filter((frame) => frame.data.collapsed).map((frame) => frame.id),
   );
+  const runOutputsByNode = new Map(
+    (run?.nodes ?? []).map((result) => [result.node_id, result.outputs] as const),
+  );
+  for (const [nodeId, outputs] of Object.entries(run?.terminal_outputs ?? {})) {
+    if (!runOutputsByNode.has(nodeId)) runOutputsByNode.set(nodeId, outputs);
+  }
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const canvasPreviewLabels = (node: WorkflowNode): string[] | undefined => {
+    if (node.data.kind === "compare_preview") {
+      const labels = edges
+        .filter(
+          (edge) =>
+            edge.target === node.id &&
+            (edge.targetHandle === "series" || edge.targetHandle === undefined),
+        )
+        .map((edge) => nodeById.get(edge.source)?.data.title)
+        .filter((label): label is string => Boolean(label));
+      return labels.length > 0 ? labels : undefined;
+    }
+    if (node.data.kind !== "preview") return undefined;
+    const sourceEdge = edges.find(
+      (edge) =>
+        edge.target === node.id &&
+        (edge.targetHandle === "value" || edge.targetHandle === undefined),
+    );
+    const source = sourceEdge ? nodeById.get(sourceEdge.source) : undefined;
+    if (source?.data.kind !== "collect") return undefined;
+    const labels = edges
+      .filter(
+        (edge) =>
+          edge.target === source.id &&
+          (edge.targetHandle === "item" || edge.targetHandle === undefined),
+      )
+      .map((edge) => nodeById.get(edge.source)?.data.title)
+      .filter((label): label is string => Boolean(label));
+    return labels.length > 0 ? labels : undefined;
+  };
   const flowNodes: CanvasNode[] = [
     ...frames.map((frame) => {
       const children = nodes.filter((node) => node.parentId === frame.id);
@@ -2107,6 +2182,28 @@ export function GlitchloomWorkbench() {
         onUpdateField: (field: string, value: unknown) => updateNodeField(node.id, field, value),
         onUpdateState: (state: LoomState) => updateLoomState(node.id, state),
         onOpenEditor: () => setOpenLoomNodeId(node.id),
+        ...((node.data.kind === "preview" || node.data.kind === "compare_preview") && {
+          canvasPreviewValue: runOutputsByNode.get(node.id),
+          canvasPreviewLabels: canvasPreviewLabels(node),
+          canvasPreviewStale: Boolean(run?.client?.stale),
+          onToggleCanvasPreview: () =>
+            updateDocument(
+              (document) => ({
+                nodes: document.nodes.map((candidate) =>
+                  candidate.id === node.id
+                    ? {
+                        ...candidate,
+                        data: {
+                          ...candidate.data,
+                          canvasPreviewVisible: candidate.data.canvasPreviewVisible === false,
+                        },
+                      }
+                    : candidate,
+                ),
+              }),
+              false,
+            ),
+        }),
         executionScopeRole:
           executionScope?.mode !== "targets"
             ? undefined

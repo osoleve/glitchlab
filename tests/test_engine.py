@@ -47,6 +47,70 @@ def edge(
     )
 
 
+@pytest.mark.asyncio
+async def test_collect_preserves_groups_and_flatten_is_explicit(tmp_path: Path) -> None:
+    graph = GraphSpec(
+        nodes=[
+            node("left", "list_input", items=["a", "b"]),
+            node("right", "list_input", items=["c", "d"]),
+            node("collect", "collect"),
+            node("flatten", "flatten"),
+        ],
+        edges=[
+            edge("left", "items", "collect", "item"),
+            edge("right", "items", "collect", "item"),
+            edge("collect", "items", "flatten", "items"),
+        ],
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph)
+
+    collect_result = next(result for result in response.nodes if result.node_id == "collect")
+    assert collect_result.outputs["items"] == [["a", "b"], ["c", "d"]]
+    assert response.terminal_outputs["flatten"]["items"] == ["a", "b", "c", "d"]
+
+
+@pytest.mark.asyncio
+async def test_saved_collect_flatten_config_remains_backward_compatible(tmp_path: Path) -> None:
+    graph = GraphSpec(
+        nodes=[
+            node("left", "list_input", items=["a", "b"]),
+            node("right", "list_input", items=["c"]),
+            node("collect", "collect", flatten=True),
+        ],
+        edges=[
+            edge("left", "items", "collect", "item"),
+            edge("right", "items", "collect", "item"),
+        ],
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph)
+
+    assert response.terminal_outputs["collect"]["items"] == ["a", "b", "c"]
+
+
+@pytest.mark.asyncio
+async def test_compare_preview_preserves_each_input_sequence(tmp_path: Path) -> None:
+    graph = GraphSpec(
+        nodes=[
+            node("left", "list_input", items=["old one", "old two"]),
+            node("right", "list_input", items=["new one"]),
+            node("compare", "compare_preview"),
+        ],
+        edges=[
+            edge("left", "items", "compare", "series"),
+            edge("right", "items", "compare", "series"),
+        ],
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph)
+
+    assert response.terminal_outputs["compare"]["values"] == [
+        ["old one", "old two"],
+        ["new one"],
+    ]
+
+
 def branching_graph() -> GraphSpec:
     return GraphSpec(
         name="partial branch",

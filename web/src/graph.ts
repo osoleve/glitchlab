@@ -48,7 +48,36 @@ export function serializePresentation(
       collapsed: bundle.collapsed,
       ...(bundle.label ? { label: bundle.label } : {}),
     })),
+    node_previews: nodes
+      .filter(
+        (node) =>
+          (node.data.kind === "preview" || node.data.kind === "compare_preview") &&
+          node.data.canvasPreviewVisible === false,
+      )
+      .map((node) => ({ node_id: node.id, visible: false })),
   };
+}
+
+export function assertWirePresentationPreserved(requested: GraphSpec, saved: GraphSpec): void {
+  const requestedPresentation = requested.presentation;
+  if (
+    !requestedPresentation ||
+    (requestedPresentation.wires.length === 0 && requestedPresentation.wire_bundles.length === 0)
+  ) {
+    return;
+  }
+
+  const savedPresentation = saved.presentation;
+  const wiresMatch =
+    JSON.stringify(savedPresentation?.wires ?? []) === JSON.stringify(requestedPresentation.wires);
+  const bundlesMatch =
+    JSON.stringify(savedPresentation?.wire_bundles ?? []) ===
+    JSON.stringify(requestedPresentation.wire_bundles);
+  if (!wiresMatch || !bundlesMatch) {
+    throw new Error(
+      "The server did not preserve wire colors and cable ties. Keep this tab open, restart the server, then save again.",
+    );
+  }
 }
 
 export function serializeGraph(
@@ -107,6 +136,9 @@ export function hydrateGraph(
     definitions.set(definition.kind, definition);
   }
   const presentation = graph.presentation;
+  const previewVisibility = new Map(
+    (presentation?.node_previews ?? []).map((item) => [item.node_id, item.visible]),
+  );
   const frames: WorkflowFrame[] = (presentation?.frames ?? []).map((frame) => ({
     id: frame.id,
     type: "workflowFrame",
@@ -150,6 +182,9 @@ export function hydrateGraph(
         controlPorts,
         ...(node.state ? { state: node.state } : {}),
         runStatus: "idle",
+        ...((node.kind === "preview" || node.kind === "compare_preview") && {
+          canvasPreviewVisible: previewVisibility.get(node.id) ?? true,
+        }),
       },
     };
   });

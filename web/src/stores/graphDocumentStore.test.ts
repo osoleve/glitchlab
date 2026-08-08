@@ -252,6 +252,47 @@ describe("graph document store", () => {
     expect(state.isDirty).toBe(true);
   });
 
+  it("duplicates incoming wires while leaving outgoing wires attached only to the source", () => {
+    useGraphDocumentStore.setState({
+      nodes: [node("source"), { ...node("selected"), selected: true }, node("downstream")],
+      edges: [
+        { id: "incoming", source: "source", target: "selected" },
+        { id: "outgoing", source: "selected", target: "downstream" },
+      ],
+      wires: [{ edgeId: "incoming", color: "rose" }],
+      wireBundles: [
+        {
+          id: "bundle-a",
+          edgeIds: ["incoming", "outgoing"],
+          waypoints: [
+            { x: 100, y: 100 },
+            { x: 200, y: 100 },
+          ],
+          collapsed: false,
+        },
+      ],
+    });
+
+    const duplicatedIds = useGraphDocumentStore
+      .getState()
+      .duplicateNodes(undefined, () => "copy-value");
+
+    const state = useGraphDocumentStore.getState();
+    expect(duplicatedIds).toEqual(["test-copy-v"]);
+    expect(state.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "copy-value",
+          source: "source",
+          target: "test-copy-v",
+        }),
+      ]),
+    );
+    expect(state.edges.filter((edge) => edge.target === "downstream")).toHaveLength(1);
+    expect(state.wires).toContainEqual({ edgeId: "copy-value", color: "rose" });
+    expect(state.wireBundles[0]?.edgeIds).toEqual(["incoming", "outgoing", "copy-value"]);
+  });
+
   it("creates and moves wire bundles without invalidating completed runs", () => {
     useGraphDocumentStore.setState({
       edges: [

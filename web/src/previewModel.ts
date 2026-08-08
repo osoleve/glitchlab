@@ -25,6 +25,7 @@ export type PreviewModel =
   | {
       kind: "completion";
       entries: CompletionEntry[];
+      entryGroups?: number[];
       raw: string;
       readableText: string;
       shapeLabel: string;
@@ -32,6 +33,7 @@ export type PreviewModel =
   | {
       kind: "text";
       entries: TextEntry[];
+      entryGroups?: number[];
       raw: string;
       readableText: string;
       shapeLabel: string;
@@ -42,7 +44,7 @@ export type PreviewModel =
       shapeLabel: string;
     };
 
-const OUTPUT_WRAPPERS = new Set(["value", "result", "items", "text", "output"]);
+const OUTPUT_WRAPPERS = new Set(["value", "values", "result", "items", "text", "output"]);
 
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -149,6 +151,14 @@ function completionEntries(value: unknown): CompletionEntry[] | undefined {
   return groups.flatMap((group) => group ?? []);
 }
 
+function groupedCompletionEntries(value: unknown): CompletionEntry[][] | undefined {
+  const unwrapped = unwrapOutput(value);
+  if (!Array.isArray(unwrapped) || unwrapped.length === 0) return undefined;
+  if (!unwrapped.every((item) => Array.isArray(unwrapOutput(item)))) return undefined;
+  const groups = unwrapped.map((item) => completionEntries(item));
+  return groups.every((group) => group !== undefined) ? (groups as CompletionEntry[][]) : undefined;
+}
+
 function textEntry(value: unknown): TextEntry | undefined {
   if (typeof value === "string") return { text: value };
   if (!isRecord(value)) return undefined;
@@ -176,6 +186,14 @@ function textEntries(value: unknown): TextEntry[] | undefined {
   return entries.every((entry) => entry !== undefined) ? (entries as TextEntry[]) : undefined;
 }
 
+function groupedTextEntries(value: unknown): TextEntry[][] | undefined {
+  const unwrapped = unwrapOutput(value);
+  if (!Array.isArray(unwrapped) || unwrapped.length === 0) return undefined;
+  if (!unwrapped.every((item) => Array.isArray(unwrapOutput(item)))) return undefined;
+  const groups = unwrapped.map((item) => textEntries(item));
+  return groups.every((group) => group !== undefined) ? (groups as TextEntry[][]) : undefined;
+}
+
 export function jsonText(value: unknown): string {
   const serialized = JSON.stringify(value, null, 2);
   return serialized === undefined ? String(value) : serialized;
@@ -183,6 +201,18 @@ export function jsonText(value: unknown): string {
 
 export function normalizePreviewValue(value: unknown): PreviewModel {
   const raw = jsonText(value);
+  const completionGroups = groupedCompletionEntries(value);
+  if (completionGroups) {
+    const entries = completionGroups.flat();
+    return {
+      kind: "completion",
+      entries,
+      entryGroups: completionGroups.map((group) => group.length),
+      raw,
+      readableText: entries.map((entry) => entry.text).join("\n\n"),
+      shapeLabel: `${completionGroups.length} groups · ${entries.length} completions`,
+    };
+  }
   const completions = completionEntries(value);
   if (completions) {
     return {
@@ -194,6 +224,18 @@ export function normalizePreviewValue(value: unknown): PreviewModel {
     };
   }
 
+  const textGroups = groupedTextEntries(value);
+  if (textGroups) {
+    const entries = textGroups.flat();
+    return {
+      kind: "text",
+      entries,
+      entryGroups: textGroups.map((group) => group.length),
+      raw,
+      readableText: entries.map((entry) => entry.text).join("\n\n"),
+      shapeLabel: `${textGroups.length} groups · ${entries.length} text items`,
+    };
+  }
   const texts = textEntries(value);
   if (texts) {
     return {

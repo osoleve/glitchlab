@@ -321,6 +321,27 @@ test("modifier selection groups two nodes into a collapsible frame", async ({ pa
   await expect(endpoint).toBeVisible();
   await expect(model).toBeVisible();
 
+  await page.locator(".react-flow__pane").click({
+    button: "right",
+    position: { x: 400, y: 20 },
+  });
+  await page.getByRole("menuitem", { name: "Tidy graph" }).click();
+  await expect
+    .poll(async () => {
+      const frameBox = await frame.boundingBox();
+      const endpointBox = await endpoint.boundingBox();
+      const modelBox = await model.boundingBox();
+      const loomBox = await page.locator('.react-flow__node[data-id="loom"]').boundingBox();
+      if (!frameBox || !endpointBox || !modelBox || !loomBox) return false;
+      const contains = (box: typeof endpointBox) =>
+        box.x >= frameBox.x &&
+        box.y >= frameBox.y + 32 &&
+        box.x + box.width <= frameBox.x + frameBox.width &&
+        box.y + box.height <= frameBox.y + frameBox.height;
+      return contains(endpointBox) && contains(modelBox) && frameBox.x + frameBox.width < loomBox.x;
+    })
+    .toBe(true);
+
   await frame.getByRole("button", { name: "Collapse frame" }).click();
   await expect(frame.getByRole("button", { name: "Expand frame" })).toBeVisible();
   await expect(endpoint).toBeHidden();
@@ -579,6 +600,55 @@ test("modifier-selected wires can be bundled, moved, recolored, and unbundled", 
   expect(errors).toEqual([]);
 });
 
+test("tidy graph keeps a mixed-source fan-in cable tie inside its target frame", async ({
+  page,
+}) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  const model = page.locator('.react-flow__node[data-id="model"]');
+  const loom = page.locator('.react-flow__node[data-id="loom"]');
+  await model.locator("header").click();
+  await page.keyboard.down("Control");
+  await loom.locator("header").click();
+  await page.keyboard.up("Control");
+  await model.locator("header").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Group in collapsible frame" }).click();
+
+  await clickWireAt(page, "endpoint-loom", 0.34);
+  await clickWireAt(page, "model-loom", 0.34, true);
+  await expect(page.getByText("2 wires", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Bundle" }).press("Enter");
+
+  const frame = page.locator('.react-flow__node[data-id^="frame-"]');
+  const trunk = page.locator('path[class*="bundleTrunkHitArea"]').last();
+  await expect(trunk).toBeVisible();
+  await page.locator(".react-flow__pane").click({
+    button: "right",
+    position: { x: 400, y: 20 },
+  });
+  await page.getByRole("menuitem", { name: "Tidy graph" }).click();
+
+  await expect
+    .poll(async () => {
+      const frameBox = await frame.boundingBox();
+      const trunkBox = await trunk.boundingBox();
+      if (!frameBox || !trunkBox) return false;
+      const center = {
+        x: trunkBox.x + trunkBox.width / 2,
+        y: trunkBox.y + trunkBox.height / 2,
+      };
+      return (
+        center.x >= frameBox.x &&
+        center.y >= frameBox.y &&
+        center.x <= frameBox.x + frameBox.width &&
+        center.y <= frameBox.y + frameBox.height
+      );
+    })
+    .toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test("document edits undo and redo through shortcuts and toolbar controls", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.goto("/");
@@ -628,13 +698,18 @@ test("a successful run selects and renders deterministic output", async ({ page 
 
   await page.getByRole("button", { name: "Run graph" }).click();
 
-  await expect(page.getByText("stubbed completion", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 completion", { exact: true })).toBeVisible();
+  const previewNode = page.locator('.react-flow__node[data-id="preview"]');
+  await expect(previewNode.getByText("stubbed completion", { exact: true })).toBeVisible();
+  await expect(previewNode.getByText("1 completion", { exact: true })).toBeVisible();
   await expect(page.getByText("Full graph run")).toBeVisible();
   await expect(page.getByText(/4 nodes · completed/)).toBeVisible();
   await expect(page.locator('.react-flow__node[data-id="preview"] article')).toHaveClass(
     /status-completed/,
   );
+  await previewNode.getByRole("button", { name: "Hide value on canvas" }).click();
+  await expect(previewNode.getByText("stubbed completion", { exact: true })).toHaveCount(0);
+  await previewNode.getByRole("button", { name: "Show value on canvas" }).click();
+  await expect(previewNode.getByText("stubbed completion", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -808,7 +883,7 @@ test("a poisoned preview output degrades inline while the canvas stays live", as
 
   await page.getByRole("button", { name: "Run graph" }).click();
 
-  await expect(page.getByRole("alert")).toContainText("Output could not be rendered");
+  await expect(page.getByRole("alert").last()).toContainText("Output could not be rendered");
   await expect(page.locator(".react-flow__node")).toHaveCount(4);
   await expect(page.getByRole("button", { name: "Run graph" })).toBeVisible();
   expect(errors.filter((message) => !message.includes("Synthetic preview render failure"))).toEqual(

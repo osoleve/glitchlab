@@ -92,9 +92,7 @@
     {
       "id": "collect",
       "kind": "collect",
-      "config": {
-        "flatten": false
-      },
+      "config": {},
       "position": {
         "x": 720,
         "y": 110

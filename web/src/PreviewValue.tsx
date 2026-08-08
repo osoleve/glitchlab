@@ -134,6 +134,22 @@ export function PreviewValue({ value, itemLabels }: { value: unknown; itemLabels
   const readableText = model.kind === "structured" ? undefined : model.readableText;
   const itemCount = model.kind === "structured" ? undefined : model.entries.length;
   const labels = itemLabels && itemLabels.length === itemCount ? itemLabels : undefined;
+  const groupLabels =
+    model.kind !== "structured" &&
+    model.entryGroups &&
+    itemLabels?.length === model.entryGroups.length
+      ? itemLabels
+      : undefined;
+  const entryGroups = model.kind === "structured" ? undefined : model.entryGroups;
+
+  const groupedIndexes = (sizes: number[]) => {
+    let offset = 0;
+    return sizes.map((size) => {
+      const indexes = Array.from({ length: size }, (_value, index) => offset + index);
+      offset += size;
+      return indexes;
+    });
+  };
 
   const copy = (kind: "text" | "json", content: string) => {
     void navigator.clipboard.writeText(content);
@@ -176,28 +192,56 @@ export function PreviewValue({ value, itemLabels }: { value: unknown; itemLabels
 
       {completions && (
         <div className={cx(styles, "completion-list")}>
-          {completions.map((entry, index) => (
-            <CompletionCard
-              entry={entry}
-              index={index}
-              total={completions.length}
-              label={labels?.[index]}
-              key={`${entry.model ?? "completion"}-${index}`}
-            />
-          ))}
+          {entryGroups
+            ? groupedIndexes(entryGroups).map((indexes, groupIndex) => (
+                <section className={cx(styles, "preview-group")} key={`group-${groupIndex}`}>
+                  <header>{groupLabels?.[groupIndex] ?? `Group ${groupIndex + 1}`}</header>
+                  {indexes.map((index) => (
+                    <CompletionCard
+                      entry={completions[index]}
+                      index={index}
+                      total={completions.length}
+                      key={`${completions[index].model ?? "completion"}-${index}`}
+                    />
+                  ))}
+                </section>
+              ))
+            : completions.map((entry, index) => (
+                <CompletionCard
+                  entry={entry}
+                  index={index}
+                  total={completions.length}
+                  label={labels?.[index]}
+                  key={`${entry.model ?? "completion"}-${index}`}
+                />
+              ))}
         </div>
       )}
       {texts && (
         <div className={cx(styles, "text-preview-list")}>
-          {texts.map((entry, index) => (
-            <TextCard
-              entry={entry}
-              index={index}
-              total={texts.length}
-              label={labels?.[index]}
-              key={`${entry.label ?? "text"}-${index}`}
-            />
-          ))}
+          {entryGroups
+            ? groupedIndexes(entryGroups).map((indexes, groupIndex) => (
+                <section className={cx(styles, "preview-group")} key={`group-${groupIndex}`}>
+                  <header>{groupLabels?.[groupIndex] ?? `Group ${groupIndex + 1}`}</header>
+                  {indexes.map((index) => (
+                    <TextCard
+                      entry={texts[index]}
+                      index={index}
+                      total={texts.length}
+                      key={`${texts[index].label ?? "text"}-${index}`}
+                    />
+                  ))}
+                </section>
+              ))
+            : texts.map((entry, index) => (
+                <TextCard
+                  entry={entry}
+                  index={index}
+                  total={texts.length}
+                  label={labels?.[index]}
+                  key={`${entry.label ?? "text"}-${index}`}
+                />
+              ))}
         </div>
       )}
       {!completions && !texts && <pre className={cx(styles, "json-preview")}>{model.raw}</pre>}

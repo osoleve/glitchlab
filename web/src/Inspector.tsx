@@ -1,5 +1,6 @@
 import { ChevronRight, Gauge, GitBranch, PanelRightClose, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ComparePreviewValue } from "./ComparePreviewValue";
 import { ErrorBoundary, PreviewErrorFallback } from "./ErrorBoundary";
 import styles from "./Inspector.module.css";
 import { moduleClassNames as cx } from "./moduleClassNames";
@@ -99,10 +100,12 @@ function ResultView({
   result,
   terminal,
   itemLabels,
+  kind,
 }: {
   result?: NodeRunResult;
   terminal?: Record<string, unknown>;
   itemLabels?: string[];
+  kind?: string;
 }) {
   const value = result?.outputs ?? terminal;
   if (!value) {
@@ -116,7 +119,11 @@ function ResultView({
         </div>
       )}
       <ErrorBoundary fallback={(error) => <PreviewErrorFallback error={error} />}>
-        <PreviewValue value={value} itemLabels={itemLabels} />
+        {kind === "compare_preview" ? (
+          <ComparePreviewValue value={value} labels={itemLabels} />
+        ) : (
+          <PreviewValue value={value} itemLabels={itemLabels} />
+        )}
       </ErrorBoundary>
     </div>
   );
@@ -129,6 +136,17 @@ function collectionSourceLabels(
 ): string[] | undefined {
   if (!selectedNode) return undefined;
   const byId = new Map(nodes.map((node) => [node.id, node]));
+  if (selectedNode.data.kind === "compare_preview") {
+    const labels = edges
+      .filter(
+        (edge) =>
+          edge.target === selectedNode.id &&
+          (edge.targetHandle === "series" || edge.targetHandle === undefined),
+      )
+      .map((edge) => byId.get(edge.source)?.data.title)
+      .filter((label): label is string => Boolean(label));
+    return labels.length > 0 ? labels : undefined;
+  }
   let collectionNode = selectedNode.data.kind === "collect" ? selectedNode : undefined;
 
   if (selectedNode.data.kind === "preview") {
@@ -418,6 +436,7 @@ export function Inspector({
                 result={selectedResult}
                 terminal={selectedTerminal}
                 itemLabels={itemLabels}
+                kind={selectedNode.data.kind}
               />
             </section>
           )}

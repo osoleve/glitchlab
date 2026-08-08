@@ -31,11 +31,16 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   controlPorts: Record<string, ControlPortMode>;
   state?: LoomState;
   runStatus: NodeRunStatus;
+  canvasPreviewVisible?: boolean;
+  canvasPreviewValue?: unknown;
+  canvasPreviewLabels?: string[];
+  canvasPreviewStale?: boolean;
   executionScopeRole?: "target" | "required" | "unrelated";
   wireHover?: { direction: "input" | "output"; portName: string };
   onUpdateField?: (field: string, value: unknown) => void;
   onUpdateState?: (state: LoomState) => void;
   onOpenEditor?: () => void;
+  onToggleCanvasPreview?: () => void;
 }
 
 export type WorkflowNode = Node<WorkflowNodeData, "workflowNode">;
@@ -111,6 +116,7 @@ export interface GraphPresentation {
     collapsed: boolean;
     label?: string | null;
   }>;
+  node_previews: Array<{ node_id: string; visible: boolean }>;
 }
 
 export type NodeRunResult = Omit<ApiSchemas["NodeRunResult"], "outputs"> & {

@@ -676,15 +676,32 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
           },
         };
       });
+      const edgeReplacements = new Map<string, string>();
       const copiedEdges = state.edges
-        .filter((edge) => sourceIds.has(edge.source) && sourceIds.has(edge.target))
-        .map((edge) => ({
-          ...edge,
-          id: createId(),
-          source: replacements.get(edge.source)!,
-          target: replacements.get(edge.target)!,
-          selected: false,
-        }));
+        .filter((edge) => sourceIds.has(edge.target))
+        .map((edge) => {
+          const id = createId();
+          edgeReplacements.set(edge.id, id);
+          return {
+            ...edge,
+            id,
+            source: replacements.get(edge.source) ?? edge.source,
+            target: replacements.get(edge.target)!,
+            selected: false,
+          };
+        });
+      const copiedWires = state.wires.flatMap((wire) => {
+        const edgeId = edgeReplacements.get(wire.edgeId);
+        return edgeId ? [{ ...wire, edgeId }] : [];
+      });
+      const copiedBundleEdges = new Map<string, string[]>();
+      for (const bundle of state.wireBundles) {
+        const edgeIds = bundle.edgeIds.flatMap((edgeId) => {
+          const replacement = edgeReplacements.get(edgeId);
+          return replacement ? [replacement] : [];
+        });
+        if (edgeIds.length > 0) copiedBundleEdges.set(bundle.id, edgeIds);
+      }
 
       return {
         nodes: [
@@ -696,6 +713,11 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
           ...copies,
         ],
         edges: [...state.edges.map((edge) => ({ ...edge, selected: false })), ...copiedEdges],
+        wires: [...state.wires, ...copiedWires],
+        wireBundles: state.wireBundles.map((bundle) => ({
+          ...bundle,
+          edgeIds: [...bundle.edgeIds, ...(copiedBundleEdges.get(bundle.id) ?? [])],
+        })),
         selectionKind: "node",
         selectedId: duplicatedIds[0],
         isDirty: true,

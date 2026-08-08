@@ -1,7 +1,7 @@
 import { Position } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 import type { WireBundle } from "./types";
-import { bundledWireGeometry, wireBundleForSelection } from "./wireGeometry";
+import { bundledWireGeometry, wireBundleForSelection, wireBundleOrder } from "./wireGeometry";
 
 const bundle: WireBundle = {
   id: "bundle-a",
@@ -42,5 +42,15 @@ describe("wire bundle geometry", () => {
     expect(wireBundleForSelection([bundle], ["a", "c"])?.id).toBe("bundle-a");
     expect(wireBundleForSelection([bundle], ["a", "missing"])).toBeUndefined();
     expect(wireBundleForSelection([bundle], ["a"])).toBeUndefined();
+  });
+
+  it("orders bundle lanes by their input-side targets", () => {
+    expect(
+      wireBundleOrder(bundle, [
+        { edgeId: "a", source: { x: 0, y: 0 }, target: { x: 320, y: 120 } },
+        { edgeId: "b", source: { x: 0, y: 200 }, target: { x: 320, y: 80 } },
+        { edgeId: "c", source: { x: 0, y: 100 }, target: { x: 320, y: 40 } },
+      ]),
+    ).toEqual(["c", "b", "a"]);
   });
 });

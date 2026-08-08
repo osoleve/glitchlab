@@ -195,6 +195,13 @@ class WireBundlePresentation(BaseModel):
     label: str | None = None
 
 
+class NodePreviewPresentation(BaseModel):
+    """Canvas visibility for an inspect node's presentation-only value preview."""
+
+    node_id: str
+    visible: bool = True
+
+
 class GraphPresentation(BaseModel):
     """Visual graph preferences that do not change execution semantics."""
 
@@ -202,6 +209,7 @@ class GraphPresentation(BaseModel):
     frames: list[FramePresentation] = Field(default_factory=list)
     wires: list[WirePresentation] = Field(default_factory=list)
     wire_bundles: list[WireBundlePresentation] = Field(default_factory=list)
+    node_previews: list[NodePreviewPresentation] = Field(default_factory=list)
 
 
 class LoomRunReference(BaseModel):
@@ -396,6 +404,23 @@ class GraphSpec(BaseModel):
                     f"Edge {reused!r} cannot belong to more than one wire bundle."
                 )
             bundled_edge_ids.update(unique_edge_ids)
+
+        preview_node_ids: set[str] = set()
+        node_kinds = {node.id: node.kind for node in self.nodes}
+        for node_preview in self.presentation.node_previews:
+            if node_preview.node_id in preview_node_ids:
+                raise ValueError(
+                    f"Node preview IDs must be unique; duplicate {node_preview.node_id!r}."
+                )
+            preview_node_ids.add(node_preview.node_id)
+            if node_preview.node_id not in semantic_node_ids:
+                raise ValueError(
+                    f"Node preview references unknown node {node_preview.node_id!r}."
+                )
+            if node_kinds[node_preview.node_id] not in {"preview", "compare_preview"}:
+                raise ValueError(
+                    f"Node preview {node_preview.node_id!r} must reference an inspect node."
+                )
         return self
 
 

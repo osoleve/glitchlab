@@ -36,13 +36,7 @@ export function wireBundleOrder(bundle: WireBundle, endpoints: readonly WireEndp
     const rightSource = projection(right.source);
     const leftTarget = projection(left.target);
     const rightTarget = projection(right.target);
-    const combined = leftSource + leftTarget - rightSource - rightTarget;
-    return (
-      combined ||
-      leftSource - rightSource ||
-      leftTarget - rightTarget ||
-      leftId.localeCompare(rightId)
-    );
+    return leftTarget - rightTarget || leftSource - rightSource || leftId.localeCompare(rightId);
   });
 }
 

@@ -396,6 +396,7 @@ def test_graph_presentation_defaults_and_round_trips() -> None:
         "frames": [],
         "wires": [],
         "wire_bundles": [],
+        "node_previews": [],
     }
 
     graph = GraphSpec.model_validate(
@@ -576,4 +577,22 @@ def test_graph_presentation_round_trips_and_validates_wires_and_bundles() -> Non
 
     dumped["presentation"]["wire_bundles"][0]["edge_ids"] = ["edge-a", "missing"]
     with pytest.raises(ValidationError, match="references unknown edge"):
+        GraphSpec.model_validate(dumped)
+
+
+def test_graph_presentation_validates_preview_visibility() -> None:
+    graph = GraphSpec.model_validate(
+        {
+            "nodes": [{"id": "preview", "kind": "preview"}],
+            "edges": [],
+            "presentation": {
+                "node_previews": [{"node_id": "preview", "visible": False}]
+            },
+        }
+    )
+    assert graph.presentation.node_previews[0].visible is False
+
+    dumped = graph.model_dump(mode="json")
+    dumped["presentation"]["node_previews"][0]["node_id"] = "missing"
+    with pytest.raises(ValidationError, match="references unknown node"):
         GraphSpec.model_validate(dumped)
