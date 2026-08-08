@@ -60,7 +60,7 @@ async function successfulRunResponse(route: Route, delayMs = 0, poisonPreview = 
     },
     parameters: { seed: 151 },
   };
-  const previewOutput = poisonPreview ? { __glitchloomPoison: true } : { value: [completion] };
+  const previewOutput = poisonPreview ? { __glitchlabPoison: true } : { value: [completion] };
   const nodes = request.graph.nodes.map((node) => ({
     node_id: node.id,
     kind: node.kind,
@@ -659,7 +659,7 @@ test("document edits undo and redo through shortcuts and toolbar controls", asyn
   await expect(redo).toBeDisabled();
 
   await page.locator('.react-flow__node[data-id="model"] header').click();
-  const modelId = page.getByLabel("Model Id for Vintage Talkie");
+  const modelId = page.getByLabel("Model Id for Local model");
   const originalModelId = await modelId.inputValue();
   await modelId.fill("undo-redo-model");
   await page.getByRole("button", { name: "Close inspector" }).click();
@@ -668,25 +668,25 @@ test("document edits undo and redo through shortcuts and toolbar controls", asyn
   await page.keyboard.press("Control+z");
   await expect(redo).toBeEnabled();
   await page.locator('.react-flow__node[data-id="model"] header').click();
-  await expect(page.getByLabel("Model Id for Vintage Talkie")).toHaveValue(originalModelId);
+  await expect(page.getByLabel("Model Id for Local model")).toHaveValue(originalModelId);
   await page.getByRole("button", { name: "Close inspector" }).click();
 
   await redo.click();
   await page.locator('.react-flow__node[data-id="model"] header').click();
-  await expect(page.getByLabel("Model Id for Vintage Talkie")).toHaveValue("undo-redo-model");
+  await expect(page.getByLabel("Model Id for Local model")).toHaveValue("undo-redo-model");
   await page.getByRole("button", { name: "Close inspector" }).click();
 
   await undo.click();
   await page.keyboard.press("Control+Shift+z");
   await page.locator('.react-flow__node[data-id="model"] header').click();
-  await expect(page.getByLabel("Model Id for Vintage Talkie")).toHaveValue("undo-redo-model");
+  await expect(page.getByLabel("Model Id for Local model")).toHaveValue("undo-redo-model");
   await page.getByRole("button", { name: "Close inspector" }).click();
 
   await page.getByRole("button", { name: "Reset to starter graph" }).click();
   await page.getByRole("button", { name: "Reset graph" }).click();
   await undo.click();
   await page.locator('.react-flow__node[data-id="model"] header').click();
-  await expect(page.getByLabel("Model Id for Vintage Talkie")).toHaveValue("undo-redo-model");
+  await expect(page.getByLabel("Model Id for Local model")).toHaveValue("undo-redo-model");
   expect(errors).toEqual([]);
 });
 
@@ -874,7 +874,7 @@ test("a poisoned preview output degrades inline while the canvas stays live", as
       ...args: Parameters<typeof JSON.stringify>
     ) => {
       const [value] = args;
-      if (value && typeof value === "object" && "__glitchloomPoison" in value) {
+      if (value && typeof value === "object" && "__glitchlabPoison" in value) {
         throw new Error("Synthetic preview render failure");
       }
       return originalStringify(...args);
@@ -907,7 +907,7 @@ test("an edit during a delayed run marks the returned result stale", async ({ pa
   await page.locator('.react-flow__node[data-id="model"] header').click();
   await page.getByRole("button", { name: "Run graph" }).click();
   await expect(page.getByText("Preparing next node")).toBeVisible();
-  await page.getByLabel("Model Id for Vintage Talkie").evaluate((element) => {
+  await page.getByLabel("Model Id for Local model").evaluate((element) => {
     const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     valueSetter?.call(element, "Changed while running");
     element.dispatchEvent(new Event("input", { bubbles: true }));

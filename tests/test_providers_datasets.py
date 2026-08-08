@@ -10,10 +10,10 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from glitchloom.catalog import definitions_by_kind
-from glitchloom.engine import GraphEngine
-from glitchloom.huggingface_adapter import _resolve_hub_revision, load_huggingface_dataset
-from glitchloom.models import GraphEdge, GraphNode, GraphSpec
+from glitchlab.catalog import definitions_by_kind
+from glitchlab.engine import GraphEngine
+from glitchlab.huggingface_adapter import _resolve_hub_revision, load_huggingface_dataset
+from glitchlab.models import GraphEdge, GraphNode, GraphSpec
 
 
 def node(node_id: str, kind: str, **config: object) -> GraphNode:
@@ -39,8 +39,8 @@ def openrouter_graph(*, cache_mode: str = "use") -> GraphSpec:
                 "endpoint",
                 "openrouter_endpoint",
                 api_key_env="TEST_OPENROUTER_KEY",
-                site_url="https://glitchloom.test",
-                app_name="Glitchloom tests",
+                site_url="https://glitchlab.test",
+                app_name="Glitchlab tests",
                 timeout_seconds=7,
             ),
             node("model", "model", model_id="owner/runtime-model"),
@@ -81,8 +81,8 @@ async def test_openrouter_endpoint_uses_raw_completions_and_env_secret(
         assert body["model"] == "owner/runtime-model"
         assert body["top_k"] == 17
         assert request.headers["Authorization"] == f"Bearer {os.getenv('TEST_OPENROUTER_KEY')}"
-        assert request.headers["HTTP-Referer"] == "https://glitchloom.test"
-        assert request.headers["X-OpenRouter-Title"] == "Glitchloom tests"
+        assert request.headers["HTTP-Referer"] == "https://glitchlab.test"
+        assert request.headers["X-OpenRouter-Title"] == "Glitchlab tests"
         return httpx.Response(
             200,
             json={
@@ -111,7 +111,7 @@ async def test_openrouter_endpoint_uses_raw_completions_and_env_secret(
     persisted = json.dumps(first.model_dump(mode="json"))
     persisted += "".join(
         path.read_text(encoding="utf-8")
-        for path in (tmp_path / ".glitchloom" / "cache").rglob("*.json")
+        for path in (tmp_path / ".glitchlab" / "cache").rglob("*.json")
     )
     assert "first-secret-key" not in persisted
     assert "rotated-secret-key" not in persisted
@@ -155,7 +155,7 @@ def test_huggingface_revision_resolver_uses_official_hub_api(
             return SimpleNamespace(sha="resolved-commit-sha")
 
     monkeypatch.setattr(
-        "glitchloom.huggingface_adapter.importlib.import_module",
+        "glitchlab.huggingface_adapter.importlib.import_module",
         lambda name: SimpleNamespace(HfApi=FakeHfApi) if name == "huggingface_hub" else None,
     )
 
@@ -246,11 +246,11 @@ def test_huggingface_dataset_records_exact_bounded_source_and_hides_token(
 
     runtime = SimpleNamespace(__version__="4.8.5", load_dataset=load_dataset)
     monkeypatch.setattr(
-        "glitchloom.huggingface_adapter._require_datasets_runtime",
+        "glitchlab.huggingface_adapter._require_datasets_runtime",
         lambda: runtime,
     )
     monkeypatch.setattr(
-        "glitchloom.huggingface_adapter._resolve_hub_revision",
+        "glitchlab.huggingface_adapter._resolve_hub_revision",
         lambda dataset_id, requested_revision, *, token: (
             captured.update(
                 resolved_dataset_id=dataset_id,
@@ -360,7 +360,7 @@ async def test_huggingface_dataset_graph_exposes_result_and_rows(
         "row_count": 1,
     }
     monkeypatch.setattr(
-        "glitchloom.engine.load_huggingface_dataset",
+        "glitchlab.engine.load_huggingface_dataset",
         lambda _config: result,
     )
     graph = GraphSpec(

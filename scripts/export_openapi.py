@@ -1,4 +1,4 @@
-"""Export Glitchloom's FastAPI schema as a deterministic frontend artifact."""
+"""Export Glitchlab's FastAPI schema as a deterministic frontend artifact."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ DEFAULT_OUTPUT = REPOSITORY_ROOT / "web" / "src" / "generated" / "openapi.json"
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from glitchloom.server import app  # noqa: E402
+from glitchlab.server import app  # noqa: E402
 
 
 def render_openapi() -> str:

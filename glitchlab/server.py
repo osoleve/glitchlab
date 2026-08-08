@@ -1,10 +1,9 @@
-"""FastAPI application for the local Glitchloom runner."""
+"""FastAPI application for the local Glitchlab runner."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-import os
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from pathlib import Path
@@ -18,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .catalog import get_catalog
+from .config import setting
 from .engine import GraphEngine
 from .glitchlings_adapter import discover_glitchlings, plugin_status
 from .graphs import GraphConflictError, GraphStore, GraphTemplateStore
@@ -46,7 +46,7 @@ from .models import (
 )
 from .workflows import WorkflowInUseError, WorkflowStore, workflow_definition
 
-app = FastAPI(title="Glitchloom", version=__version__)
+app = FastAPI(title="Glitchlab", version=__version__)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -436,9 +436,9 @@ def main() -> None:
     """Run the bundled local server."""
 
     uvicorn.run(
-        "glitchloom.server:app",
-        host=os.getenv("GLITCHLOOM_HOST", "127.0.0.1"),
-        port=int(os.getenv("GLITCHLOOM_PORT", "8788")),
+        "glitchlab.server:app",
+        host=setting("HOST", "127.0.0.1"),
+        port=int(setting("PORT", "8788")),
         reload=False,
     )
 

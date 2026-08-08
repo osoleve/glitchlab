@@ -38,7 +38,7 @@
       "config": {
         "api_key_env": "OPENROUTER_API_KEY",
         "site_url": "",
-        "app_name": "Glitchloom",
+        "app_name": "Glitchlab",
         "timeout_seconds": 120
       },
       "position": {

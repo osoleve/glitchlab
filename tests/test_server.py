@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from glitchloom.server import app
+from glitchlab.server import app
 
 
 @pytest.mark.asyncio
@@ -98,7 +98,7 @@ async def test_run_request_envelope_supports_target_scope(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GLITCHLAB_WORKSPACE", str(tmp_path))
     request = {
         "graph": {
             "name": "API partial",
@@ -153,7 +153,7 @@ async def test_graph_documents_roundtrip_revision_guard_and_trash(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GLITCHLAB_WORKSPACE", str(tmp_path))
     graph = {
         "name": "Prompt sketch",
         "nodes": [
@@ -243,7 +243,7 @@ async def test_saved_graph_round_trips_wire_colors_and_bundles(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GLITCHLAB_WORKSPACE", str(tmp_path))
     graph = {
         "name": "Wire presentation",
         "nodes": [
@@ -313,26 +313,26 @@ async def test_checked_in_graph_templates_are_read_only(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GLITCHLAB_WORKSPACE", str(tmp_path))
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",
     ) as client:
         listed = await client.get("/api/graph-templates")
-        loaded = await client.get("/api/graph-templates/talkie-smoke")
+        loaded = await client.get("/api/graph-templates/openrouter-huggingface")
         traversal = await client.get("/api/graph-templates/..%2Fpyproject")
 
     assert listed.status_code == 200
     assert any(
-        item["id"] == "talkie-smoke" for item in listed.json()["templates"]
+        item["id"] == "openrouter-huggingface" for item in listed.json()["templates"]
     )
     assert loaded.status_code == 200
     assert loaded.json()["template"]["graph"]["name"] == (
-        "Talkie generic completion smoke"
+        "Hugging Face prompts through OpenRouter"
     )
     assert loaded.json()["template"]["graph"]["nodes"]
     assert traversal.status_code == 404
-    assert not (tmp_path / ".glitchloom" / "graphs").exists()
+    assert not (tmp_path / ".glitchlab" / "graphs").exists()
 
 
 @pytest.mark.asyncio
@@ -340,7 +340,7 @@ async def test_saved_workflow_appears_in_catalog(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GLITCHLAB_WORKSPACE", str(tmp_path))
     payload = {
         "name": "Reusable preview",
         "description": "Expose a value through a saved graph.",
@@ -399,7 +399,7 @@ async def test_two_source_nodes_save_as_a_zero_input_workflow(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GLITCHLAB_WORKSPACE", str(tmp_path))
     payload = {
         "name": "Local Vintage Talkie",
         "description": "Bundle an endpoint and model reference.",
@@ -500,5 +500,5 @@ async def test_two_source_nodes_save_as_a_zero_input_workflow(
     assert deleted.status_code == 200
     assert deleted.json()["deleted"]["versions"] == 2
     assert remaining.json()["workflows"] == []
-    trashed = list((tmp_path / ".glitchloom" / "workflows" / ".trash").glob("*/v*.json"))
+    trashed = list((tmp_path / ".glitchlab" / "workflows" / ".trash").glob("*/v*.json"))
     assert len(trashed) == 2

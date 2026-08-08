@@ -1,29 +1,25 @@
-# Glitchloom Agent Guide
+# Glitchlab Agent Guide
 
 These instructions apply to the entire repository.
 
 ## Purpose
 
-Glitchloom is a local-first, typed node workbench for structured inference. It
+Glitchlab is a local-first, typed node workbench for structured inference. It
 combines OpenAI-compatible base-model completions, deterministic text
 transformations, collections, file I/O, and optional Glitchlings corruption
 operations while retaining experiment provenance.
 
 Keep the native runtime general-purpose. Model- or experiment-specific bundles
-such as “run both Talkies” belong in reusable saved subgraphs when that feature
-exists, not in special node kinds.
+belong in reusable saved subgraphs, not in special node kinds.
 
 ## Repository Map
 
-- `glitchloom/`: FastAPI server, node catalog, typed DAG validation/execution,
+- `glitchlab/`: FastAPI server, node catalog, typed DAG validation/execution,
   caching, and the Glitchlings adapter.
 - `web/`: React, TypeScript, Vite, and React Flow frontend.
 - `tests/`: backend and integration-contract tests.
 - `examples/`: checked-in graph examples.
-- `remote/`: source-of-truth copy of the optional Talkie completion service and
-  its reusable user systemd unit template.
-- `scripts/`: operational smoke-test helpers.
-- `REMOTE_SERVING.md`: optional deployment, safety, verification, and rollback contract.
+- `scripts/`: schema and maintenance utilities.
 
 ## Setup and Quality Gates
 
@@ -45,7 +41,7 @@ npm run build
 npm run test:e2e
 ```
 
-The real Glitchlings integration test runs when `GLITCHLOOM_GLITCHLINGS_PATH`
+The real Glitchlings integration test runs when `GLITCHLAB_GLITCHLINGS_PATH`
 points to a compatible checkout. Otherwise it skips cleanly.
 
 For an end-to-end Windows launch:
@@ -58,8 +54,8 @@ The app is served at `http://127.0.0.1:8788`.
 
 ## Architecture Rules
 
-- Node contracts originate in `glitchloom/catalog.py`; execution belongs in
-  `glitchloom/engine.py`. Update both, the frontend schema consumers, and tests
+- Node contracts originate in `glitchlab/catalog.py`; execution belongs in
+  `glitchlab/engine.py`. Update both, the frontend schema consumers, and tests
   together.
 - Preserve typed ports, preflight validation, deterministic topological
   execution, terminal outputs, and complete run manifests.
@@ -71,7 +67,7 @@ The app is served at `http://127.0.0.1:8788`.
   secret value.
 - Completion cache keys must cover every request-affecting field. Bump the
   package version when cached result schemas or cache semantics change.
-- File nodes remain scoped to `GLITCHLOOM_WORKSPACE` unless the documented
+- File nodes remain scoped to `GLITCHLAB_WORKSPACE` unless the documented
   absolute-path override is explicitly enabled.
 - Glitchlings must be discovered through their public registry and invoked
   deterministically with recorded specs, seeds, and application order.
@@ -89,27 +85,10 @@ The app is served at `http://127.0.0.1:8788`.
 - Do not commit `web/dist`, TypeScript build-info files, or generated Vite
   configuration output.
 
-## Remote Talkie Service
-
-The optional native base-completion service uses `talkie-openai.service`. Treat
-the host, paths, firewall, authentication proxy, and any retained rollback unit
-as deployment-specific configuration; do not assume the example template is a
-safe public-network deployment.
-
-- Treat `remote/glitchloom_talkie_api.py` and
-  `remote/talkie-openai.service` as deployment sources.
-- Before changing or restarting a remote service, inspect current unit state,
-  active GPU work, model residency, and network exposure.
-- Expect a cold restart to unload both models and make the next requests slow.
-- Deploy deliberately, compare local and remote SHA-256 hashes, then verify
-  `/health`, `/v1/models`, and a seeded completion from each model.
-- Do not modify the remote service during unrelated local UI or engine work.
-
 ## Change Discipline
 
 - Preserve unrelated user changes and generated experiment outputs.
 - Use focused commits and keep the README, examples, and operational docs in
   sync with behavior.
 - For backend changes, run Ruff and pytest. For frontend changes, also run the
-  production build. For serving changes, run live checks against the explicitly
-  named target host.
+  production build.

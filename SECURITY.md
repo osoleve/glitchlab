@@ -12,10 +12,10 @@ any suggested mitigation. You should receive an acknowledgement within seven day
 
 ## Security boundaries
 
-Glitchloom is local-first research software, not a hardened multi-user service.
-By default it binds to loopback and restricts file nodes to `GLITCHLOOM_WORKSPACE`.
-Do not expose Glitchloom or the optional Talkie completion service directly to an
-untrusted network. Neither service provides authentication or tenant isolation.
+Glitchlab is local-first research software, not a hardened multi-user service.
+By default it binds to loopback and restricts file nodes to `GLITCHLAB_WORKSPACE`.
+Do not expose Glitchlab directly to an untrusted network. It does not provide
+authentication or tenant isolation.
 
 Provider credentials must be supplied through environment variables. Saved graphs
 may contain prompts, model outputs, source paths, endpoint URLs, and experiment

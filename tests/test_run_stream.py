@@ -8,9 +8,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-import glitchloom.server as server_module
-from glitchloom.engine import GraphEngine, RunEventSinkError
-from glitchloom.models import (
+import glitchlab.server as server_module
+from glitchlab.engine import GraphEngine, RunEventSinkError
+from glitchlab.models import (
     GraphEdge,
     GraphNode,
     GraphRunFailure,
@@ -19,7 +19,7 @@ from glitchloom.models import (
     RunScope,
     RunStartedEvent,
 )
-from glitchloom.server import app
+from glitchlab.server import app
 
 
 def node(node_id: str, kind: str, **config: object) -> GraphNode:
@@ -238,7 +238,7 @@ async def test_stream_endpoint_emits_ndjson_and_preserves_legacy_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GLITCHLAB_WORKSPACE", str(tmp_path))
     request = {
         "graph": branching_graph().model_dump(mode="json"),
         "scope": {"mode": "targets", "target_node_ids": ["left"]},
@@ -274,7 +274,7 @@ async def test_stream_graph_failure_is_terminal_in_band_but_legacy_is_422(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GLITCHLOOM_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GLITCHLAB_WORKSPACE", str(tmp_path))
     request = {
         "graph": {
             "name": "missing input",

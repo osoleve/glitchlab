@@ -19,6 +19,6 @@ web/vite.config.js.map
 web/playwright-report/
 web/test-results/
 runs/
+.glitchlab/
+# Never publish pre-split local experiment state; Glitchlab does not read it.
 .glitchloom/
-talkie-smoke.result.json
-talkie-smoke.error.log

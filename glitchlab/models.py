@@ -307,7 +307,7 @@ class LoomState(BaseModel):
 
 
 class GraphNode(BaseModel):
-    """A configured node in a Glitchloom graph."""
+    """A configured node in a Glitchlab graph."""
 
     id: str
     kind: str

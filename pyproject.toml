@@ -1,7 +1,7 @@
 [project]
-name = "glitchloom"
-version = "0.9.0"
-description = "A local-first typed inference loom for base-model experiments."
+name = "glitchlab"
+version = "0.10.0"
+description = "A local-first typed inference workbench for structured experiments."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
-glitchloom = "glitchloom.server:main"
+glitchlab = "glitchlab.server:main"
 
 [project.urls]
 Homepage = "https://github.com/osoleve/glitchlab"
@@ -43,7 +43,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["glitchloom"]
+packages = ["glitchlab"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

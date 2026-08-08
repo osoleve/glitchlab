@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import definitions_by_kind, with_control_ports
+from .config import state_directory
 from .models import GraphDocument, WorkflowDraft, WorkflowSpec
 
 WORKFLOW_KIND_PREFIX = "workflow:"
@@ -123,7 +124,7 @@ class WorkflowStore:
     """Read and append immutable workflow versions under the workspace."""
 
     def __init__(self, workspace: Path) -> None:
-        self.root = workspace.resolve() / ".glitchloom" / "workflows"
+        self.root = state_directory(workspace) / "workflows"
 
     def _records(self) -> list[WorkflowSpec]:
         if not self.root.is_dir():

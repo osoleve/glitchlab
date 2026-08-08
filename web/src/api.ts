@@ -459,8 +459,8 @@ export async function saveWorkflow(draft: WorkflowDraft): Promise<SaveWorkflowRe
     const payload = await readOptionalJson(response);
     if (response.status === 404 || response.status === 405) {
       throw new Error(
-        "The running Glitchloom backend does not support reusable workflows. " +
-          "Restart Glitchloom, reload the page, and try again.",
+        "The running Glitchlab backend does not support reusable workflows. " +
+          "Restart Glitchlab, reload the page, and try again.",
       );
     }
     throw new Error(detailMessage(payload) ?? `Workflow save failed with ${response.status}.`);

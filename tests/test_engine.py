@@ -9,10 +9,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from glitchloom.catalog import control_port_name
-from glitchloom.engine import GraphEngine, compute_execution_scope
-from glitchloom.graphs import GraphConflictError, GraphStore
-from glitchloom.models import (
+from glitchlab.catalog import control_port_name
+from glitchlab.engine import GraphEngine, compute_execution_scope
+from glitchlab.graphs import GraphConflictError, GraphStore
+from glitchlab.models import (
     GraphDocumentDraft,
     GraphEdge,
     GraphNode,
@@ -25,7 +25,7 @@ from glitchloom.models import (
     WorkflowInput,
     WorkflowOutput,
 )
-from glitchloom.workflows import WorkflowInUseError, WorkflowStore, workflow_kind
+from glitchlab.workflows import WorkflowInUseError, WorkflowStore, workflow_kind
 
 
 def node(node_id: str, kind: str, **config: object) -> GraphNode:

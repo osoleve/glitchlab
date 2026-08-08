@@ -347,7 +347,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
             _field(
                 "app_name",
                 "text",
-                "Glitchloom",
+                "Glitchlab",
                 help_text="Optional X-OpenRouter-Title attribution sent to OpenRouter.",
             ),
             _field("timeout_seconds", "number", 120),
@@ -364,7 +364,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
             _field(
                 "model_id",
                 "text",
-                "talkie-1930-13b-base",
+                "model-id",
                 inline=True,
             )
         ],

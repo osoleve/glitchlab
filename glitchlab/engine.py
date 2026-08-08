@@ -26,6 +26,7 @@ from .catalog import (
     definitions_by_kind,
     with_control_ports,
 )
+from .config import setting, state_directory
 from .glitchlings_adapter import corrupt_text, plugin_status
 from .huggingface_adapter import load_huggingface_dataset
 from .models import (
@@ -252,17 +253,17 @@ class GraphEngine:
         workflow_store: WorkflowStore | None = None,
         workflow_stack: tuple[str, ...] = (),
     ) -> None:
-        configured_workspace = os.getenv("GLITCHLOOM_WORKSPACE", "").strip()
+        configured_workspace = setting("WORKSPACE").strip()
         self.workspace = (
             Path(configured_workspace).expanduser()
             if configured_workspace
             else workspace or Path.cwd()
         ).resolve()
-        configured_cache = os.getenv("GLITCHLOOM_CACHE_DIR", "").strip()
+        configured_cache = setting("CACHE_DIR").strip()
         self.cache_dir = (
             Path(configured_cache).expanduser()
             if configured_cache
-            else self.workspace / ".glitchloom" / "cache"
+            else state_directory(self.workspace) / "cache"
         ).resolve()
         self.http_client = http_client
         self.definitions = definitions_by_kind()
@@ -341,12 +342,12 @@ class GraphEngine:
             resolved = candidate.resolve()
         else:
             resolved = (self.workspace / candidate).resolve()
-        if os.getenv("GLITCHLOOM_ALLOW_ABSOLUTE_PATHS") != "1":
+        if setting("ALLOW_ABSOLUTE_PATHS") != "1":
             try:
                 resolved.relative_to(self.workspace)
             except ValueError as exc:
                 raise ValueError(
-                    f"Path {resolved} is outside the Glitchloom workspace {self.workspace}."
+                    f"Path {resolved} is outside the Glitchlab workspace {self.workspace}."
                 ) from exc
         return resolved
 
@@ -868,7 +869,7 @@ class GraphEngine:
         if kind == "openrouter_endpoint":
             headers: dict[str, str] = {}
             site_url = str(config.get("site_url", "")).strip()
-            app_name = str(config.get("app_name", "Glitchloom")).strip()
+            app_name = str(config.get("app_name", "Glitchlab")).strip()
             if site_url:
                 headers["HTTP-Referer"] = site_url
             if app_name:

@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
-        "/api": env.GLITCHLOOM_API_TARGET || "http://127.0.0.1:8788",
+        "/api": env.GLITCHLAB_API_TARGET || "http://127.0.0.1:8788",
       },
     },
     build: {

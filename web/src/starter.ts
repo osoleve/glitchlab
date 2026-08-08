@@ -57,8 +57,8 @@ export function createStarterGraph(definitions: NodeDefinition[]): {
       base_url: "http://127.0.0.1:8790/v1",
       timeout_seconds: 180,
     }),
-    makeNode("model", "model", "Vintage Talkie", { x: 0, y: 220 }, byKind, {
-      model_id: "talkie-1930-13b-base",
+    makeNode("model", "model", "Local model", { x: 0, y: 220 }, byKind, {
+      model_id: "model-id",
     }),
     loom,
     makeNode("preview", "preview", "Selected text", { x: 720, y: 70 }, byKind),

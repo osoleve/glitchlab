@@ -80,7 +80,7 @@ export function WorkbenchTopBar({
           <span />
         </div>
         <span className={cx(styles, "brand-copy")}>
-          <strong>Glitchloom</strong>
+          <strong>Glitchlab</strong>
           <small>{afterHours ? "the loom hums back" : "after hours"}</small>
         </span>
       </button>

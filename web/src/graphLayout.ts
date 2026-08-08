@@ -86,7 +86,7 @@ function wireBundleNodeId(
   end: "start" | "end",
   occupiedNodeIds: Set<string>,
 ): string {
-  const base = `__glitchloom_wire_bundle__${bundleId}__${end}`;
+  const base = `__glitchlab_wire_bundle__${bundleId}__${end}`;
   let candidate = base;
   let suffix = 1;
   while (occupiedNodeIds.has(candidate)) {

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from glitchloom.server import app
+from glitchlab.server import app
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 OPENAPI_SNAPSHOT = (
@@ -25,6 +25,11 @@ def _json_schema(
 
 def test_openapi_snapshot_matches_application_schema() -> None:
     assert json.loads(OPENAPI_SNAPSHOT.read_text(encoding="utf-8")) == app.openapi()
+
+
+def test_openapi_identifies_workbench_as_glitchlab() -> None:
+    assert app.title == "Glitchlab"
+    assert app.openapi()["info"]["title"] == "Glitchlab"
 
 
 def test_success_responses_reference_specific_wire_models() -> None:

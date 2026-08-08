@@ -32,7 +32,7 @@ describe("ErrorBoundary", () => {
 
   it("provides useful app and node fallbacks", () => {
     const appView = render(<AppErrorFallback error={new Error("Root failure")} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Glitchloom could not render this screen");
+    expect(screen.getByRole("alert")).toHaveTextContent("Glitchlab could not render this screen");
     expect(screen.getByRole("button", { name: "Reload app" })).toBeInTheDocument();
     appView.unmount();
 

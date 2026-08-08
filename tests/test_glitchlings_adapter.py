@@ -5,19 +5,20 @@ from pathlib import Path
 
 import pytest
 
-from glitchloom.glitchlings_adapter import corrupt_text, discover_glitchlings, plugin_status
+from glitchlab.config import setting
+from glitchlab.glitchlings_adapter import corrupt_text, discover_glitchlings, plugin_status
 
-LOCAL_CHECKOUT_VALUE = os.getenv("GLITCHLOOM_GLITCHLINGS_PATH", "").strip()
+LOCAL_CHECKOUT_VALUE = setting("GLITCHLINGS_PATH").strip()
 LOCAL_CHECKOUT = Path(LOCAL_CHECKOUT_VALUE).expanduser() if LOCAL_CHECKOUT_VALUE else None
 
 
 @pytest.mark.skipif(
     LOCAL_CHECKOUT is None or not LOCAL_CHECKOUT.is_dir(),
-    reason="set GLITCHLOOM_GLITCHLINGS_PATH to run the integration test",
+    reason="set GLITCHLAB_GLITCHLINGS_PATH to run the integration test",
 )
 def test_local_glitchlings_discovery_and_corruption(monkeypatch: pytest.MonkeyPatch) -> None:
     assert LOCAL_CHECKOUT is not None
-    monkeypatch.setenv("GLITCHLOOM_GLITCHLINGS_PATH", str(LOCAL_CHECKOUT))
+    monkeypatch.setenv("GLITCHLAB_GLITCHLINGS_PATH", str(LOCAL_CHECKOUT))
     os.environ.setdefault("PYTHONHASHSEED", "0")
 
     discovered = discover_glitchlings()

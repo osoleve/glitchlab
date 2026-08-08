@@ -102,6 +102,8 @@ import type {
 import { wireAppearance } from "./wireAppearance";
 import { inferWorkflowDraft, reviseWorkflowDraft } from "./workflow";
 
+const NODE_DRAG_MIME_TYPE = "application/glitchlab-node";
+
 function workflowBindingKey(
   direction: "input" | "output",
   nodeId: string,
@@ -216,7 +218,7 @@ function responsivePanelDefault(panel: ResizablePanel): number {
   return compact ? 348 : 380;
 }
 
-export function GlitchloomWorkbench() {
+export function GlitchlabWorkbench() {
   const [catalog, setCatalog] = useState<CatalogResponse>();
   const [catalogError, setCatalogError] = useState<string>();
   const {
@@ -830,12 +832,12 @@ export function GlitchloomWorkbench() {
   );
 
   const onPaletteDrag = (event: DragEvent<HTMLButtonElement>, definition: NodeDefinition) => {
-    event.dataTransfer.setData("application/glitchloom-node", definition.kind);
+    event.dataTransfer.setData(NODE_DRAG_MIME_TYPE, definition.kind);
     event.dataTransfer.effectAllowed = "move";
   };
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const kind = event.dataTransfer.getData("application/glitchloom-node");
+    const kind = event.dataTransfer.getData(NODE_DRAG_MIME_TYPE);
     const definition = catalog?.nodes.find((item) => item.kind === kind);
     if (!definition) return;
     addNode(definition, screenToFlowPosition({ x: event.clientX, y: event.clientY }));

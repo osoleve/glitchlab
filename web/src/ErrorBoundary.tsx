@@ -32,7 +32,7 @@ export function AppErrorFallback({ error }: { error: Error }) {
     <main className={cx(styles, "app-error-boundary")} role="alert">
       <section className={cx(styles, "app-error-card")}>
         <span className={cx(styles, "app-error-kicker")}>Render failure</span>
-        <h1>Glitchloom could not render this screen</h1>
+        <h1>Glitchlab could not render this screen</h1>
         <p>
           The workbench hit an unexpected UI error. Reload the app to recover the normal workspace;
           unsaved changes may not survive a reload.

@@ -1,10 +1,10 @@
 import { ReactFlowProvider } from "@xyflow/react";
-import { GlitchloomWorkbench } from "./GlitchloomWorkbench";
+import { GlitchlabWorkbench } from "./GlitchlabWorkbench";
 
 export default function App() {
   return (
     <ReactFlowProvider>
-      <GlitchloomWorkbench />
+      <GlitchlabWorkbench />
     </ReactFlowProvider>
   );
 }

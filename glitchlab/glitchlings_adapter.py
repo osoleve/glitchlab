@@ -6,11 +6,12 @@ import hashlib
 import importlib
 import inspect
 import json
-import os
 import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+from .config import setting
 
 
 class GlitchlingsUnavailable(RuntimeError):
@@ -22,7 +23,7 @@ _IMPORT_ERROR: str | None = None
 
 
 def _candidate_source_path() -> Path | None:
-    configured = os.getenv("GLITCHLOOM_GLITCHLINGS_PATH", "").strip()
+    configured = setting("GLITCHLINGS_PATH").strip()
     if configured:
         candidate = Path(configured).expanduser()
         source = candidate / "src" if (candidate / "src" / "glitchlings").is_dir() else candidate
@@ -49,8 +50,8 @@ def load_glitchlings() -> Any:
     except Exception as exc:  # noqa: BLE001 - optional plugin boundary
         _IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
         raise GlitchlingsUnavailable(
-            "Glitchlings could not be imported. Set GLITCHLOOM_GLITCHLINGS_PATH "
-            "to a compatible checkout and run Glitchloom with the same Python version "
+            "Glitchlings could not be imported. Set GLITCHLAB_GLITCHLINGS_PATH "
+            "to a compatible checkout and run Glitchlab with the same Python version "
             "as its compiled extension."
         ) from exc
 

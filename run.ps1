@@ -25,8 +25,8 @@ if (Test-Path -LiteralPath $EnvironmentFile) {
         }
     }
 }
-if (-not $env:GLITCHLOOM_WORKSPACE) {
-    $env:GLITCHLOOM_WORKSPACE = $ProjectRoot
+if (-not $env:GLITCHLAB_WORKSPACE) {
+    $env:GLITCHLAB_WORKSPACE = $ProjectRoot
 }
 
 Push-Location $ProjectRoot
@@ -42,7 +42,7 @@ try {
             Pop-Location
         }
     }
-    uv run --python 3.12 glitchloom
+    uv run --python 3.12 glitchlab
 }
 finally {
     Pop-Location

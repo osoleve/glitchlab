@@ -1,6 +1,6 @@
-# Contributing to Glitchloom
+# Contributing to Glitchlab
 
-Thanks for helping improve Glitchloom. Focused bug reports, documentation fixes,
+Thanks for helping improve Glitchlab. Focused bug reports, documentation fixes,
 tests, and small pull requests are especially useful while the project is in alpha.
 
 ## Development setup
@@ -39,7 +39,7 @@ npm run test:e2e
 ```
 
 Browser changes should remain usable at 1365×768 and 1920×1080. Backend node
-changes must keep `glitchloom/catalog.py`, `glitchloom/engine.py`, the generated
+changes must keep `glitchlab/catalog.py`, `glitchlab/engine.py`, the generated
 frontend schema, and their tests in sync.
 
 ## Pull requests

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import with_control_ports
+from .config import state_directory
 from .models import (
     GraphDocument,
     GraphDocumentDraft,
@@ -51,7 +52,7 @@ class GraphStore:
         workflow_store: WorkflowStore | None = None,
     ) -> None:
         workspace = workspace.resolve()
-        self.root = workspace / ".glitchloom" / "graphs"
+        self.root = state_directory(workspace) / "graphs"
         self.workflow_store = workflow_store or WorkflowStore(workspace)
 
     @staticmethod

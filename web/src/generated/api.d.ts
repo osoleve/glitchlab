@@ -528,7 +528,7 @@ export interface components {
         };
         /**
          * GraphNode
-         * @description A configured node in a Glitchloom graph.
+         * @description A configured node in a Glitchlab graph.
          */
         GraphNode: {
             /** Config */

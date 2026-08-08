@@ -34,11 +34,11 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `uv run uvicorn glitchloom.server:app --host 127.0.0.1 --port ${backendPort}`,
+      command: `uv run uvicorn glitchlab.server:app --host 127.0.0.1 --port ${backendPort}`,
       cwd: repositoryRoot,
       env: {
         ...process.env,
-        GLITCHLOOM_WORKSPACE: join(tmpdir(), `glitchloom-playwright-${process.pid}`),
+        GLITCHLAB_WORKSPACE: join(tmpdir(), `glitchlab-playwright-${process.pid}`),
       },
       url: `${backendUrl}/api/health`,
       reuseExistingServer: false,
@@ -49,7 +49,7 @@ export default defineConfig({
       cwd: webRoot,
       env: {
         ...process.env,
-        GLITCHLOOM_API_TARGET: backendUrl,
+        GLITCHLAB_API_TARGET: backendUrl,
       },
       url: `http://127.0.0.1:${frontendPort}`,
       reuseExistingServer: false,
