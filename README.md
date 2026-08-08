@@ -137,7 +137,22 @@ selection can also be grouped into a collapsible frame. Frames have editable
 titles and five color choices; membership, bounds, collapse state, and the graph's
 wire-routing preference persist with the graph while remaining presentation-only
 for run freshness. Collapsed frames retain their external connectivity through
-non-editable boundary wires. Selecting nodes
+non-editable boundary wires. Wires and ports are color-coded by their typed value
+family; the floating wire action bar can override that color when an experiment
+needs an additional visual grouping. Empty-canvas left-drag draws a marquee while
+Space-drag or middle-drag pans. A current node or wire selection locks the marquee
+to that family; otherwise the first intersected element decides. Ctrl/Cmd adds and
+Alt removes from the marquee selection. Wire hit-testing follows the rendered path,
+not merely its endpoint nodes.
+
+Select two or more wires to create a routed bundle. Every bundle has extensible
+waypoints: drag a waypoint to reshape the route or drag the shared trunk to move the
+whole bundle. Existing bundles can accept additional selected wires without being
+rebuilt. Bundles participate in **Tidy graph** as virtual multiplex/demultiplex
+routing nodes, then remain freely movable afterward. Wire styles and bundles persist
+with saved graphs and, like frames and routing style, do not change execution
+semantics or run freshness. Hovering a wire highlights its complete route and its
+source and destination ports. Selecting nodes
 emphasizes their complete upstream and downstream wire paths; unrelated wires
 recede while a selected wire remains fully visible. Wires use smooth stepped
 routing by default, with Bezier routing available from the canvas menu. Connection

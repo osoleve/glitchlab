@@ -56,7 +56,7 @@ import { isGraphConnectionValid } from "./connectionValidation";
 import { frameAggregate } from "./frameActivity";
 import { collapseFrameEdges } from "./frameEdges";
 import { hydrateGraph, serializeGraph } from "./graph";
-import { tidyNodeLayout } from "./graphLayout";
+import { tidyGraphLayout } from "./graphLayout";
 import {
   downstreamClosure,
   inducedEdgeIds,
@@ -99,6 +99,7 @@ import type {
   WorkflowFrame,
   WorkflowNode,
 } from "./types";
+import { wireAppearance } from "./wireAppearance";
 import { inferWorkflowDraft, reviseWorkflowDraft } from "./workflow";
 
 function workflowBindingKey(
@@ -223,11 +224,18 @@ export function GlitchloomWorkbench() {
     edges,
     frames,
     edgeRouting,
+    wires,
+    wireBundles,
+    selectionKind,
     selectedId,
     graphName,
     isDirty,
     setNodes,
     setEdgeRouting,
+    bundleEdges,
+    addEdgesToBundle,
+    unbundleEdges,
+    setWireColor,
     setSelectedId,
     setGraphName,
     setIsDirty,
@@ -242,6 +250,7 @@ export function GlitchloomWorkbench() {
     updateControlPort: updateGraphControlPort,
     removeNodes,
     removeEdge,
+    removeEdges,
     duplicateNodes,
     groupNodes,
     addFrame,
@@ -345,8 +354,11 @@ export function GlitchloomWorkbench() {
       edges,
       frames,
       edgeRouting,
+      wires,
+      wireBundles,
       run,
       runError,
+      selectionKind,
       selectedId,
       graphName,
       isDirty,
@@ -354,6 +366,8 @@ export function GlitchloomWorkbench() {
     }),
     [
       edgeRouting,
+      wires,
+      wireBundles,
       edges,
       executionScope,
       frames,
@@ -362,6 +376,7 @@ export function GlitchloomWorkbench() {
       nodes,
       run,
       runError,
+      selectionKind,
       selectedId,
     ],
   );
@@ -375,6 +390,8 @@ export function GlitchloomWorkbench() {
         snapshot.isDirty,
         snapshot.frames,
         snapshot.edgeRouting,
+        snapshot.wires,
+        snapshot.wireBundles,
       );
       setRun(snapshot.run);
       setRunError(snapshot.runError);
@@ -968,28 +985,61 @@ export function GlitchloomWorkbench() {
       setContextMenu(undefined);
       return;
     }
-    const positions = tidyNodeLayout(
+    const layout = tidyGraphLayout(
       targets.map((node) => ({
         id: node.id,
         position: node.position,
         ...nodeSize(node),
       })),
       edges,
+      wireBundles,
     );
-    const changed = targets.some((node) => {
-      const position = positions.get(node.id);
-      return (
-        position !== undefined &&
-        (Math.abs(position.x - node.position.x) > 0.01 ||
-          Math.abs(position.y - node.position.y) > 0.01)
-      );
-    });
+    const positions = layout.nodePositions;
+    const parentId = targets[0]?.parentId;
+    const parentPosition = parentId
+      ? (frames.find((frame) => frame.id === parentId)?.position ?? { x: 0, y: 0 })
+      : { x: 0, y: 0 };
+    const positionedWireBundles = new Map(
+      [...layout.wireBundleWaypoints].map(([bundleId, waypoints]) => [
+        bundleId,
+        waypoints.map((waypoint) => ({
+          x: waypoint.x + parentPosition.x,
+          y: waypoint.y + parentPosition.y,
+        })),
+      ]),
+    );
+    const changed =
+      targets.some((node) => {
+        const position = positions.get(node.id);
+        return (
+          position !== undefined &&
+          (Math.abs(position.x - node.position.x) > 0.01 ||
+            Math.abs(position.y - node.position.y) > 0.01)
+        );
+      }) ||
+      wireBundles.some((wireBundle) => {
+        const waypoints = positionedWireBundles.get(wireBundle.id);
+        return Boolean(
+          waypoints?.some((waypoint, index) => {
+            const current = wireBundle.waypoints[index];
+            return (
+              !current ||
+              Math.abs(waypoint.x - current.x) > 0.01 ||
+              Math.abs(waypoint.y - current.y) > 0.01
+            );
+          }),
+        );
+      });
     if (changed) {
       updateDocument(
-        ({ nodes: current }) => ({
+        ({ nodes: current, wireBundles: currentWireBundles }) => ({
           nodes: current.map((node) => {
             const position = positions.get(node.id);
             return position ? { ...node, position } : node;
+          }),
+          wireBundles: currentWireBundles.map((wireBundle) => {
+            const waypoints = positionedWireBundles.get(wireBundle.id);
+            return waypoints ? { ...wireBundle, waypoints } : wireBundle;
           }),
         }),
         false,
@@ -1103,6 +1153,8 @@ export function GlitchloomWorkbench() {
         edges: hydrated.edges,
         frames: hydrated.frames,
         edgeRouting: hydrated.edgeRouting,
+        wires: hydrated.wires,
+        wireBundles: hydrated.wireBundles,
         graphName: response.workflow.name,
         isDirty: false,
       };
@@ -1156,6 +1208,8 @@ export function GlitchloomWorkbench() {
       edges: hydrated.edges,
       frames: hydrated.frames,
       edgeRouting: hydrated.edgeRouting,
+      wires: hydrated.wires,
+      wireBundles: hydrated.wireBundles,
       graphName: graph.name,
       isDirty: true,
     };
@@ -1209,6 +1263,8 @@ export function GlitchloomWorkbench() {
         edges: hydrated.edges,
         frames: hydrated.frames,
         edgeRouting: hydrated.edgeRouting,
+        wires: hydrated.wires,
+        wireBundles: hydrated.wireBundles,
         graphName: response.graph.graph.name,
         isDirty: false,
       };
@@ -1268,7 +1324,15 @@ export function GlitchloomWorkbench() {
     setContextMenu(undefined);
     setGraphSaveError(undefined);
     try {
-      const graph = serializeGraph(trimmedName, nodes, edges, frames, edgeRouting);
+      const graph = serializeGraph(
+        trimmedName,
+        nodes,
+        edges,
+        frames,
+        edgeRouting,
+        wires,
+        wireBundles,
+      );
       const saved =
         activeGraph && !options.createNew
           ? await updateGraph(activeGraph.id, activeGraph.revision, graph)
@@ -1612,7 +1676,7 @@ export function GlitchloomWorkbench() {
   };
 
   const execute = async (requestedTargetIds: string[] = []) => {
-    const graph = serializeGraph(graphName, nodes, edges, frames, edgeRouting);
+    const graph = serializeGraph(graphName, nodes, edges, frames, edgeRouting, wires, wireBundles);
     const submittedFingerprint = semanticExecutionFingerprint(graph);
     const targetNodeIds = [
       ...new Set(requestedTargetIds.filter((nodeId) => nodes.some((node) => node.id === nodeId))),
@@ -2070,14 +2134,43 @@ export function GlitchloomWorkbench() {
           : styles["selection-unrelated-edge"]
         : undefined;
     const transferring = activity?.recentEdgeIds.some((id) => semanticIds.includes(id)) ?? false;
+    const semanticEdge = edges.find((candidate) => candidate.id === semanticIds[0]) ?? edge;
+    const appearance = wireAppearance(semanticEdge, nodes, wires);
+    const wireBundle = edge.data?.presentationProxy
+      ? undefined
+      : wireBundles.find((candidate) => candidate.edgeIds.includes(edge.id));
+    const wireIndex = wireBundle?.edgeIds.indexOf(edge.id) ?? -1;
     return {
       ...edge,
-      type: edgeRouting,
+      type: "wire",
+      reconnectable: !wireBundle,
+      data: {
+        ...edge.data,
+        routing: edgeRouting,
+        valueType: appearance.valueType,
+        wireColor: appearance.colorName,
+        wireColorValue: appearance.color,
+        ...(wireBundle
+          ? {
+              bundle: {
+                ...wireBundle,
+                edgeIndex: wireIndex,
+                edgeCount: wireBundle.edgeIds.length,
+                ownsHandles: wireIndex === 0,
+              },
+            }
+          : {}),
+      },
       className: [scopeClassName, transferring ? styles["edge-transfer-pulse"] : undefined]
         .filter(Boolean)
         .join(" "),
       animated: transferring,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 18,
+        height: 18,
+        color: appearance.color,
+      },
     };
   });
   const fitExecutionScope = () => {
@@ -2183,6 +2276,8 @@ export function GlitchloomWorkbench() {
           canvasRef={canvasRef}
           edges={flowEdges}
           edgeRouting={edgeRouting}
+          wires={wires}
+          wireBundles={wireBundles}
           executionScope={executionScope}
           nodes={flowNodes}
           runElapsed={runElapsed}
@@ -2196,6 +2291,14 @@ export function GlitchloomWorkbench() {
           onDismissRunError={() => setRunError(undefined)}
           onDrop={onDrop}
           onEdgesChange={onEdgesChange}
+          onRemoveEdges={(edgeIds) => {
+            markSemanticDirty();
+            removeEdges(edgeIds);
+          }}
+          onBundleEdges={(edgeIds, start, end) => bundleEdges(edgeIds, start, end)}
+          onAddEdgesToBundle={addEdgesToBundle}
+          onUnbundleEdges={unbundleEdges}
+          onSetWireColor={setWireColor}
           onFitExecutionScope={fitExecutionScope}
           onNodeDragStop={finishNodeDragHistory}
           onNodesChange={onNodesChange}
@@ -2874,7 +2977,7 @@ export function GlitchloomWorkbench() {
       )}
       {openLoomNodeId && nodes.find((node) => node.id === openLoomNodeId)?.data.state && (
         <LoomEditor
-          graph={serializeGraph(graphName, nodes, edges, frames, edgeRouting)}
+          graph={serializeGraph(graphName, nodes, edges, frames, edgeRouting, wires, wireBundles)}
           node={nodes.find((node) => node.id === openLoomNodeId)!}
           onChange={(state) => updateLoomState(openLoomNodeId, state)}
           onClose={() => setOpenLoomNodeId(undefined)}

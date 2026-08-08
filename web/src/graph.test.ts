@@ -56,6 +56,8 @@ describe("graph presentation", () => {
           node_ids: ["node-a"],
         },
       ],
+      wires: [],
+      wire_bundles: [],
     });
 
     const hydrated = hydrateGraph(graph, [definition]);
@@ -79,6 +81,56 @@ describe("graph presentation", () => {
     const hydrated = hydrateGraph(legacy, [definition]);
     expect(hydrated.frames).toEqual([]);
     expect(hydrated.edgeRouting).toBe("smoothstep");
+    expect(hydrated.wires).toEqual([]);
+    expect(hydrated.wireBundles).toEqual([]);
+  });
+
+  it("round-trips wire styles and movable bundles as presentation-only metadata", () => {
+    const edges = [
+      {
+        id: "edge-a",
+        source: "node-a",
+        sourceHandle: "out-a",
+        target: "node-b",
+        targetHandle: "in-a",
+      },
+      {
+        id: "edge-b",
+        source: "node-a",
+        sourceHandle: "out-b",
+        target: "node-b",
+        targetHandle: "in-b",
+      },
+    ];
+    const wires = [{ edgeId: "edge-a", color: "rose" as const }];
+    const wireBundles = [
+      {
+        id: "bundle-a",
+        edgeIds: ["edge-a", "edge-b"],
+        waypoints: [
+          { x: 180, y: 120 },
+          { x: 320, y: 180 },
+        ],
+        collapsed: false,
+      },
+    ];
+
+    const graph = serializeGraph("Bundled", [node], edges, [], "smoothstep", wires, wireBundles);
+    expect(graph.presentation?.wires).toEqual([{ edge_id: "edge-a", color: "rose" }]);
+    expect(graph.presentation?.wire_bundles).toEqual([
+      {
+        id: "bundle-a",
+        edge_ids: ["edge-a", "edge-b"],
+        waypoints: [
+          { x: 180, y: 120 },
+          { x: 320, y: 180 },
+        ],
+        collapsed: false,
+      },
+    ]);
+    const hydrated = hydrateGraph(graph, [definition]);
+    expect(hydrated.wires).toEqual(wires);
+    expect(hydrated.wireBundles).toEqual(wireBundles);
   });
 });
 

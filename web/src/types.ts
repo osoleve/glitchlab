@@ -32,16 +32,47 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   state?: LoomState;
   runStatus: NodeRunStatus;
   executionScopeRole?: "target" | "required" | "unrelated";
+  wireHover?: { direction: "input" | "output"; portName: string };
   onUpdateField?: (field: string, value: unknown) => void;
   onUpdateState?: (state: LoomState) => void;
   onOpenEditor?: () => void;
 }
 
 export type WorkflowNode = Node<WorkflowNodeData, "workflowNode">;
-export type WorkflowEdge = Edge;
-
 export type FrameColor = "violet" | "teal" | "amber" | "rose" | "slate";
 export type EdgeRouting = "smoothstep" | "bezier";
+export type FlowPosition = { x: number; y: number };
+export type SelectionKind = "node" | "wire";
+export type WireColor = "slate" | "amber" | "cyan" | "teal" | "violet" | "coral" | "blue" | "rose";
+
+export interface WirePresentation {
+  edgeId: string;
+  color?: WireColor;
+}
+
+export interface WireBundle {
+  id: string;
+  edgeIds: string[];
+  waypoints: FlowPosition[];
+  collapsed: boolean;
+  label?: string;
+}
+
+export interface WireEdgeData extends Record<string, unknown> {
+  valueType?: ValueType;
+  wireColor?: WireColor;
+  wireColorValue?: string;
+  routing?: EdgeRouting;
+  bundle?: WireBundle & {
+    edgeIndex: number;
+    edgeCount: number;
+    ownsHandles: boolean;
+  };
+  presentationProxy?: boolean;
+  semanticEdgeIds?: string[];
+}
+
+export type WorkflowEdge = Edge<WireEdgeData>;
 
 export interface WorkflowFrameData extends Record<string, unknown> {
   title: string;
@@ -72,6 +103,14 @@ export interface GraphFrameSpec {
 export interface GraphPresentation {
   edge_routing: EdgeRouting;
   frames: GraphFrameSpec[];
+  wires: Array<{ edge_id: string; color?: WireColor | null }>;
+  wire_bundles: Array<{
+    id: string;
+    edge_ids: string[];
+    waypoints: FlowPosition[];
+    collapsed: boolean;
+    label?: string | null;
+  }>;
 }
 
 export type NodeRunResult = Omit<ApiSchemas["NodeRunResult"], "outputs"> & {

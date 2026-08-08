@@ -2,6 +2,9 @@ import type {
   EdgeRouting,
   GraphDocument,
   RunResponse,
+  SelectionKind,
+  WireBundle,
+  WirePresentation,
   WorkflowEdge,
   WorkflowFrame,
   WorkflowNode,
@@ -21,9 +24,12 @@ export interface GraphSnapshot {
   edges: WorkflowEdge[];
   frames?: WorkflowFrame[];
   edgeRouting?: EdgeRouting;
+  wires?: WirePresentation[];
+  wireBundles?: WireBundle[];
   run?: RunResponse;
   runError?: string;
   selectedId?: string;
+  selectionKind?: SelectionKind;
   graphName: string;
   isDirty: boolean;
   executionScope?: ExecutionScopeState;

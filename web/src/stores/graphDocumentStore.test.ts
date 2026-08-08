@@ -41,6 +41,9 @@ describe("graph document store", () => {
       edges: [],
       frames: [],
       edgeRouting: "smoothstep",
+      wires: [],
+      wireBundles: [],
+      selectionKind: "node",
       selectedId: "one",
       graphName: "Test graph",
       isDirty: false,
@@ -58,7 +61,7 @@ describe("graph document store", () => {
     expect(state.isDirty).toBe(true);
   });
 
-  it("keeps native React Flow selection and moves only the inspector anchor", () => {
+  it("normalizes external node-selection changes and moves the inspector anchor", () => {
     useGraphDocumentStore.setState({
       nodes: [
         { ...node("one"), selected: true },
@@ -247,5 +250,116 @@ describe("graph document store", () => {
     );
     expect(state.edges).toHaveLength(3);
     expect(state.isDirty).toBe(true);
+  });
+
+  it("creates and moves wire bundles without invalidating completed runs", () => {
+    useGraphDocumentStore.setState({
+      edges: [
+        { id: "edge-a", source: "one", target: "two" },
+        { id: "edge-b", source: "one", target: "two" },
+        { id: "edge-c", source: "one", target: "two" },
+      ],
+    });
+
+    const bundleId = useGraphDocumentStore
+      .getState()
+      .bundleEdges(
+        ["edge-a", "edge-b", "edge-c"],
+        { x: 100, y: 120 },
+        { x: 280, y: 160 },
+        () => "fixed-id",
+      );
+    useGraphDocumentStore.getState().moveWireBundleWaypoint(bundleId!, 0, { x: 132, y: 144 });
+
+    const state = useGraphDocumentStore.getState();
+    expect(bundleId).toBe("bundle-fixed-id");
+    expect(state.wireBundles).toEqual([
+      {
+        id: "bundle-fixed-id",
+        edgeIds: ["edge-a", "edge-b", "edge-c"],
+        waypoints: [
+          { x: 132, y: 144 },
+          { x: 280, y: 160 },
+        ],
+        collapsed: false,
+      },
+    ]);
+    expect(state.nodes[0]?.data.runStatus).toBe("completed");
+    expect(state.isDirty).toBe(true);
+  });
+
+  it("prunes wire bundles as bundled edges are removed or unbundled", () => {
+    useGraphDocumentStore.setState({
+      edges: [
+        { id: "edge-a", source: "one", target: "two" },
+        { id: "edge-b", source: "one", target: "two" },
+        { id: "edge-c", source: "one", target: "two" },
+      ],
+      wireBundles: [
+        {
+          id: "bundle-a",
+          edgeIds: ["edge-a", "edge-b", "edge-c"],
+          waypoints: [
+            { x: 10, y: 20 },
+            { x: 30, y: 40 },
+          ],
+          collapsed: false,
+        },
+      ],
+    });
+
+    useGraphDocumentStore.getState().removeEdge("edge-a");
+    expect(useGraphDocumentStore.getState().wireBundles[0]?.edgeIds).toEqual(["edge-b", "edge-c"]);
+
+    useGraphDocumentStore.getState().unbundleEdges(["edge-b"]);
+    expect(useGraphDocumentStore.getState().wireBundles).toEqual([]);
+  });
+
+  it("adds wires to an existing bundle and stores optional color overrides", () => {
+    useGraphDocumentStore.setState({
+      edges: [
+        { id: "edge-a", source: "one", target: "two" },
+        { id: "edge-b", source: "one", target: "two" },
+        { id: "edge-c", source: "one", target: "two" },
+      ],
+      wireBundles: [
+        {
+          id: "bundle-a",
+          edgeIds: ["edge-a", "edge-b"],
+          waypoints: [
+            { x: 10, y: 20 },
+            { x: 30, y: 40 },
+          ],
+          collapsed: false,
+        },
+      ],
+    });
+
+    useGraphDocumentStore.getState().addEdgesToBundle("bundle-a", ["edge-c"]);
+    useGraphDocumentStore.getState().setWireColor(["edge-a", "edge-c"], "rose");
+    expect(useGraphDocumentStore.getState().wireBundles[0]?.edgeIds).toEqual([
+      "edge-a",
+      "edge-b",
+      "edge-c",
+    ]);
+    expect(useGraphDocumentStore.getState().wires).toEqual([
+      { edgeId: "edge-a", color: "rose" },
+      { edgeId: "edge-c", color: "rose" },
+    ]);
+  });
+
+  it("keeps node and wire selections mutually exclusive", () => {
+    useGraphDocumentStore.setState({
+      nodes: [node("one"), node("two")],
+      edges: [{ id: "edge-a", source: "one", target: "two" }],
+    });
+
+    useGraphDocumentStore.getState().selectEdges(["edge-a"]);
+    expect(useGraphDocumentStore.getState().selectionKind).toBe("wire");
+    expect(useGraphDocumentStore.getState().nodes.every((item) => !item.selected)).toBe(true);
+
+    useGraphDocumentStore.getState().selectNodes(["one"]);
+    expect(useGraphDocumentStore.getState().selectionKind).toBe("node");
+    expect(useGraphDocumentStore.getState().edges[0]?.selected).toBe(false);
   });
 });

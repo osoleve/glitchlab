@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type LayoutEdge, type LayoutNode, tidyNodeLayout } from "./graphLayout";
+import { type LayoutEdge, type LayoutNode, tidyGraphLayout, tidyNodeLayout } from "./graphLayout";
 
 const nodes: LayoutNode[] = [
   {
@@ -102,5 +102,38 @@ describe("tidy node layout", () => {
     expect(Object.fromEntries(tidyNodeLayout(nodes.slice(1, 3), cycleEdges))).toEqual(
       Object.fromEntries(tidyNodeLayout(nodes.slice(1, 3).reverse(), cycleEdges.reverse())),
     );
+  });
+
+  it("lays out wire bundles as multiplex and demultiplex routing nodes", () => {
+    const tiedEdges = edges.slice(2).map((edge, index) => ({ ...edge, id: `edge-${index}` }));
+    const result = tidyGraphLayout(nodes, tiedEdges, [
+      { id: "bundle", edgeIds: tiedEdges.map((edge) => edge.id) },
+    ]);
+    const waypoints = result.wireBundleWaypoints.get("bundle")!;
+    const sourceRight = Math.max(
+      result.nodePositions.get("left")!.x + nodes[1].width,
+      result.nodePositions.get("right")!.x + nodes[2].width,
+    );
+    const targetLeft = result.nodePositions.get("merge")!.x;
+
+    expect(waypoints[0].x).toBeGreaterThan(sourceRight);
+    expect(waypoints[0].x).toBeLessThan(waypoints[1].x);
+    expect(waypoints[1].x).toBeLessThan(targetLeft);
+  });
+
+  it("lays out tied graphs deterministically and ignores partial ties", () => {
+    const tiedEdges = edges.map((edge, index) => ({ ...edge, id: `edge-${index}` }));
+    const tie = { id: "bundle", edgeIds: tiedEdges.map((edge) => edge.id) };
+    const first = tidyGraphLayout(nodes, tiedEdges, [tie]);
+    const reordered = tidyGraphLayout([...nodes].reverse(), [...tiedEdges].reverse(), [tie]);
+    const partial = tidyGraphLayout(nodes.slice(0, 3), tiedEdges, [tie]);
+
+    expect(Object.fromEntries(first.nodePositions)).toEqual(
+      Object.fromEntries(reordered.nodePositions),
+    );
+    expect(Object.fromEntries(first.wireBundleWaypoints)).toEqual(
+      Object.fromEntries(reordered.wireBundleWaypoints),
+    );
+    expect(partial.wireBundleWaypoints.size).toBe(0);
   });
 });

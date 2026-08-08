@@ -979,20 +979,16 @@
 }
 
 :global(.react-flow__edge.selected) :global(.react-flow__edge-path) {
-  stroke: #c9b4e9;
-  stroke-width: 2.2;
+  stroke-width: 2.8;
+  filter: brightness(1.28) drop-shadow(0 0 6px rgba(236, 222, 255, 0.48));
 }
 
 :global(.react-flow__edge.animated) :global(.react-flow__edge-path) {
-  stroke: #c9b4e9;
+  stroke-width: 2.2;
 }
 
 :global(.react-flow__edge).edge-transfer-pulse :global(.react-flow__edge-path) {
-  stroke: #f0dbff;
-  stroke-width: 3.4;
-  stroke-dasharray: 8 5;
-  filter: drop-shadow(0 0 7px rgba(220, 179, 255, 0.8));
-  animation: edge-transfer 600ms linear both;
+  filter: brightness(1.18) drop-shadow(0 0 5px rgba(220, 179, 255, 0.42));
 }
 
 @keyframes edge-transfer {
@@ -1020,13 +1016,11 @@
 }
 
 :global(.react-flow__edge).execution-scope-edge :global(.react-flow__edge-path) {
-  stroke: #b99bdd;
   stroke-width: 2.15;
   filter: drop-shadow(0 0 5px rgba(188, 152, 224, 0.28));
 }
 
 :global(.react-flow__edge).selection-path-edge :global(.react-flow__edge-path) {
-  stroke: #a994c2;
   stroke-width: 2;
   filter: drop-shadow(0 0 4px rgba(169, 148, 194, 0.22));
 }
@@ -1034,6 +1028,49 @@
 :global(.react-flow__edge).selection-unrelated-edge:not(:global(.selected)),
 :global(.react-flow__edge).execution-unrelated-edge:not(:global(.selected)) {
   opacity: 0.18;
+}
+
+:global(.react-flow__edge).wire-hovered :global(.react-flow__edge-path) {
+  stroke-width: 3px;
+  filter: brightness(1.25) drop-shadow(0 0 7px rgba(239, 225, 255, 0.42));
+}
+
+:global(.react-flow__edge).wire-hover-dimmed:not(:global(.selected)) {
+  opacity: 0.16;
+}
+
+.selection-marquee {
+  position: absolute;
+  z-index: 12;
+  pointer-events: none;
+  background: rgba(143, 135, 150, 0.08);
+  border: 1px solid rgba(180, 169, 188, 0.72);
+  box-shadow: inset 0 0 18px rgba(172, 158, 184, 0.08);
+}
+
+.selection-marquee.kind-node {
+  background: rgba(169, 139, 244, 0.1);
+  border-color: rgba(188, 162, 247, 0.82);
+}
+
+.selection-marquee.kind-wire {
+  background: rgba(95, 193, 170, 0.08);
+  border-color: rgba(111, 209, 186, 0.84);
+}
+
+.selection-marquee > span {
+  position: absolute;
+  top: -21px;
+  left: -1px;
+  padding: 3px 6px;
+  color: #d9d0dc;
+  background: rgba(20, 17, 23, 0.94);
+  border: 1px solid rgba(84, 75, 90, 0.92);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 :global(.react-flow__edgeupdater) {

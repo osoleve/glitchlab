@@ -658,6 +658,20 @@
             },
             "title": "Frames",
             "type": "array"
+          },
+          "wire_bundles": {
+            "items": {
+              "$ref": "#/components/schemas/WireBundlePresentation"
+            },
+            "title": "Wire Bundles",
+            "type": "array"
+          },
+          "wires": {
+            "items": {
+              "$ref": "#/components/schemas/WirePresentation"
+            },
+            "title": "Wires",
+            "type": "array"
           }
         },
         "title": "GraphPresentation",
@@ -1986,6 +2000,89 @@
           "type"
         ],
         "title": "ValidationIssue",
+        "type": "object"
+      },
+      "WireBundlePresentation": {
+        "description": "A visual-only routed bundle of graph edges.",
+        "properties": {
+          "collapsed": {
+            "default": false,
+            "title": "Collapsed",
+            "type": "boolean"
+          },
+          "edge_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "title": "Edge Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "waypoints": {
+            "items": {
+              "$ref": "#/components/schemas/Position"
+            },
+            "minItems": 2,
+            "title": "Waypoints",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "edge_ids",
+          "waypoints"
+        ],
+        "title": "WireBundlePresentation",
+        "type": "object"
+      },
+      "WirePresentation": {
+        "description": "Visual overrides for one semantic graph edge.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "enum": [
+                  "slate",
+                  "amber",
+                  "cyan",
+                  "teal",
+                  "violet",
+                  "coral",
+                  "blue",
+                  "rose"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "edge_id": {
+            "title": "Edge Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "edge_id"
+        ],
+        "title": "WirePresentation",
         "type": "object"
       },
       "WorkflowDraft": {

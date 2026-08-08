@@ -536,10 +536,10 @@
   width: 18px;
   height: 18px;
   background: #18141b;
-  border: 2px solid color-mix(in srgb, var(--accent) 72%, #d8ceda);
+  border: 2px solid color-mix(in srgb, var(--port-color, var(--accent)) 78%, #f0e8f1);
   box-shadow:
     0 0 0 2px #151118,
-    0 0 8px color-mix(in srgb, var(--accent) 24%, transparent);
+    0 0 8px color-mix(in srgb, var(--port-color, var(--accent)) 28%, transparent);
   transition:
     width 110ms ease,
     height 110ms ease,
@@ -551,7 +551,21 @@
 :global(.react-flow__handle.connectingfrom) {
   width: 22px;
   height: 22px;
-  background: var(--accent);
+  background: var(--port-color, var(--accent));
+}
+
+.node-port.is-wire-hovered {
+  color: #fff8ee;
+  background: color-mix(in srgb, var(--port-color) 18%, transparent);
+}
+
+.node-port.is-wire-hovered :global(.react-flow__handle) {
+  width: 22px;
+  height: 22px;
+  background: var(--port-color);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--port-color) 22%, transparent),
+    0 0 14px color-mix(in srgb, var(--port-color) 58%, transparent);
 }
 
 :global(.react-flow__handle.connectingto:not(.valid)) {

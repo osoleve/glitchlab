@@ -1,0 +1,184 @@
+.waypointHandle {
+  position: absolute;
+  z-index: 6;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  pointer-events: all;
+  color: #d2c8da;
+  background: transparent;
+  border: 0;
+  cursor: grab;
+  transform-origin: center;
+}
+
+.waypointHandle:active,
+.bundleTrunkHitArea:active {
+  cursor: grabbing;
+}
+
+.waypointHandle span {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 7px;
+  background: linear-gradient(180deg, #a9a0b0 0 28%, #5d5665 29% 70%, #91889a 71%);
+  border: 1px solid #c4bacb;
+  border-radius: 2px;
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.58),
+    0 0 0 1px rgba(15, 13, 18, 0.7);
+}
+
+.waypointHandle span::after {
+  position: absolute;
+  top: 1px;
+  right: -4px;
+  width: 5px;
+  height: 3px;
+  background: #68616f;
+  border: 1px solid #aaa0b2;
+  border-left: 0;
+  border-radius: 0 2px 2px 0;
+  content: "";
+}
+
+.waypointHandle:hover span,
+.waypointHandle:focus-visible span {
+  border-color: #eed69e;
+  box-shadow:
+    0 0 0 2px rgba(208, 171, 101, 0.2),
+    0 2px 7px rgba(0, 0, 0, 0.64);
+}
+
+.waypointHandle:focus-visible {
+  outline: none;
+}
+
+.bundleTrunkHitArea {
+  fill: none;
+  pointer-events: stroke !important;
+  stroke: transparent;
+  stroke-width: 22px;
+  cursor: grab;
+}
+
+.bundleCount {
+  position: absolute;
+  z-index: 5;
+  display: inline-flex;
+  min-width: 20px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  pointer-events: none;
+  color: #d8cedc;
+  background: rgba(25, 21, 29, 0.94);
+  border: 1px solid #514858;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 7px;
+}
+
+.transferOverlay {
+  fill: none;
+  pointer-events: none;
+  stroke: #fff4ff;
+  stroke-width: 3.4px;
+  stroke-dasharray: 8 5;
+  filter: drop-shadow(0 0 7px rgba(220, 179, 255, 0.8));
+  animation: wire-transfer 600ms linear both;
+}
+
+@keyframes wire-transfer {
+  from {
+    stroke-dashoffset: 26;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.edgeToolbar {
+  display: flex;
+  min-height: 38px;
+  align-items: stretch;
+  overflow: hidden;
+  color: #bbb1bf;
+  background: rgba(24, 20, 28, 0.98);
+  border: 1px solid #514657;
+  border-radius: 5px 5px 11px 5px;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.46);
+  font-family: var(--mono);
+}
+
+.edgeCount,
+.colorPicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px;
+  color: #807687;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.colorPicker {
+  gap: 6px;
+  padding-right: 7px;
+  border-left: 1px solid #39313e;
+}
+
+.colorPicker select {
+  max-width: 76px;
+  height: 24px;
+  color: #cfc7d2;
+  background: #17131a;
+  border: 1px solid #423847;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 8px;
+}
+
+.edgeToolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  color: #cfc7d2;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid #39313e;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.edgeToolbar button:hover:not(:disabled) {
+  color: #f0dda8;
+  background: #2b2530;
+}
+
+.edgeToolbar button:last-child:hover:not(:disabled) {
+  color: #eda0a7;
+  background: #331f25;
+}
+
+.edgeToolbar button:disabled,
+.colorPicker select:disabled {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transferOverlay {
+    stroke-width: 4px;
+    stroke-dasharray: none;
+    animation: none;
+  }
+}

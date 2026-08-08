@@ -5,6 +5,8 @@ import type {
   GraphPresentation,
   GraphSpec,
   NodeDefinition,
+  WireBundle,
+  WirePresentation,
   WorkflowEdge,
   WorkflowFrame,
   WorkflowNode,
@@ -21,6 +23,8 @@ export function serializePresentation(
   nodes: WorkflowNode[],
   frames: WorkflowFrame[],
   edgeRouting: EdgeRouting,
+  wires: WirePresentation[],
+  wireBundles: WireBundle[],
 ): GraphPresentation {
   return {
     edge_routing: edgeRouting,
@@ -33,6 +37,17 @@ export function serializePresentation(
       collapsed: frame.data.collapsed,
       node_ids: nodes.filter((node) => node.parentId === frame.id).map((node) => node.id),
     })),
+    wires: wires.map((wire) => ({
+      edge_id: wire.edgeId,
+      ...(wire.color ? { color: wire.color } : {}),
+    })),
+    wire_bundles: wireBundles.map((bundle) => ({
+      id: bundle.id,
+      edge_ids: bundle.edgeIds,
+      waypoints: bundle.waypoints,
+      collapsed: bundle.collapsed,
+      ...(bundle.label ? { label: bundle.label } : {}),
+    })),
   };
 }
 
@@ -42,6 +57,8 @@ export function serializeGraph(
   edges: WorkflowEdge[],
   frames: WorkflowFrame[] = [],
   edgeRouting: EdgeRouting = "smoothstep",
+  wires: WirePresentation[] = [],
+  wireBundles: WireBundle[] = [],
 ): GraphSpec {
   const frameMap = new Map(frames.map((frame) => [frame.id, frame]));
   return {
@@ -67,7 +84,7 @@ export function serializeGraph(
       target: edge.target,
       target_port: edge.targetHandle!,
     })),
-    presentation: serializePresentation(nodes, frames, edgeRouting),
+    presentation: serializePresentation(nodes, frames, edgeRouting, wires, wireBundles),
   };
 }
 
@@ -80,6 +97,8 @@ export function hydrateGraph(
   edges: WorkflowEdge[];
   frames: WorkflowFrame[];
   edgeRouting: EdgeRouting;
+  wires: WirePresentation[];
+  wireBundles: WireBundle[];
 } {
   const definitions = new Map(
     catalogDefinitions.map((definition) => [definition.kind, definition]),
@@ -151,5 +170,16 @@ export function hydrateGraph(
     edges,
     frames,
     edgeRouting: presentation?.edge_routing ?? "smoothstep",
+    wires: (presentation?.wires ?? []).map((wire) => ({
+      edgeId: wire.edge_id,
+      ...(wire.color ? { color: wire.color } : {}),
+    })),
+    wireBundles: (presentation?.wire_bundles ?? []).map((bundle) => ({
+      id: bundle.id,
+      edgeIds: bundle.edge_ids,
+      waypoints: bundle.waypoints,
+      collapsed: bundle.collapsed,
+      ...(bundle.label ? { label: bundle.label } : {}),
+    })),
   };
 }

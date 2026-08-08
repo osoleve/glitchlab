@@ -389,11 +389,13 @@ async def test_huggingface_dataset_graph_exposes_result_and_rows(
     assert response.manifest.graph.nodes[0].config["revision"] == "commit"
 
 
-def test_graph_presentation_is_backward_compatible_and_round_trips() -> None:
-    legacy = GraphSpec.model_validate({"name": "legacy", "nodes": [], "edges": []})
-    assert legacy.presentation.model_dump() == {
+def test_graph_presentation_defaults_and_round_trips() -> None:
+    empty = GraphSpec.model_validate({"name": "empty", "nodes": [], "edges": []})
+    assert empty.presentation.model_dump() == {
         "edge_routing": "smoothstep",
         "frames": [],
+        "wires": [],
+        "wire_bundles": [],
     }
 
     graph = GraphSpec.model_validate(
@@ -525,3 +527,53 @@ def test_graph_presentation_rejects_ambiguous_frame_membership(
                 "presentation": {"frames": frames},
             }
         )
+
+
+def test_graph_presentation_round_trips_and_validates_wires_and_bundles() -> None:
+    graph = GraphSpec.model_validate(
+        {
+            "nodes": [
+                {"id": "source-a", "kind": "text_input"},
+                {"id": "source-b", "kind": "text_input"},
+                {"id": "target", "kind": "gaggle"},
+            ],
+            "edges": [
+                {
+                    "id": "edge-a",
+                    "source": "source-a",
+                    "source_port": "text",
+                    "target": "target",
+                    "target_port": "items",
+                },
+                {
+                    "id": "edge-b",
+                    "source": "source-b",
+                    "source_port": "text",
+                    "target": "target",
+                    "target_port": "items",
+                },
+            ],
+            "presentation": {
+                "wires": [{"edge_id": "edge-a", "color": "rose"}],
+                "wire_bundles": [
+                    {
+                        "id": "bundle-a",
+                        "edge_ids": ["edge-a", "edge-b"],
+                        "waypoints": [
+                            {"x": 120, "y": 80},
+                            {"x": 280, "y": 120},
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+
+    assert graph.presentation.wires[0].color == "rose"
+    assert graph.presentation.wire_bundles[0].edge_ids == ["edge-a", "edge-b"]
+    dumped = graph.model_dump(mode="json")
+    assert GraphSpec.model_validate(dumped).model_dump(mode="json") == dumped
+
+    dumped["presentation"]["wire_bundles"][0]["edge_ids"] = ["edge-a", "missing"]
+    with pytest.raises(ValidationError, match="references unknown edge"):
+        GraphSpec.model_validate(dumped)

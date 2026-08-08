@@ -33,6 +33,7 @@ import { selectedLoomText } from "./loom";
 import { moduleClassNames as cx } from "./moduleClassNames";
 import type { FieldDefinition, WorkflowNode, WorkflowNodeData } from "./types";
 import styles from "./WorkflowNode.module.css";
+import { WIRE_COLOR_VALUES, wireColorForValueType } from "./wireAppearance";
 
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number }>> = {
   text_input: TextCursorInput,
@@ -336,7 +337,15 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
               "node-port",
               "node-port-input",
               port.control && "is-control-port",
+              data.wireHover?.direction === "input" &&
+                data.wireHover.portName === port.name &&
+                "is-wire-hovered",
             )}
+            style={
+              {
+                "--port-color": WIRE_COLOR_VALUES[wireColorForValueType(port.type)],
+              } as CSSProperties
+            }
             key={port.name}
             title={port.control ? `${port.label} control input` : undefined}
           >
@@ -354,7 +363,15 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
               "node-port",
               "node-port-output",
               port.control && "is-control-port",
+              data.wireHover?.direction === "output" &&
+                data.wireHover.portName === port.name &&
+                "is-wire-hovered",
             )}
+            style={
+              {
+                "--port-color": WIRE_COLOR_VALUES[wireColorForValueType(port.type)],
+              } as CSSProperties
+            }
             key={port.name}
             title={port.control ? `${port.label} control output` : undefined}
           >
