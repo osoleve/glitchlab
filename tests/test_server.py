@@ -17,7 +17,12 @@ async def test_health_and_catalog_contract() -> None:
 
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
+    assert health.json()["glitchlings"]["available"] is True
+    assert health.json()["glitchlings"]["version"] is not None
     assert catalog.status_code == 200
+    assert {"typogre", "scannequin"}.issubset(
+        {item["name"] for item in catalog.json()["glitchlings"]}
+    )
     kinds = {node["kind"] for node in catalog.json()["nodes"]}
     assert {
         "text_input",
@@ -239,7 +244,7 @@ async def test_graph_documents_roundtrip_revision_guard_and_trash(
 
 
 @pytest.mark.asyncio
-async def test_saved_graph_round_trips_wire_colors_and_bundles(
+async def test_saved_graph_round_trips_canvas_presentation(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -281,6 +286,16 @@ async def test_saved_graph_round_trips_wire_colors_and_bundles(
                     "label": "Talkie pair",
                 }
             ],
+            "notes": [
+                {
+                    "id": "note-a",
+                    "text": "  Keep exact spacing.  ",
+                    "color": "amber",
+                    "position": {"x": 40, "y": 360},
+                    "width": 280,
+                    "height": 160,
+                }
+            ],
         },
     }
     async with httpx.AsyncClient(
@@ -306,6 +321,16 @@ async def test_saved_graph_round_trips_wire_colors_and_bundles(
             "label": "Talkie pair",
         }
     ]
+    assert presentation["notes"] == [
+        {
+            "id": "note-a",
+            "text": "  Keep exact spacing.  ",
+            "color": "amber",
+            "position": {"x": 40.0, "y": 360.0},
+            "width": 280.0,
+            "height": 160.0,
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -323,9 +348,12 @@ async def test_checked_in_graph_templates_are_read_only(
         traversal = await client.get("/api/graph-templates/..%2Fpyproject")
 
     assert listed.status_code == 200
-    assert any(
-        item["id"] == "openrouter-huggingface" for item in listed.json()["templates"]
-    )
+    assert {item["id"] for item in listed.json()["templates"]} == {
+        "openrouter-huggingface",
+        "phased-math-worksheet",
+        "prompt-corruption-ab",
+        "two-model-synthesis",
+    }
     assert loaded.status_code == 200
     assert loaded.json()["template"]["graph"]["name"] == (
         "Hugging Face prompts through OpenRouter"

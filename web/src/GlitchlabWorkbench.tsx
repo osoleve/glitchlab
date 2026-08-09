@@ -98,6 +98,7 @@ import type {
   WorkflowEdge,
   WorkflowFrame,
   WorkflowNode,
+  WorkflowNote,
 } from "./types";
 import { wireAppearance } from "./wireAppearance";
 import { inferWorkflowDraft, reviseWorkflowDraft } from "./workflow";
@@ -225,6 +226,7 @@ export function GlitchlabWorkbench() {
     nodes,
     edges,
     frames,
+    notes,
     edgeRouting,
     wires,
     wireBundles,
@@ -233,6 +235,7 @@ export function GlitchlabWorkbench() {
     graphName,
     isDirty,
     setNodes,
+    setNotes,
     setEdgeRouting,
     bundleEdges,
     addEdgesToBundle,
@@ -245,6 +248,7 @@ export function GlitchlabWorkbench() {
     updateDocument,
     applyNodeChanges,
     applyFrameChanges,
+    applyNoteChanges,
     applyEdgeChanges,
     connect: connectGraph,
     updateNodeField: updateGraphNodeField,
@@ -258,6 +262,10 @@ export function GlitchlabWorkbench() {
     addFrame,
     updateFrame,
     removeFrames,
+    addNote,
+    updateNote,
+    duplicateNotes,
+    removeNotes,
     selectAllNodes: selectAllGraphNodes,
     selectRelatedNodes,
     replaceGraph,
@@ -355,6 +363,7 @@ export function GlitchlabWorkbench() {
       nodes,
       edges,
       frames,
+      notes,
       edgeRouting,
       wires,
       wireBundles,
@@ -373,6 +382,7 @@ export function GlitchlabWorkbench() {
       edges,
       executionScope,
       frames,
+      notes,
       isDirty,
       graphName,
       nodes,
@@ -394,6 +404,7 @@ export function GlitchlabWorkbench() {
         snapshot.edgeRouting,
         snapshot.wires,
         snapshot.wireBundles,
+        snapshot.notes,
       );
       setRun(snapshot.run);
       setRunError(snapshot.runError);
@@ -486,7 +497,7 @@ export function GlitchlabWorkbench() {
   }, [hasUnsavedTabs]);
 
   useEffect(() => {
-    if (!needsFit || !nodesInitialized || nodes.length === 0) return;
+    if (!needsFit || !nodesInitialized || nodes.length + notes.length === 0) return;
     const frame = window.requestAnimationFrame(() => {
       void fitView({
         padding: 0.03,
@@ -497,13 +508,13 @@ export function GlitchlabWorkbench() {
       setNeedsFit(false);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [fitView, needsFit, nodes.length, nodesInitialized]);
+  }, [fitView, needsFit, nodes.length, nodesInitialized, notes.length]);
 
   // Panel visibility changes intentionally retrigger the fit after CSS transitions.
   // biome-ignore lint/correctness/useExhaustiveDependencies(inspectorOpen): trigger-only dependency
   // biome-ignore lint/correctness/useExhaustiveDependencies(paletteOpen): trigger-only dependency
   useEffect(() => {
-    if (!nodesInitialized || nodes.length === 0 || needsFit) return;
+    if (!nodesInitialized || nodes.length + notes.length === 0 || needsFit) return;
     const timer = window.setTimeout(() => {
       void fitView({
         padding: 0.03,
@@ -513,7 +524,7 @@ export function GlitchlabWorkbench() {
       });
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [fitView, inspectorOpen, needsFit, nodes.length, nodesInitialized, paletteOpen]);
+  }, [fitView, inspectorOpen, needsFit, nodes.length, nodesInitialized, notes.length, paletteOpen]);
 
   useEffect(() => {
     if (!running) return;
@@ -531,6 +542,7 @@ export function GlitchlabWorkbench() {
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
+  const selectedNotes = useMemo(() => notes.filter((note) => note.selected), [notes]);
   const contextualWorkflowDefinition =
     selectedNodes.length <= 1
       ? selectedNode?.data.definition.workflow
@@ -629,11 +641,18 @@ export function GlitchlabWorkbench() {
   const onNodesChange = useCallback(
     (changes: NodeChange<CanvasNode>[]) => {
       const frameIds = new Set(frames.map((frame) => frame.id));
+      const noteIds = new Set(notes.map((note) => note.id));
       const isFrameChange = (change: NodeChange<CanvasNode>) => {
         if (change.type === "add" || change.type === "replace") {
           return change.item.type === "workflowFrame";
         }
         return frameIds.has(change.id);
+      };
+      const isNoteChange = (change: NodeChange<CanvasNode>) => {
+        if (change.type === "add" || change.type === "replace") {
+          return change.item.type === "workflowNote";
+        }
+        return noteIds.has(change.id);
       };
       const collapsedIds = new Set(
         frames.filter((frame) => frame.data.collapsed).map((frame) => frame.id),
@@ -643,14 +662,16 @@ export function GlitchlabWorkbench() {
           isFrameChange(change) && !(change.type === "dimensions" && collapsedIds.has(change.id)),
       ) as NodeChange<WorkflowFrame>[];
       const nodeChanges = changes.filter(
-        (change) => !isFrameChange(change),
+        (change) => !isFrameChange(change) && !isNoteChange(change),
       ) as NodeChange<WorkflowNode>[];
+      const noteChanges = changes.filter(isNoteChange) as NodeChange<WorkflowNote>[];
       const semantic = nodeChanges.some(
         (change) => change.type === "add" || change.type === "remove",
       );
       if (semantic) markSemanticDirty();
       if (nodeChanges.length > 0) applyNodeChanges(nodeChanges);
       if (frameChanges.length > 0) applyFrameChanges(frameChanges);
+      if (noteChanges.length > 0) applyNoteChanges(noteChanges);
       const dragging = changes.some(
         (change) => change.type === "position" && change.dragging === true,
       );
@@ -666,7 +687,7 @@ export function GlitchlabWorkbench() {
         nodeDragHistoryPaused.current = false;
       }
     },
-    [applyFrameChanges, applyNodeChanges, frames, markSemanticDirty],
+    [applyFrameChanges, applyNodeChanges, applyNoteChanges, frames, markSemanticDirty, notes],
   );
   const finishNodeDragHistory = useCallback(() => {
     if (!nodeDragHistoryPaused.current) return;
@@ -1194,6 +1215,7 @@ export function GlitchlabWorkbench() {
         edgeRouting: hydrated.edgeRouting,
         wires: hydrated.wires,
         wireBundles: hydrated.wireBundles,
+        notes: hydrated.notes,
         graphName: response.workflow.name,
         isDirty: false,
       };
@@ -1249,6 +1271,7 @@ export function GlitchlabWorkbench() {
       edgeRouting: hydrated.edgeRouting,
       wires: hydrated.wires,
       wireBundles: hydrated.wireBundles,
+      notes: hydrated.notes,
       graphName: graph.name,
       isDirty: true,
     };
@@ -1304,6 +1327,7 @@ export function GlitchlabWorkbench() {
         edgeRouting: hydrated.edgeRouting,
         wires: hydrated.wires,
         wireBundles: hydrated.wireBundles,
+        notes: hydrated.notes,
         graphName: response.graph.graph.name,
         isDirty: false,
       };
@@ -1371,6 +1395,7 @@ export function GlitchlabWorkbench() {
         edgeRouting,
         wires,
         wireBundles,
+        notes,
       );
       const saved =
         activeGraph && !options.createNew
@@ -1716,7 +1741,16 @@ export function GlitchlabWorkbench() {
   };
 
   const execute = async (requestedTargetIds: string[] = []) => {
-    const graph = serializeGraph(graphName, nodes, edges, frames, edgeRouting, wires, wireBundles);
+    const graph = serializeGraph(
+      graphName,
+      nodes,
+      edges,
+      frames,
+      edgeRouting,
+      wires,
+      wireBundles,
+      notes,
+    );
     const submittedFingerprint = semanticExecutionFingerprint(graph);
     const targetNodeIds = [
       ...new Set(requestedTargetIds.filter((nodeId) => nodes.some((node) => node.id === nodeId))),
@@ -1993,10 +2027,13 @@ export function GlitchlabWorkbench() {
           setResetDialogOpen(false);
         } else if (editable) {
           event.target.blur();
-        } else if (selectedId) {
+        } else if (selectedId || selectedNotes.length > 0) {
           event.preventDefault();
           setNodes((current) =>
             current.map((node) => (node.selected ? { ...node, selected: false } : node)),
+          );
+          setNotes((current) =>
+            current.map((note) => (note.selected ? { ...note, selected: false } : note)),
           );
           setSelectedId(undefined);
           setInspectorOpen(false);
@@ -2061,10 +2098,14 @@ export function GlitchlabWorkbench() {
         !resetDialogOpen &&
         !saveDialogOpen &&
         !savingGraph &&
-        selectedNodes.length > 0
+        (selectedNodes.length > 0 || selectedNotes.length > 0)
       ) {
         event.preventDefault();
-        duplicateSelected();
+        if (selectedNotes.length > 0) {
+          duplicateNotes(selectedNotes.map((note) => note.id));
+        } else {
+          duplicateSelected();
+        }
         return;
       }
       if (commandKey && event.key === "Enter" && !running && !savingGraph && nodes.length > 0) {
@@ -2214,6 +2255,15 @@ export function GlitchlabWorkbench() {
               : scopedNodeIdSet.has(node.id)
                 ? ("required" as const)
                 : ("unrelated" as const),
+      },
+    })),
+    ...notes.map((note) => ({
+      ...note,
+      data: {
+        ...note.data,
+        onUpdate: (update: Partial<Pick<WorkflowNote["data"], "text" | "color">>) =>
+          updateNote(note.id, update),
+        onRemove: () => removeNotes([note.id]),
       },
     })),
   ];
@@ -2428,10 +2478,18 @@ export function GlitchlabWorkbench() {
                 addFrame(position);
                 setContextMenu(undefined);
               }}
+              onAddNote={(position) => {
+                addNote(position);
+                setContextMenu(undefined);
+              }}
               onArrangeSelection={arrangeSelection}
               onDeleteNodes={deleteSelected}
               onDeleteFrame={(frameId) => {
                 removeFrames([frameId]);
+                setContextMenu(undefined);
+              }}
+              onDeleteNote={(noteId) => {
+                removeNotes([noteId]);
                 setContextMenu(undefined);
               }}
               onDeleteWorkflow={requestDeleteWorkflow}
@@ -2442,6 +2500,10 @@ export function GlitchlabWorkbench() {
               }}
               onDismiss={() => setContextMenu(undefined)}
               onDuplicateNodes={duplicateSelected}
+              onDuplicateNote={(noteId) => {
+                duplicateNotes([noteId]);
+                setContextMenu(undefined);
+              }}
               onExecute={(nodeIds) => void execute(nodeIds)}
               onFitGraph={() => {
                 void fitView({
@@ -3076,7 +3138,16 @@ export function GlitchlabWorkbench() {
       )}
       {openLoomNodeId && nodes.find((node) => node.id === openLoomNodeId)?.data.state && (
         <LoomEditor
-          graph={serializeGraph(graphName, nodes, edges, frames, edgeRouting, wires, wireBundles)}
+          graph={serializeGraph(
+            graphName,
+            nodes,
+            edges,
+            frames,
+            edgeRouting,
+            wires,
+            wireBundles,
+            notes,
+          )}
           node={nodes.find((node) => node.id === openLoomNodeId)!}
           onChange={(state) => updateLoomState(openLoomNodeId, state)}
           onClose={() => setOpenLoomNodeId(undefined)}

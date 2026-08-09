@@ -311,6 +311,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
                 "base_url",
                 "text",
                 "http://127.0.0.1:8000/v1",
+                help_text="Base URL ending in /v1; Glitchlab appends /completions.",
                 inline=True,
             ),
             _field(

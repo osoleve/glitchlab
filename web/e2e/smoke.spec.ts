@@ -225,6 +225,72 @@ test("the Loom editor preserves whitespace and caret edits", async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
+test("inline endpoint editing preserves the caret and recent values are reusable", async ({
+  page,
+}) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  const endpointNode = page.locator('.react-flow__node[data-id="endpoint"]');
+  const endpointInput = endpointNode.getByRole("textbox");
+  const originalEndpoint = await endpointInput.inputValue();
+  const insertionPoint = originalEndpoint.indexOf("://") + 3;
+  await endpointInput.evaluate((element: HTMLInputElement, caret) => {
+    element.focus();
+    element.setSelectionRange(caret, caret);
+  }, insertionPoint);
+  await page.keyboard.type("edge.");
+
+  await expect(endpointInput).toHaveValue(
+    `${originalEndpoint.slice(0, insertionPoint)}edge.${originalEndpoint.slice(insertionPoint)}`,
+  );
+  expect(await endpointInput.evaluate((element: HTMLInputElement) => element.selectionStart)).toBe(
+    insertionPoint + 5,
+  );
+  await endpointInput.blur();
+  const recentEndpoints = endpointNode.getByRole("combobox", { name: "Recent endpoint URLs" });
+  await expect(recentEndpoints).toContainText("edge.");
+
+  await endpointInput.fill("http://temporary.test/v1");
+  await endpointInput.blur();
+  await recentEndpoints.selectOption(
+    `${originalEndpoint.slice(0, insertionPoint)}edge.${originalEndpoint.slice(insertionPoint)}`,
+  );
+  await expect(endpointInput).toHaveValue(
+    `${originalEndpoint.slice(0, insertionPoint)}edge.${originalEndpoint.slice(insertionPoint)}`,
+  );
+
+  const modelNode = page.locator('.react-flow__node[data-id="model"]');
+  const modelInput = modelNode.getByRole("textbox");
+  await modelInput.fill("publisher/used-model");
+  await modelInput.blur();
+  await expect(modelNode.getByRole("combobox", { name: "Recent model IDs" })).toContainText(
+    "publisher/used-model",
+  );
+
+  await endpointNode.locator("header").click();
+  const inspector = page.locator('aside[aria-label="Inspector"]');
+  const inspectorEndpoint = inspector.getByRole("textbox", { name: "Base URL" });
+  const inspectorValue = await inspectorEndpoint.inputValue();
+  const inspectorInsertionPoint = inspectorValue.indexOf("://") + 3;
+  await inspectorEndpoint.evaluate((element: HTMLInputElement, caret) => {
+    element.focus();
+    element.setSelectionRange(caret, caret);
+  }, inspectorInsertionPoint);
+  await page.keyboard.type("inspector.");
+  await expect(inspectorEndpoint).toHaveValue(
+    `${inspectorValue.slice(0, inspectorInsertionPoint)}inspector.${inspectorValue.slice(inspectorInsertionPoint)}`,
+  );
+  expect(
+    await inspectorEndpoint.evaluate((element: HTMLInputElement) => element.selectionStart),
+  ).toBe(inspectorInsertionPoint + 10);
+  await inspectorEndpoint.blur();
+  await expect(
+    inspector.getByRole("combobox", { name: "Recent endpoint URLs" }),
+  ).toContainText("inspector.");
+  expect(errors).toEqual([]);
+});
+
 test("the Loom steers exact tokens with digit hotkeys and a nested left-to-right branch", async ({
   page,
 }) => {
@@ -294,6 +360,68 @@ test("canvas context menu adds a node with the mouse", async ({ page }) => {
   await expect(nodes).toHaveCount(5);
   await expect(page.locator('.react-flow__node[data-id^="number_input-"]')).toHaveCount(1);
   await expect(page.getByRole("menu")).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test("public starter templates load with canvas guidance", async ({ page }) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Phased math worksheet/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Two-model synthesis/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Prompt corruption A\/B lab/ })).toBeVisible();
+  await page.getByRole("button", { name: /Phased math worksheet/ }).click();
+
+  await expect(page.locator('.react-flow__node[data-id="worksheet-preview"]')).toBeVisible();
+  await expect(page.locator(".react-flow__node-workflowNote")).toHaveCount(3);
+  await expect(page.getByLabel("Canvas note").nth(1)).toHaveValue(
+    /Select field node takes the completion's text field/,
+  );
+  await expect(page.locator(".react-flow__minimap")).toBeVisible();
+  const canvasBox = await page.locator(".react-flow").boundingBox();
+  expect(canvasBox).not.toBeNull();
+  for (const note of await page.locator(".react-flow__node-workflowNote").all()) {
+    const noteBox = await note.boundingBox();
+    expect(noteBox).not.toBeNull();
+    if (!canvasBox || !noteBox) continue;
+    expect(noteBox.x).toBeGreaterThanOrEqual(canvasBox.x - 2);
+    expect(noteBox.y).toBeGreaterThanOrEqual(canvasBox.y - 2);
+    expect(noteBox.x + noteBox.width).toBeLessThanOrEqual(canvasBox.x + canvasBox.width + 2);
+    expect(noteBox.y + noteBox.height).toBeLessThanOrEqual(canvasBox.y + canvasBox.height + 2);
+  }
+  expect(errors).toEqual([]);
+});
+
+test("canvas notes preserve whitespace and support duplication", async ({ page }) => {
+  const errors = watchPageErrors(page);
+  await page.goto("/");
+
+  await page.locator(".react-flow__pane").click({
+    button: "right",
+    position: { x: 400, y: 20 },
+  });
+  await page.getByRole("menuitem", { name: "Add note" }).click();
+
+  const notes = page.locator(".react-flow__node-workflowNote");
+  await expect(notes).toHaveCount(1);
+  const textarea = page.getByLabel("Canvas note");
+  await textarea.fill("  alpha beta");
+  await textarea.evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(8, 8));
+  await page.keyboard.insertText(" ");
+  await textarea.evaluate((element: HTMLTextAreaElement) =>
+    element.setSelectionRange(element.value.length, element.value.length),
+  );
+  await page.keyboard.insertText("\nkept  ");
+  await expect(textarea).toHaveValue("  alpha  beta\nkept  ");
+
+  await notes.locator("header").click();
+  await page.keyboard.press("Control+d");
+  await expect(notes).toHaveCount(2);
+  await expect(page.getByLabel("Canvas note").nth(0)).toHaveValue("  alpha  beta\nkept  ");
+  await expect(page.getByLabel("Canvas note").nth(1)).toHaveValue("  alpha  beta\nkept  ");
+  await page.getByRole("button", { name: "Delete note" }).last().click();
+  await expect(notes).toHaveCount(1);
   expect(errors).toEqual([]);
 });
 

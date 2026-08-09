@@ -23,12 +23,21 @@ import type {
   WorkflowEdge,
   WorkflowFrame,
   WorkflowNode,
+  WorkflowNote,
 } from "../types";
 
 type Updater<T> = T | ((current: T) => T);
 type GraphDocumentFields = Pick<
   GraphDocumentState,
-  "nodes" | "edges" | "frames" | "edgeRouting" | "wires" | "wireBundles" | "graphName" | "isDirty"
+  | "nodes"
+  | "edges"
+  | "frames"
+  | "notes"
+  | "edgeRouting"
+  | "wires"
+  | "wireBundles"
+  | "graphName"
+  | "isDirty"
 >;
 type GraphDocumentUpdate = Partial<GraphDocumentFields>;
 
@@ -38,6 +47,7 @@ export interface GraphDocumentState {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   frames: WorkflowFrame[];
+  notes: WorkflowNote[];
   edgeRouting: EdgeRouting;
   wires: WirePresentation[];
   wireBundles: WireBundle[];
@@ -48,6 +58,7 @@ export interface GraphDocumentState {
   setNodes: (nodes: Updater<WorkflowNode[]>) => void;
   setEdges: (edges: Updater<WorkflowEdge[]>) => void;
   setFrames: (frames: Updater<WorkflowFrame[]>) => void;
+  setNotes: (notes: Updater<WorkflowNote[]>) => void;
   setEdgeRouting: (edgeRouting: EdgeRouting) => void;
   bundleEdges: (
     edgeIds: string[],
@@ -72,6 +83,7 @@ export interface GraphDocumentState {
   ) => void;
   applyNodeChanges: (changes: NodeChange<WorkflowNode>[]) => void;
   applyFrameChanges: (changes: NodeChange<WorkflowFrame>[]) => void;
+  applyNoteChanges: (changes: NodeChange<WorkflowNote>[]) => void;
   applyEdgeChanges: (changes: EdgeChange<WorkflowEdge>[]) => void;
   connect: (connection: Connection | WorkflowEdge) => void;
   updateNodeField: (nodeId: string, field: string, value: unknown) => void;
@@ -98,6 +110,13 @@ export interface GraphDocumentState {
     update: Partial<{ title: string; color: FrameColor; collapsed: boolean }>,
   ) => void;
   removeFrames: (frameIds: string[]) => void;
+  addNote: (position: FlowPosition, createId?: () => string) => string;
+  updateNote: (
+    noteId: string,
+    update: Partial<Pick<WorkflowNote["data"], "text" | "color">>,
+  ) => void;
+  duplicateNotes: (noteIds: string[], createId?: () => string) => string[];
+  removeNotes: (noteIds: string[]) => void;
   replaceGraph: (
     nodes: WorkflowNode[],
     edges: WorkflowEdge[],
@@ -107,6 +126,7 @@ export interface GraphDocumentState {
     edgeRouting?: EdgeRouting,
     wires?: WirePresentation[],
     wireBundles?: WireBundle[],
+    notes?: WorkflowNote[],
   ) => void;
 }
 
@@ -171,11 +191,27 @@ function historyFrame(frame: WorkflowFrame): WorkflowFrame {
   };
 }
 
+function historyNote(note: WorkflowNote): WorkflowNote {
+  return {
+    ...note,
+    measured: undefined,
+    selected: false,
+    dragging: false,
+    resizing: false,
+    data: {
+      ...note.data,
+      onUpdate: undefined,
+      onRemove: undefined,
+    },
+  };
+}
+
 function graphHistoryState(state: GraphDocumentState): GraphHistoryState {
   return {
     nodes: state.nodes.map(historyNode),
     edges: state.edges.map(historyEdge),
     frames: state.frames.map(historyFrame),
+    notes: state.notes.map(historyNote),
     edgeRouting: state.edgeRouting,
     wires: state.wires.map((wire) => ({ ...wire })),
     wireBundles: state.wireBundles.map((bundle) => ({
@@ -196,6 +232,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
   nodes: [],
   edges: [],
   frames: [],
+  notes: [],
   edgeRouting: "smoothstep",
   wires: [],
   wireBundles: [],
@@ -207,6 +244,8 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     set((state) => ({ edges: typeof edges === "function" ? edges(state.edges) : edges })),
   setFrames: (frames) =>
     set((state) => ({ frames: typeof frames === "function" ? frames(state.frames) : frames })),
+  setNotes: (notes) =>
+    set((state) => ({ notes: typeof notes === "function" ? notes(state.notes) : notes })),
   setEdgeRouting: (edgeRouting) => set({ edgeRouting, isDirty: true }),
   bundleEdges: (edgeIds, start, end, createId = () => crypto.randomUUID()) => {
     let createdId: string | undefined;
@@ -320,6 +359,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         nodes: state.nodes,
         edges: state.edges,
         frames: state.frames,
+        notes: state.notes,
         edgeRouting: state.edgeRouting,
         wires: state.wires,
         wireBundles: state.wireBundles,
@@ -401,6 +441,21 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         nodes,
         frames: applyNodeChanges(changes, state.frames),
         isDirty: state.isDirty || layout,
+      };
+    }),
+  applyNoteChanges: (changes) =>
+    set((state) => {
+      const notes = applyNodeChanges(changes, state.notes);
+      const presentationChanged = changes.some(
+        (change) =>
+          change.type === "add" ||
+          change.type === "remove" ||
+          change.type === "position" ||
+          change.type === "dimensions",
+      );
+      return {
+        notes,
+        isDirty: state.isDirty || presentationChanged,
       };
     }),
   applyEdgeChanges: (changes) =>
@@ -560,6 +615,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         selectionKind: selectedIds.size > 0 ? "node" : undefined,
         nodes: state.nodes.map((node) => ({ ...node, selected: selectedIds.has(node.id) })),
         edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+        notes: state.notes.map((note) => ({ ...note, selected: false })),
       };
     });
     return selectedId;
@@ -572,6 +628,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       selectionKind: selectedIds.size > 0 ? "node" : undefined,
       nodes: state.nodes.map((node) => ({ ...node, selected: selectedIds.has(node.id) })),
       edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+      notes: state.notes.map((note) => ({ ...note, selected: false })),
     }));
     return selectedId;
   },
@@ -591,6 +648,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         selectedId: undefined,
         nodes: state.nodes.map((node) => ({ ...node, selected: false })),
         edges: state.edges.map((edge) => ({ ...edge, selected: selectedIds.has(edge.id) })),
+        notes: state.notes.map((note) => ({ ...note, selected: false })),
       };
     }),
   setSelectionAnchor: (preferredId) => {
@@ -616,6 +674,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         selectionKind: "node",
         nodes: state.nodes.map((node) => ({ ...node, selected: true })),
         edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+        notes: state.notes.map((note) => ({ ...note, selected: false })),
       };
     });
     return selectedId;
@@ -635,6 +694,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         selectionKind: selectedIds.size > 0 ? "node" : undefined,
         nodes: state.nodes.map((node) => ({ ...node, selected: selectedIds.has(node.id) })),
         edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+        notes: state.notes.map((note) => ({ ...note, selected: false })),
       };
     });
     return selectedId;
@@ -645,6 +705,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       selectedId: undefined,
       nodes: state.nodes.map((node) => ({ ...node, selected: false })),
       edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+      notes: state.notes.map((note) => ({ ...note, selected: false })),
     })),
   duplicateNodes: (nodeIds, createId = () => crypto.randomUUID()) => {
     const duplicatedIds: string[] = [];
@@ -835,6 +896,70 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
         isDirty: true,
       };
     }),
+  addNote: (position, createId = () => crypto.randomUUID()) => {
+    const id = `note-${createId().slice(0, 8)}`;
+    set((state) => ({
+      notes: [
+        ...state.notes.map((note) => ({ ...note, selected: false })),
+        {
+          id,
+          type: "workflowNote" as const,
+          position,
+          width: 280,
+          height: 180,
+          dragHandle: ".note-drag-handle",
+          selected: true,
+          data: { text: "", color: "amber" as const },
+        },
+      ],
+      nodes: state.nodes.map((node) => ({ ...node, selected: false })),
+      edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+      frames: state.frames.map((frame) => ({ ...frame, selected: false })),
+      selectionKind: undefined,
+      selectedId: undefined,
+      isDirty: true,
+    }));
+    return id;
+  },
+  updateNote: (noteId, update) =>
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === noteId ? { ...note, data: { ...note.data, ...update } } : note,
+      ),
+      isDirty: true,
+    })),
+  duplicateNotes: (noteIds, createId = () => crypto.randomUUID()) => {
+    const duplicatedIds: string[] = [];
+    set((state) => {
+      const requested = new Set(noteIds);
+      const copies = state.notes.flatMap((note) => {
+        if (!requested.has(note.id)) return [];
+        const id = `note-${createId().slice(0, 8)}`;
+        duplicatedIds.push(id);
+        return [
+          {
+            ...note,
+            id,
+            position: { x: note.position.x + 32, y: note.position.y + 32 },
+            selected: true,
+            data: { text: note.data.text, color: note.data.color },
+          },
+        ];
+      });
+      if (copies.length === 0) return state;
+      return {
+        notes: [...state.notes.map((note) => ({ ...note, selected: false })), ...copies],
+        isDirty: true,
+      };
+    });
+    return duplicatedIds;
+  },
+  removeNotes: (noteIds) =>
+    set((state) => {
+      const ids = new Set(noteIds);
+      const notes = state.notes.filter((note) => !ids.has(note.id));
+      return notes.length === state.notes.length ? state : { notes, isDirty: true };
+    }),
   replaceGraph: (
     nodes,
     edges,
@@ -844,6 +969,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
     edgeRouting = "smoothstep",
     wires = [],
     wireBundles = [],
+    notes = [],
   ) =>
     set({
       nodes,
@@ -852,6 +978,7 @@ const graphDocumentState: StateCreator<GraphDocumentState> = (set) => ({
       edgeRouting,
       wires: reconcileWires(wires, edges),
       wireBundles: reconcileWireBundles(wireBundles, edges),
+      notes,
       selectionKind: nodes.some((node) => node.selected)
         ? "node"
         : edges.some((edge) => edge.selected)

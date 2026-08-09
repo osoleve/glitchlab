@@ -40,6 +40,7 @@ describe("graph document store", () => {
       nodes: [node("one")],
       edges: [],
       frames: [],
+      notes: [],
       edgeRouting: "smoothstep",
       wires: [],
       wireBundles: [],
@@ -106,6 +107,40 @@ describe("graph document store", () => {
     expect(state.nodes.map((item) => item.parentId)).toEqual([frameId, frameId]);
     expect(state.nodes.map((item) => item.data.runStatus)).toEqual(["completed", "completed"]);
     expect(state.isDirty).toBe(true);
+  });
+
+  it("adds, edits, resizes, duplicates, and removes notes without invalidating runs", () => {
+    const noteId = useGraphDocumentStore.getState().addNote({ x: 80, y: 120 }, () => "fixed-id");
+    useGraphDocumentStore
+      .getState()
+      .updateNote(noteId, { text: "  exact  spacing\nkept  ", color: "teal" });
+    useGraphDocumentStore.getState().applyNoteChanges([
+      { id: noteId, type: "position", position: { x: 140, y: 180 }, dragging: false },
+      {
+        id: noteId,
+        type: "dimensions",
+        dimensions: { width: 360, height: 240 },
+        resizing: false,
+      },
+    ]);
+    const duplicateIds = useGraphDocumentStore.getState().duplicateNotes([noteId], () => "copy-id");
+
+    let state = useGraphDocumentStore.getState();
+    expect(noteId).toBe("note-fixed-id");
+    expect(duplicateIds).toEqual(["note-copy-id"]);
+    expect(state.notes[0]).toMatchObject({
+      position: { x: 140, y: 180 },
+      measured: { width: 360, height: 240 },
+      data: { text: "  exact  spacing\nkept  ", color: "teal" },
+    });
+    expect(state.notes[1]?.position).toEqual({ x: 172, y: 212 });
+    expect(state.nodes[0]?.data.runStatus).toBe("completed");
+    expect(state.isDirty).toBe(true);
+
+    useGraphDocumentStore.getState().removeNotes([noteId]);
+    state = useGraphDocumentStore.getState();
+    expect(state.notes.map((note) => note.id)).toEqual(["note-copy-id"]);
+    expect(state.nodes[0]?.data.runStatus).toBe("completed");
   });
 
   it("removing a frame preserves child absolute positions", () => {

@@ -12,6 +12,7 @@ import {
   Save,
   Search,
   Spline,
+  StickyNote,
   Trash2,
   Unplug,
 } from "lucide-react";
@@ -29,6 +30,7 @@ export type ContextMenuState =
     }
   | { x: number; y: number; scope: "selection"; nodeIds: string[] }
   | { x: number; y: number; scope: "frame"; frameId: string }
+  | { x: number; y: number; scope: "note"; noteId: string }
   | {
       x: number;
       y: number;
@@ -66,13 +68,16 @@ interface CanvasContextMenuProps {
   running: boolean;
   onAddQuickNode: (definition: NodeDefinition, input?: PortDefinition) => void;
   onAddFrame: (position: { x: number; y: number }) => void;
+  onAddNote: (position: { x: number; y: number }) => void;
   onArrangeSelection: (nodeIds: string[], mode: Arrangement) => void;
   onDeleteNodes: (nodeIds: string[]) => void;
   onDeleteFrame: (frameId: string) => void;
+  onDeleteNote: (noteId: string) => void;
   onDeleteWorkflow: (definition: NodeDefinition) => void;
   onDisconnectEdge: (edgeId: string) => void;
   onDismiss: () => void;
   onDuplicateNodes: (nodeIds: string[]) => void;
+  onDuplicateNote: (noteId: string) => void;
   onExecute: (nodeIds: string[]) => void;
   onFitGraph: () => void;
   onGroupNodes: (nodeIds: string[]) => void;
@@ -99,13 +104,16 @@ export function CanvasContextMenu({
   running,
   onAddQuickNode,
   onAddFrame,
+  onAddNote,
   onArrangeSelection,
   onDeleteNodes,
   onDeleteFrame,
+  onDeleteNote,
   onDeleteWorkflow,
   onDisconnectEdge,
   onDismiss,
   onDuplicateNodes,
+  onDuplicateNote,
   onExecute,
   onFitGraph,
   onGroupNodes,
@@ -334,6 +342,24 @@ export function CanvasContextMenu({
           Remove frame
         </button>
       )}
+      {contextMenu.scope === "note" && (
+        <>
+          <button type="button" role="menuitem" onClick={() => onDuplicateNote(contextMenu.noteId)}>
+            <Copy size={14} />
+            Duplicate note
+          </button>
+          <span className={cx(styles, "context-menu-separator")} />
+          <button
+            type="button"
+            role="menuitem"
+            className={cx(styles, "is-danger")}
+            onClick={() => onDeleteNote(contextMenu.noteId)}
+          >
+            <Trash2 size={14} />
+            Delete note
+          </button>
+        </>
+      )}
       {contextMenu.scope === "pane" && (
         <>
           {contextMenu.pendingConnection && (
@@ -432,6 +458,14 @@ export function CanvasContextMenu({
               >
                 <Frame size={14} />
                 Add empty frame
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => onAddNote(contextMenu.flowPosition)}
+              >
+                <StickyNote size={14} />
+                Add note
               </button>
               <span className={cx(styles, "context-menu-separator")} />
               <button

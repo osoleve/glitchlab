@@ -666,6 +666,13 @@
             "title": "Node Previews",
             "type": "array"
           },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/NotePresentation"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
           "wire_bundles": {
             "items": {
               "$ref": "#/components/schemas/WireBundlePresentation"
@@ -1314,6 +1321,53 @@
           "kind"
         ],
         "title": "NodeStartedEvent",
+        "type": "object"
+      },
+      "NotePresentation": {
+        "description": "One editable, visual-only note placed on the graph canvas.",
+        "properties": {
+          "color": {
+            "default": "amber",
+            "enum": [
+              "violet",
+              "teal",
+              "amber",
+              "rose",
+              "slate"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "height": {
+            "default": 180,
+            "exclusiveMinimum": 0.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "width": {
+            "default": 280,
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "position"
+        ],
+        "title": "NotePresentation",
         "type": "object"
       },
       "PluginStatus": {

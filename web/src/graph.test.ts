@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assertWirePresentationPreserved, hydrateGraph, serializeGraph } from "./graph";
-import type { NodeDefinition, WorkflowFrame, WorkflowNode } from "./types";
+import type { NodeDefinition, WorkflowFrame, WorkflowNode, WorkflowNote } from "./types";
 
 const definition = {
   kind: "test",
@@ -37,6 +37,15 @@ const node: WorkflowNode = {
   },
 };
 
+const note: WorkflowNote = {
+  id: "note-a",
+  type: "workflowNote",
+  position: { x: 640, y: 80 },
+  width: 280,
+  height: 160,
+  data: { text: "  Preserve this note exactly.  ", color: "teal" },
+};
+
 describe("graph presentation", () => {
   it("rejects a save response that silently drops wire presentation", () => {
     const requested = serializeGraph(
@@ -67,7 +76,7 @@ describe("graph presentation", () => {
 
     expect(() => assertWirePresentationPreserved(requested, requested)).not.toThrow();
     expect(() => assertWirePresentationPreserved(requested, dropped)).toThrow(
-      "The server did not preserve wire colors and cable ties",
+      "The server did not preserve canvas presentation data",
     );
   });
 
@@ -92,6 +101,7 @@ describe("graph presentation", () => {
       wires: [],
       wire_bundles: [],
       node_previews: [],
+      notes: [],
     });
 
     const hydrated = hydrateGraph(graph, [definition]);
@@ -117,6 +127,7 @@ describe("graph presentation", () => {
     expect(hydrated.edgeRouting).toBe("smoothstep");
     expect(hydrated.wires).toEqual([]);
     expect(hydrated.wireBundles).toEqual([]);
+    expect(hydrated.notes).toEqual([]);
   });
 
   it("round-trips wire styles and movable bundles as presentation-only metadata", () => {
@@ -186,6 +197,30 @@ describe("graph presentation", () => {
     expect(hydrateGraph(graph, [previewDefinition]).nodes[0]?.data.canvasPreviewVisible).toBe(
       false,
     );
+  });
+
+  it("round-trips editable notes as presentation-only state", () => {
+    const graph = serializeGraph("Annotated", [node], [], [], "smoothstep", [], [], [note]);
+
+    expect(graph.nodes).toHaveLength(1);
+    expect(graph.presentation?.notes).toEqual([
+      {
+        id: "note-a",
+        text: "  Preserve this note exactly.  ",
+        color: "teal",
+        position: { x: 640, y: 80 },
+        width: 280,
+        height: 160,
+      },
+    ]);
+    expect(hydrateGraph(graph, [definition]).notes[0]).toMatchObject({
+      id: "note-a",
+      type: "workflowNote",
+      position: { x: 640, y: 80 },
+      width: 280,
+      height: 160,
+      data: { text: "  Preserve this note exactly.  ", color: "teal" },
+    });
   });
 });
 

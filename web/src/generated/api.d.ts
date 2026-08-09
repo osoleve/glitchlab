@@ -563,6 +563,8 @@ export interface components {
             frames?: components["schemas"]["FramePresentation"][];
             /** Node Previews */
             node_previews?: components["schemas"]["NodePreviewPresentation"][];
+            /** Notes */
+            notes?: components["schemas"]["NotePresentation"][];
             /** Wire Bundles */
             wire_bundles?: components["schemas"]["WireBundlePresentation"][];
             /** Wires */
@@ -867,6 +869,36 @@ export interface components {
             run_id: string;
             /** Sequence */
             sequence: number;
+        };
+        /**
+         * NotePresentation
+         * @description One editable, visual-only note placed on the graph canvas.
+         */
+        NotePresentation: {
+            /**
+             * Color
+             * @default amber
+             * @enum {string}
+             */
+            color: "violet" | "teal" | "amber" | "rose" | "slate";
+            /**
+             * Height
+             * @default 180
+             */
+            height: number;
+            /** Id */
+            id: string;
+            position: components["schemas"]["Position"];
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /**
+             * Width
+             * @default 280
+             */
+            width: number;
         };
         /**
          * PluginStatus

@@ -8,6 +8,7 @@ import type {
   WorkflowEdge,
   WorkflowFrame,
   WorkflowNode,
+  WorkflowNote,
   WorkflowSpec,
 } from "../types";
 
@@ -23,6 +24,7 @@ export interface GraphSnapshot {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   frames?: WorkflowFrame[];
+  notes?: WorkflowNote[];
   edgeRouting?: EdgeRouting;
   wires?: WirePresentation[];
   wireBundles?: WireBundle[];

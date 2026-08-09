@@ -10,6 +10,7 @@ import type {
   WorkflowEdge,
   WorkflowFrame,
   WorkflowNode,
+  WorkflowNote,
 } from "./types";
 
 function frameSize(frame: WorkflowFrame): { width: number; height: number } {
@@ -25,6 +26,7 @@ export function serializePresentation(
   edgeRouting: EdgeRouting,
   wires: WirePresentation[],
   wireBundles: WireBundle[],
+  notes: WorkflowNote[],
 ): GraphPresentation {
   return {
     edge_routing: edgeRouting,
@@ -55,14 +57,25 @@ export function serializePresentation(
           node.data.canvasPreviewVisible === false,
       )
       .map((node) => ({ node_id: node.id, visible: false })),
+    notes: notes.map((note) => ({
+      id: note.id,
+      text: note.data.text,
+      color: note.data.color,
+      position: note.position,
+      width: note.measured?.width ?? note.width ?? 280,
+      height: note.measured?.height ?? note.height ?? 180,
+    })),
   };
 }
 
 export function assertWirePresentationPreserved(requested: GraphSpec, saved: GraphSpec): void {
   const requestedPresentation = requested.presentation;
+  const requestedNotes = requestedPresentation?.notes ?? [];
   if (
     !requestedPresentation ||
-    (requestedPresentation.wires.length === 0 && requestedPresentation.wire_bundles.length === 0)
+    (requestedPresentation.wires.length === 0 &&
+      requestedPresentation.wire_bundles.length === 0 &&
+      requestedNotes.length === 0)
   ) {
     return;
   }
@@ -73,9 +86,11 @@ export function assertWirePresentationPreserved(requested: GraphSpec, saved: Gra
   const bundlesMatch =
     JSON.stringify(savedPresentation?.wire_bundles ?? []) ===
     JSON.stringify(requestedPresentation.wire_bundles);
-  if (!wiresMatch || !bundlesMatch) {
+  const notesMatch =
+    JSON.stringify(savedPresentation?.notes ?? []) === JSON.stringify(requestedNotes);
+  if (!wiresMatch || !bundlesMatch || !notesMatch) {
     throw new Error(
-      "The server did not preserve wire colors and cable ties. Keep this tab open, restart the server, then save again.",
+      "The server did not preserve canvas presentation data. Keep this tab open, restart the server, then save again.",
     );
   }
 }
@@ -88,6 +103,7 @@ export function serializeGraph(
   edgeRouting: EdgeRouting = "smoothstep",
   wires: WirePresentation[] = [],
   wireBundles: WireBundle[] = [],
+  notes: WorkflowNote[] = [],
 ): GraphSpec {
   const frameMap = new Map(frames.map((frame) => [frame.id, frame]));
   return {
@@ -113,7 +129,7 @@ export function serializeGraph(
       target: edge.target,
       target_port: edge.targetHandle!,
     })),
-    presentation: serializePresentation(nodes, frames, edgeRouting, wires, wireBundles),
+    presentation: serializePresentation(nodes, frames, edgeRouting, wires, wireBundles, notes),
   };
 }
 
@@ -128,6 +144,7 @@ export function hydrateGraph(
   edgeRouting: EdgeRouting;
   wires: WirePresentation[];
   wireBundles: WireBundle[];
+  notes: WorkflowNote[];
 } {
   const definitions = new Map(
     catalogDefinitions.map((definition) => [definition.kind, definition]),
@@ -215,6 +232,15 @@ export function hydrateGraph(
       waypoints: bundle.waypoints,
       collapsed: bundle.collapsed,
       ...(bundle.label ? { label: bundle.label } : {}),
+    })),
+    notes: (presentation?.notes ?? []).map((note) => ({
+      id: note.id,
+      type: "workflowNote" as const,
+      position: note.position,
+      width: note.width,
+      height: note.height,
+      dragHandle: ".note-drag-handle",
+      data: { text: note.text, color: note.color },
     })),
   };
 }

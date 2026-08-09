@@ -1,0 +1,202 @@
+{
+  "name": "Phased math worksheet",
+  "nodes": [
+    {
+      "id": "endpoint",
+      "kind": "endpoint",
+      "title": "Local completion API",
+      "config": {
+        "base_url": "http://127.0.0.1:8790/v1",
+        "api_key_env": "",
+        "timeout_seconds": 180
+      },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "model",
+      "kind": "model",
+      "title": "Worksheet model",
+      "config": { "model_id": "model-id" },
+      "position": { "x": 0, "y": 220 }
+    },
+    {
+      "id": "question-one-prompt",
+      "kind": "text_input",
+      "title": "Seed question brief",
+      "config": {
+        "text": "Write one clear seventh-grade proportional-reasoning word problem. Make the quantities realistic and solvable without a calculator. Return only the problem."
+      },
+      "position": { "x": 300, "y": 0 }
+    },
+    {
+      "id": "question-one-completion",
+      "kind": "completion",
+      "title": "Generate anchor question",
+      "config": {
+        "temperature": 0.7,
+        "top_p": 0.95,
+        "max_tokens": 160,
+        "seed": 151,
+        "stop": "",
+        "logprobs": null,
+        "extra_body": {},
+        "cache_mode": "use"
+      },
+      "position": { "x": 560, "y": 0 }
+    },
+    {
+      "id": "question-one-extract",
+      "kind": "select_field",
+      "title": "Take question one text",
+      "config": { "path": "text" },
+      "position": { "x": 820, "y": 0 }
+    },
+    {
+      "id": "question-two-template",
+      "kind": "template_input",
+      "title": "Guided follow-up prompt",
+      "config": {
+        "template": "Create a second seventh-grade proportional-reasoning word problem that naturally follows the earlier one below. Increase the reasoning demand instead of merely changing numbers. Do not repeat its scenario.\n\nEarlier question:\n?question_one\n\nReturn only the new problem."
+      },
+      "position": { "x": 300, "y": 260 }
+    },
+    {
+      "id": "question-two-fill",
+      "kind": "fill_hole",
+      "title": "Bind earlier question",
+      "config": { "name": "question_one", "value": "" },
+      "position": { "x": 560, "y": 260 }
+    },
+    {
+      "id": "question-two-render",
+      "kind": "render_template",
+      "title": "Render phase-two prompt",
+      "config": {},
+      "position": { "x": 820, "y": 260 }
+    },
+    {
+      "id": "question-two-completion",
+      "kind": "completion",
+      "title": "Generate guided question",
+      "config": {
+        "temperature": 0.7,
+        "top_p": 0.95,
+        "max_tokens": 180,
+        "seed": 152,
+        "stop": "",
+        "logprobs": null,
+        "extra_body": {},
+        "cache_mode": "use"
+      },
+      "position": { "x": 1080, "y": 260 }
+    },
+    {
+      "id": "question-two-extract",
+      "kind": "select_field",
+      "title": "Take question two text",
+      "config": { "path": "text" },
+      "position": { "x": 1340, "y": 260 }
+    },
+    {
+      "id": "worksheet-template",
+      "kind": "template_input",
+      "title": "Worksheet assembly prompt",
+      "config": {
+        "template": "Build a cohesive seventh-grade proportional-reasoning worksheet around these two anchor questions. Preserve both anchors exactly, add four questions with a smooth difficulty ramp, and finish with a concise answer key.\n\nAnchor 1:\n?question_one\n\nAnchor 2:\n?question_two\n\nReturn only the finished worksheet."
+      },
+      "position": { "x": 300, "y": 520 }
+    },
+    {
+      "id": "worksheet-fill-one",
+      "kind": "fill_hole",
+      "title": "Bind anchor one",
+      "config": { "name": "question_one", "value": "" },
+      "position": { "x": 560, "y": 520 }
+    },
+    {
+      "id": "worksheet-fill-two",
+      "kind": "fill_hole",
+      "title": "Bind anchor two",
+      "config": { "name": "question_two", "value": "" },
+      "position": { "x": 820, "y": 520 }
+    },
+    {
+      "id": "worksheet-render",
+      "kind": "render_template",
+      "title": "Render worksheet prompt",
+      "config": {},
+      "position": { "x": 1080, "y": 520 }
+    },
+    {
+      "id": "worksheet-completion",
+      "kind": "completion",
+      "title": "Assemble worksheet",
+      "config": {
+        "temperature": 0.55,
+        "top_p": 0.9,
+        "max_tokens": 900,
+        "seed": 153,
+        "stop": "",
+        "logprobs": null,
+        "extra_body": {},
+        "cache_mode": "use"
+      },
+      "position": { "x": 820, "y": 780 }
+    },
+    {
+      "id": "worksheet-extract",
+      "kind": "select_field",
+      "title": "Take worksheet text",
+      "config": { "path": "text" },
+      "position": { "x": 1080, "y": 780 }
+    },
+    {
+      "id": "worksheet-preview",
+      "kind": "preview",
+      "title": "Worksheet preview",
+      "config": {},
+      "position": { "x": 1340, "y": 780 }
+    }
+  ],
+  "edges": [
+    { "id": "endpoint-q1", "source": "endpoint", "source_port": "endpoint", "target": "question-one-completion", "target_port": "endpoint" },
+    { "id": "model-q1", "source": "model", "source_port": "model", "target": "question-one-completion", "target_port": "model" },
+    { "id": "prompt-q1", "source": "question-one-prompt", "source_port": "text", "target": "question-one-completion", "target_port": "prompt" },
+    { "id": "q1-extract", "source": "question-one-completion", "source_port": "result", "target": "question-one-extract", "target_port": "value" },
+    { "id": "q2-template-fill", "source": "question-two-template", "source_port": "template", "target": "question-two-fill", "target_port": "template" },
+    { "id": "q1-q2-fill", "source": "question-one-extract", "source_port": "value", "target": "question-two-fill", "target_port": "value" },
+    { "id": "q2-fill-render", "source": "question-two-fill", "source_port": "template", "target": "question-two-render", "target_port": "template" },
+    { "id": "endpoint-q2", "source": "endpoint", "source_port": "endpoint", "target": "question-two-completion", "target_port": "endpoint" },
+    { "id": "model-q2", "source": "model", "source_port": "model", "target": "question-two-completion", "target_port": "model" },
+    { "id": "prompt-q2", "source": "question-two-render", "source_port": "text", "target": "question-two-completion", "target_port": "prompt" },
+    { "id": "q2-extract", "source": "question-two-completion", "source_port": "result", "target": "question-two-extract", "target_port": "value" },
+    { "id": "worksheet-template-fill-one", "source": "worksheet-template", "source_port": "template", "target": "worksheet-fill-one", "target_port": "template" },
+    { "id": "q1-worksheet", "source": "question-one-extract", "source_port": "value", "target": "worksheet-fill-one", "target_port": "value" },
+    { "id": "worksheet-fill-chain", "source": "worksheet-fill-one", "source_port": "template", "target": "worksheet-fill-two", "target_port": "template" },
+    { "id": "q2-worksheet", "source": "question-two-extract", "source_port": "value", "target": "worksheet-fill-two", "target_port": "value" },
+    { "id": "worksheet-fill-render", "source": "worksheet-fill-two", "source_port": "template", "target": "worksheet-render", "target_port": "template" },
+    { "id": "endpoint-worksheet", "source": "endpoint", "source_port": "endpoint", "target": "worksheet-completion", "target_port": "endpoint" },
+    { "id": "model-worksheet", "source": "model", "source_port": "model", "target": "worksheet-completion", "target_port": "model" },
+    { "id": "prompt-worksheet", "source": "worksheet-render", "source_port": "text", "target": "worksheet-completion", "target_port": "prompt" },
+    { "id": "worksheet-result-extract", "source": "worksheet-completion", "source_port": "result", "target": "worksheet-extract", "target_port": "value" },
+    { "id": "worksheet-result-preview", "source": "worksheet-extract", "source_port": "value", "target": "worksheet-preview", "target_port": "value" }
+  ],
+  "presentation": {
+    "edge_routing": "smoothstep",
+    "frames": [
+      { "id": "frame-resources", "title": "Shared model resources", "color": "slate", "position": { "x": -40, "y": -40 }, "width": 300, "height": 500, "collapsed": false, "node_ids": ["endpoint", "model"] },
+      { "id": "frame-question-one", "title": "Phase 1 · establish an anchor", "color": "teal", "position": { "x": 280, "y": -40 }, "width": 800, "height": 300, "collapsed": false, "node_ids": ["question-one-prompt", "question-one-completion", "question-one-extract"] },
+      { "id": "frame-question-two", "title": "Phase 2 · guide the next question", "color": "violet", "position": { "x": 280, "y": 220 }, "width": 1320, "height": 300, "collapsed": false, "node_ids": ["question-two-template", "question-two-fill", "question-two-render", "question-two-completion", "question-two-extract"] },
+      { "id": "frame-worksheet-prompt", "title": "Phase 3 · bind both anchors", "color": "amber", "position": { "x": 280, "y": 480 }, "width": 1060, "height": 300, "collapsed": false, "node_ids": ["worksheet-template", "worksheet-fill-one", "worksheet-fill-two", "worksheet-render"] },
+      { "id": "frame-worksheet-output", "title": "Generate and inspect", "color": "rose", "position": { "x": 800, "y": 740 }, "width": 800, "height": 300, "collapsed": false, "node_ids": ["worksheet-completion", "worksheet-extract", "worksheet-preview"] }
+    ],
+    "wires": [],
+    "wire_bundles": [],
+    "node_previews": [],
+    "notes": [
+      { "id": "note-setup", "text": "Start here: point the endpoint and model nodes at a raw /v1/completions server. Then edit the seed-question brief for a different grade or topic.", "color": "slate", "position": { "x": 0, "y": 480 }, "width": 250, "height": 150 },
+      { "id": "note-markers", "text": "Each Select field node takes the completion's text field, keeping request metadata out of later prompt holes without requiring special output markers.", "color": "teal", "position": { "x": 1100, "y": 0 }, "width": 280, "height": 170 },
+      { "id": "note-handoff", "text": "The final prompt receives both earlier questions as typed hole values. Run to any preview or extraction node to inspect one phase at a time.", "color": "amber", "position": { "x": 0, "y": 660 }, "width": 250, "height": 170 }
+    ]
+  }
+}

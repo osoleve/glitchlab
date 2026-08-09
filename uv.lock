@@ -432,6 +432,7 @@ source = { editable = "." }
 dependencies = [
     { name = "datasets" },
     { name = "fastapi" },
+    { name = "glitchlings" },
     { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "pydantic" },
@@ -449,6 +450,7 @@ dev = [
 requires-dist = [
     { name = "datasets", specifier = ">=4,<5" },
     { name = "fastapi", specifier = ">=0.116,<1" },
+    { name = "glitchlings", specifier = ">=1.0.0" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "huggingface-hub", specifier = ">=0.25,<2" },
     { name = "pydantic", specifier = ">=2.11,<3" },
@@ -460,6 +462,24 @@ dev = [
     { name = "pytest", specifier = ">=9.0.3,<10" },
     { name = "pytest-asyncio", specifier = ">=1.1,<2" },
     { name = "ruff", specifier = ">=0.12,<1" },
+]
+
+[[package]]
+name = "glitchlings"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7c/d7/0955b9bbf537cc0c939fb4f879e2cfc6f92b938a48d8d9018a1ad2c67e03/glitchlings-1.0.0.tar.gz", hash = "sha256:cc5af16ca13f7ecd90a782678fe9eb361affda5298b5527406ea3e1a1ff3eef4", size = 331062, upload-time = "2026-01-20T15:50:14.936Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/58/4e5302a668048ded616a7f27da3334b5ff8a259dc2480c7c5eaf719b04c1/glitchlings-1.0.0-cp312-cp312-macosx_11_0_universal2.whl", hash = "sha256:29a6b562e8ea700a4e53a3e6abd257392cf5955e6ce878f484563468b7bb6a27", size = 1682324, upload-time = "2026-01-20T15:50:05.965Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/97/62b77d0a21c92979196dc47bac1f85b2ec9d85719b800f9d06c9e81d2fb6/glitchlings-1.0.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:7f93c0c6eefedabec242673fce19fdee7360346e9d572e2750a1e2a7d558dc86", size = 1892174, upload-time = "2026-01-20T15:50:07.381Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/9e/c1de0e1e3fbfbcd8956a2ea7f67370bcb3aa33362536b727eb612f166a72/glitchlings-1.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:f8728267e9e098fb86b6e1edd4027c0e467a41defaf6536e61838f30ffa069b3", size = 1579455, upload-time = "2026-01-20T15:50:08.753Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/2c/1f44acf74928f5e3b74a6d6d7efc2d2d49d6cefa27d2285d003a29851b8e/glitchlings-1.0.0-cp313-cp313-macosx_11_0_universal2.whl", hash = "sha256:28f60005da6c1ae24ac39254e37f675c0ca1d9c5c377bd0ba49ea0297246dda8", size = 1682103, upload-time = "2026-01-20T15:50:10.657Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/ab/7c5b29957aaba577df3965a3b52dd5e82cd2679e363f29a0c07ecae3445b/glitchlings-1.0.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:b2cb64edac91199ad5810053241e63e727f955a00108fd2930b91a603d43b442", size = 1892053, upload-time = "2026-01-20T15:50:12.197Z" },
+    { url = "https://files.pythonhosted.org/packages/93/ac/26b3d30ac8c7841a8c321c03a0ac7263310ffcd2386030ee2cd482517d0e/glitchlings-1.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:8813fb050c7cd37d7cd9a19e8fd940fcf02f7f32291f3b3a72b8d267f0e959e1", size = 1579075, upload-time = "2026-01-20T15:50:13.57Z" },
 ]
 
 [[package]]

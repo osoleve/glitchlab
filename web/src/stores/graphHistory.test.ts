@@ -58,6 +58,8 @@ describe("graph document history", () => {
     useGraphDocumentStore.setState({
       nodes: [node()],
       edges: [],
+      frames: [],
+      notes: [],
       selectedId: undefined,
       graphName: "History test",
       isDirty: false,
@@ -118,6 +120,31 @@ describe("graph document history", () => {
     expect(state.nodes[0]?.data.runStatus).toBe("completed");
     expect(useRunControllerStore.getState().run?.client?.stale).toBe(false);
     expect(useRunControllerStore.getState().executionScope?.status).toBe("completed");
+  });
+
+  it("undoes a note edit without making the accepted run stale", () => {
+    useGraphDocumentStore.setState({
+      nodes: [node("before", "completed")],
+      notes: [
+        {
+          id: "note-a",
+          type: "workflowNote",
+          position: { x: 20, y: 40 },
+          width: 280,
+          height: 180,
+          data: { text: "before", color: "amber" },
+        },
+      ],
+    });
+    clearGraphHistory();
+    acceptRun();
+
+    useGraphDocumentStore.getState().updateNote("note-a", { text: "after" });
+
+    expect(undoGraphDocument()).toBe(true);
+    expect(useGraphDocumentStore.getState().notes[0]?.data.text).toBe("before");
+    expect(useGraphDocumentStore.getState().nodes[0]?.data.runStatus).toBe("completed");
+    expect(useRunControllerStore.getState().run?.client?.stale).toBe(false);
   });
 
   it("records a multi-field document mutation as one history entry", () => {

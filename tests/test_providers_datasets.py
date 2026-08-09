@@ -397,6 +397,7 @@ def test_graph_presentation_defaults_and_round_trips() -> None:
         "wires": [],
         "wire_bundles": [],
         "node_previews": [],
+        "notes": [],
     }
 
     graph = GraphSpec.model_validate(
@@ -595,4 +596,39 @@ def test_graph_presentation_validates_preview_visibility() -> None:
     dumped = graph.model_dump(mode="json")
     dumped["presentation"]["node_previews"][0]["node_id"] = "missing"
     with pytest.raises(ValidationError, match="references unknown node"):
+        GraphSpec.model_validate(dumped)
+
+
+def test_graph_presentation_round_trips_and_validates_notes() -> None:
+    graph = GraphSpec.model_validate(
+        {
+            "nodes": [{"id": "source", "kind": "text_input"}],
+            "edges": [],
+            "presentation": {
+                "notes": [
+                    {
+                        "id": "note-a",
+                        "text": "Edit the source, then run the graph.",
+                        "color": "amber",
+                        "position": {"x": 24, "y": 48},
+                        "width": 300,
+                        "height": 160,
+                    }
+                ]
+            },
+        }
+    )
+
+    assert graph.presentation.notes[0].text == "Edit the source, then run the graph."
+    dumped = graph.model_dump(mode="json")
+    assert GraphSpec.model_validate(dumped).model_dump(mode="json") == dumped
+
+    dumped["presentation"]["notes"].append(
+        {
+            "id": "source",
+            "text": "Collision",
+            "position": {"x": 0, "y": 0},
+        }
+    )
+    with pytest.raises(ValidationError, match="collides with another canvas item"):
         GraphSpec.model_validate(dumped)

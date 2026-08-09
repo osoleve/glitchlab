@@ -20,6 +20,7 @@ Glitchlab is the distribution, Python package, CLI, API, and workbench.
 ## Features
 
 - **Cable ties!** Bundle related wires into tidy, draggable routes.
+- **Canvas notes.** Leave resizable, color-coded guidance inside saved graphs and templates.
 - **A basic loom!** Grow and compare branching text histories without flattening them into a single prompt.
 - **Glitchlings integration for text perturbation.** Discover operations from the public registry, seed them deterministically, and record what happened.
 - **Hugging Face integration for loading datasets.** Select bounded rows and columns for use in a graph.
@@ -54,6 +55,8 @@ uv run glitchlab
 Open [http://127.0.0.1:8788](http://127.0.0.1:8788).
 
 The canvas works without a model server. Generation nodes need a raw OpenAI-compatible completions endpoint; the starter graph expects one at `http://127.0.0.1:8790/v1`.
+
+Use **Open → Templates** for checked-in starting points, including phased worksheet generation, two-model synthesis, and a deterministic prompt-corruption A/B lab.
 
 ## Models and providers
 

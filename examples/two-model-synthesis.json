@@ -1,0 +1,152 @@
+{
+  "name": "Two-model synthesis",
+  "nodes": [
+    {
+      "id": "endpoint",
+      "kind": "endpoint",
+      "title": "Shared completion API",
+      "config": { "base_url": "http://127.0.0.1:8790/v1", "api_key_env": "", "timeout_seconds": 180 },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "model-a",
+      "kind": "model",
+      "title": "Model A · divergent",
+      "config": { "model_id": "first-model-id" },
+      "position": { "x": 0, "y": 200 }
+    },
+    {
+      "id": "model-b",
+      "kind": "model",
+      "title": "Model B · editor",
+      "config": { "model_id": "second-model-id" },
+      "position": { "x": 0, "y": 400 }
+    },
+    {
+      "id": "brief",
+      "kind": "text_input",
+      "title": "Shared creative brief",
+      "config": {
+        "text": "Invent a compact premise for a science-fiction story about a city that can remember its residents. Favor one vivid mechanism, one human conflict, and one surprising consequence. Return only the premise."
+      },
+      "position": { "x": 320, "y": 0 }
+    },
+    {
+      "id": "completion-a",
+      "kind": "completion",
+      "title": "Model A candidate",
+      "config": { "temperature": 0.95, "top_p": 0.98, "max_tokens": 240, "seed": 301, "stop": "", "logprobs": null, "extra_body": {}, "cache_mode": "use" },
+      "position": { "x": 600, "y": 0 }
+    },
+    {
+      "id": "extract-a",
+      "kind": "select_field",
+      "title": "Take candidate A text",
+      "config": { "path": "text" },
+      "position": { "x": 900, "y": 0 }
+    },
+    {
+      "id": "completion-b",
+      "kind": "completion",
+      "title": "Model B candidate",
+      "config": { "temperature": 0.75, "top_p": 0.92, "max_tokens": 240, "seed": 302, "stop": "", "logprobs": null, "extra_body": {}, "cache_mode": "use" },
+      "position": { "x": 600, "y": 260 }
+    },
+    {
+      "id": "extract-b",
+      "kind": "select_field",
+      "title": "Take candidate B text",
+      "config": { "path": "text" },
+      "position": { "x": 900, "y": 260 }
+    },
+    {
+      "id": "synthesis-template",
+      "kind": "template_input",
+      "title": "Synthesis prompt",
+      "config": {
+        "template": "Act as a demanding story editor. Synthesize the strongest compatible ideas from both candidate premises into one sharper premise. Do not simply concatenate them. Resolve contradictions, retain a concrete speculative mechanism, and foreground a human choice.\n\nCandidate A:\n?draft_a\n\nCandidate B:\n?draft_b\n\nReturn only the synthesis."
+      },
+      "position": { "x": 320, "y": 540 }
+    },
+    {
+      "id": "fill-a",
+      "kind": "fill_hole",
+      "title": "Bind candidate A",
+      "config": { "name": "draft_a", "value": "" },
+      "position": { "x": 600, "y": 540 }
+    },
+    {
+      "id": "fill-b",
+      "kind": "fill_hole",
+      "title": "Bind candidate B",
+      "config": { "name": "draft_b", "value": "" },
+      "position": { "x": 880, "y": 540 }
+    },
+    {
+      "id": "render-synthesis",
+      "kind": "render_template",
+      "title": "Render synthesis prompt",
+      "config": {},
+      "position": { "x": 1160, "y": 540 }
+    },
+    {
+      "id": "completion-synthesis",
+      "kind": "completion",
+      "title": "Model B synthesis",
+      "config": { "temperature": 0.55, "top_p": 0.9, "max_tokens": 320, "seed": 303, "stop": "", "logprobs": null, "extra_body": {}, "cache_mode": "use" },
+      "position": { "x": 880, "y": 820 }
+    },
+    {
+      "id": "extract-synthesis",
+      "kind": "select_field",
+      "title": "Take synthesis text",
+      "config": { "path": "text" },
+      "position": { "x": 1160, "y": 820 }
+    },
+    {
+      "id": "compare",
+      "kind": "compare_preview",
+      "title": "Candidates and synthesis",
+      "config": {},
+      "position": { "x": 1440, "y": 820 }
+    }
+  ],
+  "edges": [
+    { "id": "endpoint-a", "source": "endpoint", "source_port": "endpoint", "target": "completion-a", "target_port": "endpoint" },
+    { "id": "endpoint-b", "source": "endpoint", "source_port": "endpoint", "target": "completion-b", "target_port": "endpoint" },
+    { "id": "endpoint-synthesis", "source": "endpoint", "source_port": "endpoint", "target": "completion-synthesis", "target_port": "endpoint" },
+    { "id": "model-a-completion", "source": "model-a", "source_port": "model", "target": "completion-a", "target_port": "model" },
+    { "id": "model-b-completion", "source": "model-b", "source_port": "model", "target": "completion-b", "target_port": "model" },
+    { "id": "model-b-synthesis", "source": "model-b", "source_port": "model", "target": "completion-synthesis", "target_port": "model" },
+    { "id": "brief-a", "source": "brief", "source_port": "text", "target": "completion-a", "target_port": "prompt" },
+    { "id": "brief-b", "source": "brief", "source_port": "text", "target": "completion-b", "target_port": "prompt" },
+    { "id": "completion-a-extract", "source": "completion-a", "source_port": "result", "target": "extract-a", "target_port": "value" },
+    { "id": "completion-b-extract", "source": "completion-b", "source_port": "result", "target": "extract-b", "target_port": "value" },
+    { "id": "template-fill-a", "source": "synthesis-template", "source_port": "template", "target": "fill-a", "target_port": "template" },
+    { "id": "extract-a-fill", "source": "extract-a", "source_port": "value", "target": "fill-a", "target_port": "value" },
+    { "id": "fill-a-fill-b", "source": "fill-a", "source_port": "template", "target": "fill-b", "target_port": "template" },
+    { "id": "extract-b-fill", "source": "extract-b", "source_port": "value", "target": "fill-b", "target_port": "value" },
+    { "id": "fill-b-render", "source": "fill-b", "source_port": "template", "target": "render-synthesis", "target_port": "template" },
+    { "id": "render-completion", "source": "render-synthesis", "source_port": "text", "target": "completion-synthesis", "target_port": "prompt" },
+    { "id": "synthesis-extract", "source": "completion-synthesis", "source_port": "result", "target": "extract-synthesis", "target_port": "value" },
+    { "id": "compare-a", "source": "extract-a", "source_port": "value", "target": "compare", "target_port": "series" },
+    { "id": "compare-b", "source": "extract-b", "source_port": "value", "target": "compare", "target_port": "series" },
+    { "id": "compare-synthesis", "source": "extract-synthesis", "source_port": "value", "target": "compare", "target_port": "series" }
+  ],
+  "presentation": {
+    "edge_routing": "smoothstep",
+    "frames": [
+      { "id": "frame-resources", "title": "One endpoint · two models", "color": "slate", "position": { "x": -40, "y": -40 }, "width": 300, "height": 620, "collapsed": false, "node_ids": ["endpoint", "model-a", "model-b"] },
+      { "id": "frame-candidates", "title": "Parallel candidates", "color": "violet", "position": { "x": 280, "y": -40 }, "width": 900, "height": 560, "collapsed": false, "node_ids": ["brief", "completion-a", "extract-a", "completion-b", "extract-b"] },
+      { "id": "frame-synthesis-prompt", "title": "Bind both candidates into one prompt", "color": "teal", "position": { "x": 280, "y": 500 }, "width": 1160, "height": 300, "collapsed": false, "node_ids": ["synthesis-template", "fill-a", "fill-b", "render-synthesis"] },
+      { "id": "frame-synthesis-output", "title": "One final synthesis generation", "color": "amber", "position": { "x": 840, "y": 780 }, "width": 880, "height": 340, "collapsed": false, "node_ids": ["completion-synthesis", "extract-synthesis", "compare"] }
+    ],
+    "wires": [],
+    "wire_bundles": [],
+    "node_previews": [],
+    "notes": [
+      { "id": "note-models", "text": "Set both model IDs served by the same endpoint. Both see the same brief; their text outputs become literal values in the final synthesis prompt. Recent model IDs are available from each model field.", "color": "violet", "position": { "x": 1200, "y": 0 }, "width": 300, "height": 170 },
+      { "id": "note-final-model", "text": "The final generation uses Model B as the editor. Swap that wire to Model A, or add a third model node, to change who performs the synthesis.", "color": "amber", "position": { "x": 0, "y": 650 }, "width": 250, "height": 170 }
+    ]
+  }
+}

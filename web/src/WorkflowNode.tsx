@@ -34,6 +34,7 @@ import { ComparePreviewValue } from "./ComparePreviewValue";
 import { ErrorBoundary, NodeErrorFallback } from "./ErrorBoundary";
 import { selectedLoomText } from "./loom";
 import { moduleClassNames as cx } from "./moduleClassNames";
+import { loadRecentValues, type RecentValueKind, rememberRecentValue } from "./recentValues";
 import type { FieldDefinition, WorkflowNode, WorkflowNodeData } from "./types";
 import styles from "./WorkflowNode.module.css";
 import { WIRE_COLOR_VALUES, wireColorForValueType } from "./wireAppearance";
@@ -172,6 +173,81 @@ function InlineTextarea({ ariaLabel, disabled, placeholder, update, value }: Inl
       rows={2}
     />
   );
+}
+
+interface InlineTextInputProps extends InlineTextareaProps {
+  recentKind?: RecentValueKind;
+}
+
+function InlineTextInput({
+  ariaLabel,
+  disabled,
+  placeholder,
+  recentKind,
+  update,
+  value,
+}: InlineTextInputProps) {
+  const [draft, setDraft] = useState(value);
+  const [recentValues, setRecentValues] = useState<string[]>(() =>
+    recentKind ? loadRecentValues(recentKind) : [],
+  );
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const remember = () => {
+    if (recentKind) setRecentValues(rememberRecentValue(recentKind, draft));
+  };
+
+  return (
+    <div className={cx(styles, "inline-text-input")}>
+      <input
+        type="text"
+        value={draft}
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setDraft(nextValue);
+          update(nextValue);
+        }}
+        onBlur={remember}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") remember();
+        }}
+        aria-label={ariaLabel}
+      />
+      {recentKind && recentValues.length > 0 && (
+        <select
+          value=""
+          disabled={disabled}
+          aria-label={`Recent ${recentKind === "endpoint" ? "endpoint URLs" : "model IDs"}`}
+          title={`Recent ${recentKind === "endpoint" ? "endpoint URLs" : "model IDs"}`}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            if (!nextValue) return;
+            setDraft(nextValue);
+            update(nextValue);
+            setRecentValues(rememberRecentValue(recentKind, nextValue));
+          }}
+        >
+          <option value="">Recent…</option>
+          {recentValues.map((recentValue) => (
+            <option value={recentValue} key={recentValue}>
+              {recentValue}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
+function recentKindForField(kind: string, fieldName: string): RecentValueKind | undefined {
+  if (kind === "endpoint" && fieldName === "base_url") return "endpoint";
+  if (kind === "model" && fieldName === "model_id") return "model";
+  return undefined;
 }
 
 export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
@@ -345,6 +421,15 @@ export function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowNode>) {
                     disabled={disabled}
                     update={update}
                     ariaLabel={`${field.label} for ${data.title}`}
+                  />
+                ) : field.control === "text" ? (
+                  <InlineTextInput
+                    value={String(value ?? "")}
+                    placeholder={field.placeholder}
+                    disabled={disabled}
+                    update={update}
+                    ariaLabel={`${field.label} for ${data.title}`}
+                    recentKind={recentKindForField(data.kind, field.name)}
                   />
                 ) : (
                   <input

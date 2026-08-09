@@ -5,6 +5,7 @@ import { ErrorBoundary, PreviewErrorFallback } from "./ErrorBoundary";
 import styles from "./Inspector.module.css";
 import { moduleClassNames as cx } from "./moduleClassNames";
 import { PreviewValue } from "./PreviewValue";
+import { loadRecentValues, type RecentValueKind, rememberRecentValue } from "./recentValues";
 import type {
   ControlPortMode,
   FieldDefinition,
@@ -28,6 +29,80 @@ interface InspectorProps {
   onOpenNodeEditor?: () => void;
   onDelete: () => void;
   onClose: () => void;
+}
+
+interface InspectorTextInputProps {
+  ariaLabel: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  recentKind?: RecentValueKind;
+  value: string;
+}
+
+function InspectorTextInput({
+  ariaLabel,
+  onChange,
+  placeholder,
+  recentKind,
+  value,
+}: InspectorTextInputProps) {
+  const [draft, setDraft] = useState(value);
+  const [recentValues, setRecentValues] = useState<string[]>(() =>
+    recentKind ? loadRecentValues(recentKind) : [],
+  );
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const remember = () => {
+    if (recentKind) setRecentValues(rememberRecentValue(recentKind, draft));
+  };
+
+  return (
+    <div className={cx(styles, "recent-text-control")}>
+      <input
+        aria-label={ariaLabel}
+        value={draft}
+        placeholder={placeholder}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setDraft(nextValue);
+          onChange(nextValue);
+        }}
+        onBlur={remember}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") remember();
+        }}
+      />
+      {recentKind && recentValues.length > 0 && (
+        <select
+          value=""
+          aria-label={`Recent ${recentKind === "endpoint" ? "endpoint URLs" : "model IDs"}`}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            if (!nextValue) return;
+            setDraft(nextValue);
+            onChange(nextValue);
+            setRecentValues(rememberRecentValue(recentKind, nextValue));
+          }}
+        >
+          <option value="">Recent…</option>
+          {recentValues.map((recentValue) => (
+            <option value={recentValue} key={recentValue}>
+              {recentValue}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
+function recentKindForField(kind: string, fieldName: string): RecentValueKind | undefined {
+  if (kind === "endpoint" && fieldName === "base_url") return "endpoint";
+  if (kind === "model" && fieldName === "model_id") return "model";
+  return undefined;
 }
 
 function ControlPortSelector({
@@ -270,13 +345,14 @@ export function Inspector({
                       : selectedNode.data.runStatus}
                   </span>
                 </div>
-                <label className={cx(styles, "field")}>
+                <div className={cx(styles, "field")}>
                   <span>Node title</span>
-                  <input
+                  <InspectorTextInput
+                    ariaLabel="Node title"
                     value={selectedNode.data.title}
-                    onChange={(event) => onUpdateTitle(event.target.value)}
+                    onChange={onUpdateTitle}
                   />
-                </label>
+                </div>
                 <p className={cx(styles, "node-description")}>
                   {selectedNode.data.definition.description}
                 </p>
@@ -371,6 +447,14 @@ export function Inspector({
                           placeholder={field.placeholder}
                           spellCheck={field.control !== "json"}
                           onChange={(event) => onUpdateField(field.name, event.target.value)}
+                        />
+                      ) : field.control === "text" ? (
+                        <InspectorTextInput
+                          ariaLabel={field.label}
+                          value={String(value ?? "")}
+                          placeholder={field.placeholder}
+                          onChange={(nextValue) => onUpdateField(field.name, nextValue)}
+                          recentKind={recentKindForField(selectedNode.data.kind, field.name)}
                         />
                       ) : (
                         <input

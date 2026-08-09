@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import styles from "../App.module.css";
+import { CanvasNote } from "../CanvasNote";
 import { WorkflowFrameNode } from "../FrameNode";
 import { moduleClassNames as cx } from "../moduleClassNames";
 import {
@@ -48,7 +49,11 @@ import { SelectedWiresToolbar, WireEdge } from "../WireEdge";
 import { WorkflowNodeCardWithBoundary } from "../WorkflowNode";
 import type { ContextMenuState } from "./CanvasContextMenu";
 
-const nodeTypes = { workflowNode: WorkflowNodeCardWithBoundary, workflowFrame: WorkflowFrameNode };
+const nodeTypes = {
+  workflowNode: WorkflowNodeCardWithBoundary,
+  workflowFrame: WorkflowFrameNode,
+  workflowNote: CanvasNote,
+};
 const edgeTypes = { wire: WireEdge };
 
 interface GraphCanvasProps {
@@ -190,6 +195,7 @@ export function GraphCanvas({
   const selectionKind = useGraphDocumentStore((state) => state.selectionKind);
   const clearSelection = useGraphDocumentStore((state) => state.clearSelection);
   const setFrames = useGraphDocumentStore((state) => state.setFrames);
+  const setNotes = useGraphDocumentStore((state) => state.setNotes);
   const selectNode = useGraphDocumentStore((state) => state.selectNode);
   const selectNodes = useGraphDocumentStore((state) => state.selectNodes);
   const selectEdges = useGraphDocumentStore((state) => state.selectEdges);
@@ -486,6 +492,16 @@ export function GraphCanvas({
             onOpenContextMenu(undefined);
             return;
           }
+          if (node.type === "workflowNote") {
+            clearSelection();
+            setFrames((current) => current.map((frame) => ({ ...frame, selected: false })));
+            setNotes((current) =>
+              current.map((note) => ({ ...note, selected: note.id === node.id })),
+            );
+            setInspectorOpen(false);
+            onOpenContextMenu(undefined);
+            return;
+          }
           const anchor = selectNode(node.id, event.ctrlKey || event.metaKey);
           setInspectorOpen(Boolean(anchor));
           onOpenContextMenu(undefined);
@@ -520,6 +536,21 @@ export function GraphCanvas({
               y: event.clientY,
               scope: "frame",
               frameId: node.id,
+            });
+            return;
+          }
+          if (node.type === "workflowNote") {
+            clearSelection();
+            setFrames((current) => current.map((frame) => ({ ...frame, selected: false })));
+            setNotes((current) =>
+              current.map((note) => ({ ...note, selected: note.id === node.id })),
+            );
+            setInspectorOpen(false);
+            onOpenContextMenu({
+              x: event.clientX,
+              y: event.clientY,
+              scope: "note",
+              noteId: node.id,
             });
             return;
           }
@@ -583,6 +614,7 @@ export function GraphCanvas({
         <MiniMap
           nodeColor={(node) => {
             if (node.type === "workflowFrame") return "rgba(169, 139, 244, 0.24)";
+            if (node.type === "workflowNote") return "#e2aa5f";
             const category = (node.data as WorkflowNode["data"]).definition.category;
             return category === "Glitchlings"
               ? "#e2767f"

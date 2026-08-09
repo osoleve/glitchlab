@@ -1,0 +1,98 @@
+{
+  "name": "Prompt corruption A/B lab",
+  "nodes": [
+    {
+      "id": "prompt",
+      "kind": "text_input",
+      "title": "Clean prompt",
+      "config": {
+        "text": "Explain why a metal spoon feels colder than a wooden spoon in the same room. Write for a curious twelve-year-old, use one analogy, and keep the answer under 140 words."
+      },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "typogre",
+      "kind": "glitchling",
+      "title": "Deterministic Typogre",
+      "config": { "name": "typogre", "seed": 151, "params": {} },
+      "position": { "x": 0, "y": 240 }
+    },
+    {
+      "id": "corrupt",
+      "kind": "corrupt",
+      "title": "Corrupt prompt",
+      "config": {},
+      "position": { "x": 300, "y": 240 }
+    },
+    {
+      "id": "endpoint",
+      "kind": "endpoint",
+      "title": "Local completion API",
+      "config": { "base_url": "http://127.0.0.1:8790/v1", "api_key_env": "", "timeout_seconds": 180 },
+      "position": { "x": 0, "y": 500 }
+    },
+    {
+      "id": "model",
+      "kind": "model",
+      "title": "Shared model",
+      "config": { "model_id": "model-id" },
+      "position": { "x": 300, "y": 500 }
+    },
+    {
+      "id": "clean-completion",
+      "kind": "completion",
+      "title": "Clean-prompt completion",
+      "config": { "temperature": 0.6, "top_p": 0.9, "max_tokens": 220, "seed": 404, "stop": "", "logprobs": null, "extra_body": {}, "cache_mode": "use" },
+      "position": { "x": 620, "y": 0 }
+    },
+    {
+      "id": "noisy-completion",
+      "kind": "completion",
+      "title": "Corrupted-prompt completion",
+      "config": { "temperature": 0.6, "top_p": 0.9, "max_tokens": 220, "seed": 404, "stop": "", "logprobs": null, "extra_body": {}, "cache_mode": "use" },
+      "position": { "x": 620, "y": 280 }
+    },
+    {
+      "id": "corruption-preview",
+      "kind": "preview",
+      "title": "Corruption record",
+      "config": {},
+      "position": { "x": 940, "y": 280 }
+    },
+    {
+      "id": "compare",
+      "kind": "compare_preview",
+      "title": "Clean versus corrupted",
+      "config": {},
+      "position": { "x": 940, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "prompt-clean", "source": "prompt", "source_port": "text", "target": "clean-completion", "target_port": "prompt" },
+    { "id": "prompt-corrupt", "source": "prompt", "source_port": "text", "target": "corrupt", "target_port": "text" },
+    { "id": "typogre-corrupt", "source": "typogre", "source_port": "glitchling", "target": "corrupt", "target_port": "corruptor" },
+    { "id": "corrupt-noisy", "source": "corrupt", "source_port": "result", "target": "noisy-completion", "target_port": "prompt" },
+    { "id": "corrupt-preview", "source": "corrupt", "source_port": "result", "target": "corruption-preview", "target_port": "value" },
+    { "id": "endpoint-clean", "source": "endpoint", "source_port": "endpoint", "target": "clean-completion", "target_port": "endpoint" },
+    { "id": "endpoint-noisy", "source": "endpoint", "source_port": "endpoint", "target": "noisy-completion", "target_port": "endpoint" },
+    { "id": "model-clean", "source": "model", "source_port": "model", "target": "clean-completion", "target_port": "model" },
+    { "id": "model-noisy", "source": "model", "source_port": "model", "target": "noisy-completion", "target_port": "model" },
+    { "id": "clean-compare", "source": "clean-completion", "source_port": "result", "target": "compare", "target_port": "series" },
+    { "id": "noisy-compare", "source": "noisy-completion", "source_port": "result", "target": "compare", "target_port": "series" }
+  ],
+  "presentation": {
+    "edge_routing": "bezier",
+    "frames": [
+      { "id": "frame-inputs", "title": "Controlled input and corruption", "color": "rose", "position": { "x": -40, "y": -40 }, "width": 600, "height": 500, "collapsed": false, "node_ids": ["prompt", "typogre", "corrupt"] },
+      { "id": "frame-model", "title": "Shared generation settings", "color": "slate", "position": { "x": -40, "y": 460 }, "width": 600, "height": 280, "collapsed": false, "node_ids": ["endpoint", "model"] },
+      { "id": "frame-completions", "title": "A/B completions", "color": "violet", "position": { "x": 580, "y": -40 }, "width": 680, "height": 620, "collapsed": false, "node_ids": ["clean-completion", "noisy-completion", "corruption-preview", "compare"] }
+    ],
+    "wires": [],
+    "wire_bundles": [],
+    "node_previews": [],
+    "notes": [
+      { "id": "note-control", "text": "Both branches use the same endpoint, model, seed, and sampling settings. The prompt corruption is the intended experimental difference.", "color": "violet", "position": { "x": 1280, "y": 0 }, "width": 290, "height": 160 },
+      { "id": "note-plugin", "text": "Typogre comes from the Glitchlings registry and applies deterministic, seed-recorded noise. Change the Glitchling node to explore another installed operation.", "color": "rose", "position": { "x": 1280, "y": 190 }, "width": 290, "height": 180 }
+    ]
+  }
+}

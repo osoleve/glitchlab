@@ -12,6 +12,25 @@ LOCAL_CHECKOUT_VALUE = setting("GLITCHLINGS_PATH").strip()
 LOCAL_CHECKOUT = Path(LOCAL_CHECKOUT_VALUE).expanduser() if LOCAL_CHECKOUT_VALUE else None
 
 
+def test_installed_glitchlings_discovery_and_corruption() -> None:
+    discovered = discover_glitchlings()
+    status = plugin_status()
+    first = corrupt_text(
+        "The quick brown fox jumps over the lazy dog.",
+        {"kind": "glitchling", "name": "typogre", "seed": 151, "params": {}},
+    )
+    second = corrupt_text(
+        "The quick brown fox jumps over the lazy dog.",
+        {"kind": "glitchling", "name": "typogre", "seed": 151, "params": {}},
+    )
+
+    assert status["available"]
+    assert status["version"] is not None
+    assert {"typogre", "scannequin"}.issubset({item["name"] for item in discovered})
+    assert first == second
+    assert first["apply_order"] == ["Typogre"]
+
+
 @pytest.mark.skipif(
     LOCAL_CHECKOUT is None or not LOCAL_CHECKOUT.is_dir(),
     reason="set GLITCHLAB_GLITCHLINGS_PATH to run the integration test",

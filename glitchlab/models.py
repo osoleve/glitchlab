@@ -202,6 +202,17 @@ class NodePreviewPresentation(BaseModel):
     visible: bool = True
 
 
+class NotePresentation(BaseModel):
+    """One editable, visual-only note placed on the graph canvas."""
+
+    id: str
+    text: str = ""
+    color: Literal["violet", "teal", "amber", "rose", "slate"] = "amber"
+    position: Position
+    width: float = Field(default=280, gt=0)
+    height: float = Field(default=180, gt=0)
+
+
 class GraphPresentation(BaseModel):
     """Visual graph preferences that do not change execution semantics."""
 
@@ -210,6 +221,7 @@ class GraphPresentation(BaseModel):
     wires: list[WirePresentation] = Field(default_factory=list)
     wire_bundles: list[WireBundlePresentation] = Field(default_factory=list)
     node_previews: list[NodePreviewPresentation] = Field(default_factory=list)
+    notes: list[NotePresentation] = Field(default_factory=list)
 
 
 class LoomRunReference(BaseModel):
@@ -421,6 +433,15 @@ class GraphSpec(BaseModel):
                 raise ValueError(
                     f"Node preview {node_preview.node_id!r} must reference an inspect node."
                 )
+
+        note_ids: set[str] = set()
+        reserved_ids = semantic_node_ids | frame_ids
+        for note in self.presentation.notes:
+            if note.id in note_ids:
+                raise ValueError(f"Note IDs must be unique; duplicate {note.id!r}.")
+            note_ids.add(note.id)
+            if note.id in reserved_ids:
+                raise ValueError(f"Note ID {note.id!r} collides with another canvas item.")
         return self
 
 

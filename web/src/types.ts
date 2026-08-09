@@ -45,6 +45,7 @@ export interface WorkflowNodeData extends Record<string, unknown> {
 
 export type WorkflowNode = Node<WorkflowNodeData, "workflowNode">;
 export type FrameColor = "violet" | "teal" | "amber" | "rose" | "slate";
+export type NoteColor = FrameColor;
 export type EdgeRouting = "smoothstep" | "bezier";
 export type FlowPosition = { x: number; y: number };
 export type SelectionKind = "node" | "wire";
@@ -92,7 +93,16 @@ export interface WorkflowFrameData extends Record<string, unknown> {
 }
 
 export type WorkflowFrame = Node<WorkflowFrameData, "workflowFrame">;
-export type CanvasNode = WorkflowFrame | WorkflowNode;
+
+export interface WorkflowNoteData extends Record<string, unknown> {
+  text: string;
+  color: NoteColor;
+  onUpdate?: (update: Partial<Pick<WorkflowNoteData, "text" | "color">>) => void;
+  onRemove?: () => void;
+}
+
+export type WorkflowNote = Node<WorkflowNoteData, "workflowNote">;
+export type CanvasNode = WorkflowFrame | WorkflowNode | WorkflowNote;
 
 export interface GraphFrameSpec {
   id: string;
@@ -117,6 +127,14 @@ export interface GraphPresentation {
     label?: string | null;
   }>;
   node_previews: Array<{ node_id: string; visible: boolean }>;
+  notes: Array<{
+    id: string;
+    text: string;
+    color: NoteColor;
+    position: FlowPosition;
+    width: number;
+    height: number;
+  }>;
 }
 
 export type NodeRunResult = Omit<ApiSchemas["NodeRunResult"], "outputs"> & {

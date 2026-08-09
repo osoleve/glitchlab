@@ -405,6 +405,19 @@
   grid-column: 1 / -1;
 }
 
+.inline-text-input {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px;
+}
+
+.inline-text-input select {
+  width: 58px;
+  padding-right: 2px;
+  color: #aaa1ae;
+}
+
 .node-inline-field > span {
   overflow: hidden;
   color: #77707d;

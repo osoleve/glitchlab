@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Inspector } from "./Inspector";
 import type { NodeDefinition, RunResponse, WorkflowNode } from "./types";
 
@@ -68,7 +69,61 @@ const handlers = {
   onClose: vi.fn(),
 };
 
+const endpointDefinition: NodeDefinition = {
+  kind: "endpoint",
+  label: "Completion endpoint",
+  category: "Models",
+  description: "An OpenAI-compatible endpoint reference.",
+  inputs: [],
+  outputs: [],
+  fields: [
+    {
+      name: "base_url",
+      label: "Base URL",
+      control: "text",
+      type: "text",
+      default: "http://127.0.0.1:8000/v1",
+      help: "",
+      options: [],
+      placeholder: "",
+      inline: true,
+    },
+  ],
+};
+
+function InspectorEndpointHarness({ onUpdate = vi.fn() }: { onUpdate?: ReturnType<typeof vi.fn> }) {
+  const [baseUrl, setBaseUrl] = useState("http://models.test/v1");
+  const selectedNode: WorkflowNode = {
+    id: "endpoint",
+    type: "workflowNode",
+    position: { x: 0, y: 0 },
+    data: {
+      kind: "endpoint",
+      title: "Endpoint",
+      definition: endpointDefinition,
+      config: { base_url: baseUrl },
+      controlPorts: {},
+      runStatus: "idle",
+    },
+  };
+  return (
+    <Inspector
+      selectedNode={selectedNode}
+      nodes={[selectedNode]}
+      edges={[]}
+      glitchlings={[]}
+      {...handlers}
+      onUpdateField={(field, value) => {
+        onUpdate(field, value);
+        if (field === "base_url") setBaseUrl(String(value));
+      }}
+    />
+  );
+}
+
 describe("Inspector output selection", () => {
+  beforeEach(() => localStorage.clear());
+
   it("switches to Output when a result arrives for the selected node", () => {
     const selectedNode = node("text-1");
     const view = render(
@@ -131,5 +186,22 @@ describe("Inspector output selection", () => {
 
     expect(screen.getByRole("tab", { name: "Output" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Run the graph to inspect this node’s output.")).toBeInTheDocument();
+  });
+
+  it("preserves endpoint caret edits and offers the committed value for reuse", () => {
+    const onUpdate = vi.fn();
+    render(<InspectorEndpointHarness onUpdate={onUpdate} />);
+    const input = screen.getByRole("textbox", { name: "Base URL" }) as HTMLInputElement;
+    input.setSelectionRange(7, 7);
+    fireEvent.change(input, {
+      target: { value: "http://new.models.test/v1", selectionStart: 11 },
+    });
+
+    expect(input.selectionStart).toBe(11);
+    expect(onUpdate).toHaveBeenLastCalledWith("base_url", "http://new.models.test/v1");
+    fireEvent.blur(input);
+    expect(screen.getByRole("combobox", { name: "Recent endpoint URLs" })).toHaveTextContent(
+      "http://new.models.test/v1",
+    );
   });
 });
