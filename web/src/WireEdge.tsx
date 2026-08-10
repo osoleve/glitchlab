@@ -9,24 +9,26 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { Cable, Plus, Trash2, Unlink2 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Cable, Plus, Scissors, Trash2, Unlink2 } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useGraphDocumentStore } from "./stores/graphDocumentStore";
 import { pauseGraphHistory, resumeGraphHistory } from "./stores/graphHistory";
-import type { FlowPosition, WireBundle, WireColor, WirePresentation, WorkflowEdge } from "./types";
+import type {
+  FlowPosition,
+  WireBundle,
+  WireBundleMembership,
+  WireColor,
+  WirePresentation,
+  WorkflowEdge,
+} from "./types";
 import styles from "./WireEdge.module.css";
 import { WIRE_COLOR_OPTIONS } from "./wireAppearance";
-import {
-  bundledWireGeometry,
-  wireBundleForSelection,
-  wireBundleOrder,
-  wireBundleWaypointAngle,
-} from "./wireGeometry";
+import { bundleTrunkPath, wireBundleOrder, wireBundleTieAngle, wireGeometry } from "./wireGeometry";
 
-interface WaypointDragState {
+interface TieDragState {
   pointerId: number;
   bundleId: string;
-  waypointIndex: number;
+  tieIndex: number;
   initial: FlowPosition;
   latest: FlowPosition;
   moved: boolean;
@@ -61,19 +63,29 @@ function handleCenter(
   };
 }
 
-function WireBundleWaypoint({
+function useSelectedWireBundleId(): string | undefined {
+  return useGraphDocumentStore((state) =>
+    state.selectionKind === "bundle" ? state.selectedWireBundleId : undefined,
+  );
+}
+
+function WireBundleTie({
   bundle,
-  waypointIndex,
+  tieIndex,
+  selected,
 }: {
   bundle: WireBundle;
-  waypointIndex: number;
+  tieIndex: number;
+  selected: boolean;
 }) {
   const { screenToFlowPosition } = useReactFlow();
-  const moveWireBundleWaypoint = useGraphDocumentStore((state) => state.moveWireBundleWaypoint);
-  const drag = useRef<WaypointDragState | undefined>(undefined);
+  const moveWireBundleTie = useGraphDocumentStore((state) => state.moveWireBundleTie);
+  const selectWireBundle = useGraphDocumentStore((state) => state.selectWireBundle);
+  const snipWireBundle = useGraphDocumentStore((state) => state.snipWireBundle);
+  const drag = useRef<TieDragState | undefined>(undefined);
   const removeDragListeners = useRef<(() => void) | undefined>(undefined);
-  const position = bundle.waypoints[waypointIndex];
-  const angle = wireBundleWaypointAngle(bundle, waypointIndex);
+  const position = bundle.ties[tieIndex];
+  const angle = wireBundleTieAngle(bundle);
 
   useEffect(
     () => () => {
@@ -87,11 +99,13 @@ function WireBundleWaypoint({
     const current = drag.current;
     if (!current) return;
     if (current.moved) {
-      moveWireBundleWaypoint(current.bundleId, current.waypointIndex, current.initial);
+      moveWireBundleTie(current.bundleId, current.tieIndex, current.initial);
     }
     resumeGraphHistory();
     if (current.moved) {
-      moveWireBundleWaypoint(current.bundleId, current.waypointIndex, current.latest);
+      moveWireBundleTie(current.bundleId, current.tieIndex, current.latest);
+    } else {
+      selectWireBundle(current.bundleId);
     }
     drag.current = undefined;
     removeDragListeners.current?.();
@@ -101,12 +115,12 @@ function WireBundleWaypoint({
   return (
     <button
       type="button"
-      className={`${styles.waypointHandle} nodrag nopan`}
+      className={`${styles.tieHandle} ${selected ? styles.tieHandleSelected : ""} nodrag nopan`}
       style={{
         transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) rotate(${angle}deg)`,
       }}
-      aria-label={`Move bundle waypoint ${waypointIndex + 1} for ${bundle.edgeIds.length} wires`}
-      title="Drag to reshape bundle"
+      aria-label={`Move tie ${tieIndex + 1} of the pair around ${bundle.edgeIds.length} wires`}
+      title="Drag to move this tie; click to select the pair"
       data-flow-x={position.x}
       data-flow-y={position.y}
       onPointerDown={(event) => {
@@ -116,7 +130,7 @@ function WireBundleWaypoint({
         drag.current = {
           pointerId: event.pointerId,
           bundleId: bundle.id,
-          waypointIndex,
+          tieIndex,
           initial: { ...position },
           latest: { ...position },
           moved: false,
@@ -126,7 +140,7 @@ function WireBundleWaypoint({
           const next = screenToFlowPosition({ x: pointerEvent.clientX, y: pointerEvent.clientY });
           drag.current.latest = next;
           drag.current.moved = true;
-          moveWireBundleWaypoint(bundle.id, waypointIndex, next);
+          moveWireBundleTie(bundle.id, tieIndex, next);
         };
         const finish = (pointerEvent: PointerEvent) => {
           if (drag.current?.pointerId !== pointerEvent.pointerId) return;
@@ -142,6 +156,16 @@ function WireBundleWaypoint({
         };
       }}
       onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectWireBundle(bundle.id);
+          return;
+        }
+        if (event.key === "Delete" || event.key === "Backspace") {
+          event.preventDefault();
+          snipWireBundle(bundle.id);
+          return;
+        }
         const delta = event.shiftKey ? 1 : 8;
         const movement =
           event.key === "ArrowLeft"
@@ -155,7 +179,7 @@ function WireBundleWaypoint({
                   : undefined;
         if (!movement) return;
         event.preventDefault();
-        moveWireBundleWaypoint(bundle.id, waypointIndex, {
+        moveWireBundleTie(bundle.id, tieIndex, {
           x: position.x + movement.x,
           y: position.y + movement.y,
         });
@@ -166,11 +190,13 @@ function WireBundleWaypoint({
   );
 }
 
-function BundleTrunk({ bundle, path }: { bundle: WireBundle; path: string }) {
+function BundleTrunk({ bundle, selected }: { bundle: WireBundle; selected: boolean }) {
   const { screenToFlowPosition } = useReactFlow();
   const translateWireBundle = useGraphDocumentStore((state) => state.translateWireBundle);
+  const selectWireBundle = useGraphDocumentStore((state) => state.selectWireBundle);
   const drag = useRef<TrunkDragState | undefined>(undefined);
   const removeDragListeners = useRef<(() => void) | undefined>(undefined);
+  const path = bundleTrunkPath(bundle);
 
   useEffect(
     () => () => {
@@ -191,89 +217,115 @@ function BundleTrunk({ bundle, path }: { bundle: WireBundle; path: string }) {
     }
     resumeGraphHistory();
     if (current.moved) translateWireBundle(current.bundleId, current.totalDelta);
+    else selectWireBundle(current.bundleId);
     drag.current = undefined;
     removeDragListeners.current?.();
     removeDragListeners.current = undefined;
   };
 
   return (
-    <path
-      d={path}
-      className={`${styles.bundleTrunkHitArea} nodrag nopan`}
-      onPointerDown={(event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const pointer = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-        pauseGraphHistory();
-        drag.current = {
-          pointerId: event.pointerId,
-          bundleId: bundle.id,
-          latestPointer: pointer,
-          totalDelta: { x: 0, y: 0 },
-          moved: false,
-        };
-        const move = (pointerEvent: PointerEvent) => {
-          const current = drag.current;
-          if (!current || current.pointerId !== pointerEvent.pointerId) return;
-          const next = screenToFlowPosition({ x: pointerEvent.clientX, y: pointerEvent.clientY });
-          const delta = {
-            x: next.x - current.latestPointer.x,
-            y: next.y - current.latestPointer.y,
+    <>
+      {selected && <path d={path} className={styles.bundleTrunkSelected} />}
+      <path
+        d={path}
+        className={`${styles.bundleTrunkHitArea} nodrag nopan`}
+        onClick={(event) => {
+          // The trunk lives inside a member edge's group; swallow the click so
+          // interacting with the tie pair never selects the wire under it.
+          event.stopPropagation();
+        }}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const pointer = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          pauseGraphHistory();
+          drag.current = {
+            pointerId: event.pointerId,
+            bundleId: bundle.id,
+            latestPointer: pointer,
+            totalDelta: { x: 0, y: 0 },
+            moved: false,
           };
-          current.latestPointer = next;
-          current.totalDelta = {
-            x: current.totalDelta.x + delta.x,
-            y: current.totalDelta.y + delta.y,
+          const move = (pointerEvent: PointerEvent) => {
+            const current = drag.current;
+            if (!current || current.pointerId !== pointerEvent.pointerId) return;
+            const next = screenToFlowPosition({ x: pointerEvent.clientX, y: pointerEvent.clientY });
+            const delta = {
+              x: next.x - current.latestPointer.x,
+              y: next.y - current.latestPointer.y,
+            };
+            current.latestPointer = next;
+            current.totalDelta = {
+              x: current.totalDelta.x + delta.x,
+              y: current.totalDelta.y + delta.y,
+            };
+            current.moved = true;
+            translateWireBundle(bundle.id, delta);
           };
-          current.moved = true;
-          translateWireBundle(bundle.id, delta);
-        };
-        const finish = (pointerEvent: PointerEvent) => {
-          if (drag.current?.pointerId !== pointerEvent.pointerId) return;
-          finishDrag();
-        };
-        window.addEventListener("pointermove", move);
-        window.addEventListener("pointerup", finish);
-        window.addEventListener("pointercancel", finish);
-        removeDragListeners.current = () => {
-          window.removeEventListener("pointermove", move);
-          window.removeEventListener("pointerup", finish);
-          window.removeEventListener("pointercancel", finish);
-        };
-      }}
-    />
+          const finish = (pointerEvent: PointerEvent) => {
+            if (drag.current?.pointerId !== pointerEvent.pointerId) return;
+            finishDrag();
+          };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", finish);
+          window.addEventListener("pointercancel", finish);
+          removeDragListeners.current = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", finish);
+            window.removeEventListener("pointercancel", finish);
+          };
+        }}
+      />
+    </>
   );
 }
 
 export function WireEdge(props: EdgeProps<WorkflowEdge>) {
-  const bundle = props.data?.bundle;
-  const dynamicEdgeIndex = useStore((state) => {
-    if (!bundle) return -1;
-    const endpoints = bundle.edgeIds.flatMap((edgeId) => {
-      const edge = state.edgeLookup.get(edgeId);
-      if (!edge) return [];
-      const source = handleCenter(state.nodeLookup.get(edge.source), edge.sourceHandle, "source");
-      const target = handleCenter(state.nodeLookup.get(edge.target), edge.targetHandle, "target");
-      return source && target ? [{ edgeId, source, target }] : [];
-    });
-    return wireBundleOrder(bundle, endpoints).indexOf(props.id);
+  const memberships = props.data?.bundles ?? [];
+  const dynamicIndexKey = useStore((state) =>
+    memberships
+      .map((membership) => {
+        const endpoints = membership.bundle.edgeIds.flatMap((edgeId) => {
+          const edge = state.edgeLookup.get(edgeId);
+          if (!edge) return [];
+          const source = handleCenter(
+            state.nodeLookup.get(edge.source),
+            edge.sourceHandle,
+            "source",
+          );
+          const target = handleCenter(
+            state.nodeLookup.get(edge.target),
+            edge.targetHandle,
+            "target",
+          );
+          return source && target ? [{ edgeId, source, target }] : [];
+        });
+        return wireBundleOrder(membership.bundle, endpoints).indexOf(props.id);
+      })
+      .join(","),
+  );
+  const selectedBundleId = useSelectedWireBundleId();
+  const dynamicIndexes = dynamicIndexKey === "" ? [] : dynamicIndexKey.split(",").map(Number);
+  const resolved = memberships.map((membership, index) => {
+    const dynamicIndex = dynamicIndexes[index] ?? -1;
+    return dynamicIndex >= 0 ? { ...membership, edgeIndex: dynamicIndex } : membership;
   });
-  const bundleGeometry = bundle
-    ? bundledWireGeometry(
-        { x: props.sourceX, y: props.sourceY },
-        { x: props.targetX, y: props.targetY },
-        props.sourcePosition,
-        props.targetPosition,
-        bundle,
-        dynamicEdgeIndex >= 0 ? dynamicEdgeIndex : bundle.edgeIndex,
-        bundle.edgeCount,
-      )
-    : undefined;
+  const geometry =
+    resolved.length > 0
+      ? wireGeometry(
+          { x: props.sourceX, y: props.sourceY },
+          { x: props.targetX, y: props.targetY },
+          props.sourcePosition,
+          props.targetPosition,
+          resolved,
+        )
+      : undefined;
   const regularPath =
     props.data?.routing === "bezier" ? getBezierPath(props)[0] : getSmoothStepPath(props)[0];
-  const path = bundleGeometry?.path ?? regularPath;
+  const path = geometry?.path ?? regularPath;
   const color = props.data?.wireColorValue ?? "#8f8796";
+  const owned = resolved.filter((membership) => membership.ownsHandles);
 
   return (
     <>
@@ -286,20 +338,37 @@ export function WireEdge(props: EdgeProps<WorkflowEdge>) {
         interactionWidth={props.interactionWidth ?? 24}
       />
       {props.animated && <path d={path} className={styles.transferOverlay} />}
-      {bundle && bundleGeometry && <BundleTrunk bundle={bundle} path={bundleGeometry.trunkPath} />}
-      {bundle?.ownsHandles && bundleGeometry && (
+      {owned.map((membership) => (
+        <BundleTrunk
+          key={membership.bundle.id}
+          bundle={membership.bundle}
+          selected={membership.bundle.id === selectedBundleId}
+        />
+      ))}
+      {owned.length > 0 && (
         <EdgeLabelRenderer>
-          {bundle.waypoints.map((_waypoint, index) => (
-            <WireBundleWaypoint key={index} bundle={bundle} waypointIndex={index} />
+          {owned.map((membership) => (
+            <Fragment key={membership.bundle.id}>
+              <WireBundleTie
+                bundle={membership.bundle}
+                tieIndex={0}
+                selected={membership.bundle.id === selectedBundleId}
+              />
+              <WireBundleTie
+                bundle={membership.bundle}
+                tieIndex={1}
+                selected={membership.bundle.id === selectedBundleId}
+              />
+              <span
+                className={styles.bundleCount}
+                style={{
+                  transform: `translate(-50%, -50%) translate(${membership.bundle.ties[0].x}px, ${membership.bundle.ties[0].y}px)`,
+                }}
+              >
+                ×{membership.edgeCount}
+              </span>
+            </Fragment>
           ))}
-          <span
-            className={styles.bundleCount}
-            style={{
-              transform: `translate(-50%, -50%) translate(${bundle.waypoints[0].x}px, ${bundle.waypoints[0].y}px)`,
-            }}
-          >
-            ×{bundle.edgeCount}
-          </span>
         </EdgeLabelRenderer>
       )}
     </>
@@ -349,6 +418,51 @@ function sampleSelectedEdges(edgeIds: string[]): EdgeSamples | undefined {
   };
 }
 
+export function SelectedBundleToolbar({
+  edges,
+  wireBundles,
+  disabled,
+}: {
+  edges: WorkflowEdge[];
+  wireBundles: WireBundle[];
+  disabled: boolean;
+}) {
+  const selectedBundleId = useSelectedWireBundleId();
+  const snipWireBundle = useGraphDocumentStore((state) => state.snipWireBundle);
+  const bundle = wireBundles.find((candidate) => candidate.id === selectedBundleId);
+  const anchorEdge =
+    bundle &&
+    edges.find((edge) =>
+      edge.data?.bundles?.some((membership) => membership.bundle.id === bundle.id),
+    );
+  if (!bundle || !anchorEdge) return null;
+  // Anchor below the lower tie so the toolbar never covers the trunk or the
+  // tie handles while the pair is selected.
+  const anchor = {
+    x: (bundle.ties[0].x + bundle.ties[1].x) / 2,
+    y: Math.max(bundle.ties[0].y, bundle.ties[1].y) + 26,
+  };
+
+  return (
+    <EdgeToolbar
+      edgeId={anchorEdge.id}
+      x={anchor.x}
+      y={anchor.y}
+      isVisible
+      alignY="top"
+      className={styles.edgeToolbar}
+      style={{ zIndex: 8 }}
+      aria-label="Selected tie pair actions"
+    >
+      <span className={styles.edgeCount}>tie pair · {bundle.edgeIds.length} wires</span>
+      <button type="button" disabled={disabled} onClick={() => snipWireBundle(bundle.id)}>
+        <Scissors size={13} />
+        Snip
+      </button>
+    </EdgeToolbar>
+  );
+}
+
 export function SelectedWiresToolbar({
   edges,
   wires,
@@ -356,7 +470,7 @@ export function SelectedWiresToolbar({
   disabled,
   onBundle,
   onAddToBundle,
-  onUnbundle,
+  onRemoveFromBundle,
   onSetColor,
   onRemove,
 }: {
@@ -366,7 +480,7 @@ export function SelectedWiresToolbar({
   disabled: boolean;
   onBundle: (edgeIds: string[], start: FlowPosition, end: FlowPosition) => void;
   onAddToBundle: (bundleId: string, edgeIds: string[]) => void;
-  onUnbundle: (edgeIds: string[]) => void;
+  onRemoveFromBundle: (bundleId: string, edgeIds: string[]) => void;
   onSetColor: (edgeIds: string[], color?: WireColor) => void;
   onRemove: (edgeIds: string[]) => void;
 }) {
@@ -386,12 +500,18 @@ export function SelectedWiresToolbar({
   }, [edgeIds]);
 
   if (edgeIds.length === 0 || !samples) return null;
-  const existingBundle = wireBundleForSelection(wireBundles, edgeIds);
+  const containingBundles = wireBundles.filter((bundle) =>
+    edgeIds.every((edgeId) => bundle.edgeIds.includes(edgeId)),
+  );
   const intersectingBundles = wireBundles.filter((bundle) =>
     edgeIds.some((edgeId) => bundle.edgeIds.includes(edgeId)),
   );
+  const pullTarget = containingBundles.length === 1 ? containingBundles[0] : undefined;
   const addTarget =
-    !existingBundle && intersectingBundles.length === 1 ? intersectingBundles[0] : undefined;
+    intersectingBundles.length === 1 &&
+    edgeIds.some((edgeId) => !intersectingBundles[0].edgeIds.includes(edgeId))
+      ? intersectingBundles[0]
+      : undefined;
   const overrides = edgeIds.map(
     (edgeId) => wires.find((wire) => wire.edgeId === edgeId)?.color ?? "auto",
   );
@@ -405,6 +525,7 @@ export function SelectedWiresToolbar({
       isVisible
       alignY="bottom"
       className={styles.edgeToolbar}
+      style={{ zIndex: 8 }}
       aria-label="Selected wire actions"
     >
       <span className={styles.edgeCount}>
@@ -431,31 +552,35 @@ export function SelectedWiresToolbar({
           ))}
         </select>
       </label>
-      {existingBundle ? (
-        <button type="button" disabled={disabled} onClick={() => onUnbundle(edgeIds)}>
-          <Unlink2 size={13} />
-          Unbundle
-        </button>
-      ) : addTarget ? (
+      <button
+        type="button"
+        disabled={disabled || edgeIds.length < 2}
+        onClick={() => {
+          const current = sampleSelectedEdges(edgeIds) ?? samples;
+          onBundle(edgeIds, current.start, current.end);
+        }}
+      >
+        <Cable size={13} />
+        Tie
+      </button>
+      {addTarget && (
         <button
           type="button"
           disabled={disabled}
           onClick={() => onAddToBundle(addTarget.id, edgeIds)}
         >
           <Plus size={13} />
-          Add to bundle
+          Add to tie
         </button>
-      ) : (
+      )}
+      {pullTarget && (
         <button
           type="button"
-          disabled={disabled || edgeIds.length < 2}
-          onClick={() => {
-            const current = sampleSelectedEdges(edgeIds) ?? samples;
-            onBundle(edgeIds, current.start, current.end);
-          }}
+          disabled={disabled}
+          onClick={() => onRemoveFromBundle(pullTarget.id, edgeIds)}
         >
-          <Cable size={13} />
-          Bundle
+          <Unlink2 size={13} />
+          Pull from tie
         </button>
       )}
       <button type="button" disabled={disabled} onClick={() => onRemove(edgeIds)}>

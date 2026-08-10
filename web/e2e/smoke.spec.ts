@@ -613,7 +613,7 @@ test("marquee selection latches to nodes or rendered wire paths", async ({ page 
   expect(errors).toEqual([]);
 });
 
-test("modifier-selected wires can be bundled, moved, recolored, and unbundled", async ({
+test("modifier-selected wires can be tied, moved, recolored, and pulled from the tie", async ({
   page,
 }) => {
   const errors = watchPageErrors(page);
@@ -632,17 +632,17 @@ test("modifier-selected wires can be bundled, moved, recolored, and unbundled", 
     "stroke",
     "rgb(217, 134, 174)",
   );
-  await page.getByRole("button", { name: "Bundle" }).click();
+  await page.getByRole("button", { name: "Tie", exact: true }).click();
 
   const startWaypoint = page.getByRole("button", {
-    name: "Move bundle waypoint 1 for 2 wires",
+    name: "Move tie 1 of the pair around 2 wires",
   });
   const endWaypoint = page.getByRole("button", {
-    name: "Move bundle waypoint 2 for 2 wires",
+    name: "Move tie 2 of the pair around 2 wires",
   });
   await expect(startWaypoint).toBeVisible();
   await expect(endWaypoint).toBeVisible();
-  await expect(page.getByRole("button", { name: "Unbundle" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Snip" })).toBeVisible();
 
   const trunk = page.locator('path[class*="bundleTrunkHitArea"]').last();
   const trunkBox = await trunk.boundingBox();
@@ -702,25 +702,23 @@ test("modifier-selected wires can be bundled, moved, recolored, and unbundled", 
     x: Number(await endWaypoint.getAttribute("data-flow-x")),
     y: Number(await endWaypoint.getAttribute("data-flow-y")),
   };
+  const viewport = page.locator(".react-flow__viewport");
+  const viewportBefore = await viewport.getAttribute("style");
   await page.locator(".react-flow__pane").click({
     button: "right",
     position: { x: 400, y: 20 },
   });
   await page.getByRole("menuitem", { name: "Tidy graph" }).click();
-  await expect
-    .poll(async () => ({
-      x: Number(await endWaypoint.getAttribute("data-flow-x")),
-      y: Number(await endWaypoint.getAttribute("data-flow-y")),
-    }))
-    .not.toEqual(manuallyMovedFlow);
-  const tidiedStartX = Number(await startWaypoint.getAttribute("data-flow-x"));
-  const tidiedEndX = Number(await endWaypoint.getAttribute("data-flow-x"));
-  expect(tidiedStartX).toBeLessThan(tidiedEndX);
+  await expect.poll(() => viewport.getAttribute("style")).not.toBe(viewportBefore);
+  expect({
+    x: Number(await endWaypoint.getAttribute("data-flow-x")),
+    y: Number(await endWaypoint.getAttribute("data-flow-y")),
+  }).toEqual(manuallyMovedFlow);
 
   await clickWireAt(page, "endpoint-loom", 0.08);
   await clickWireAt(page, "model-loom", 0.08, true);
-  await expect(page.getByRole("button", { name: "Unbundle" })).toBeVisible();
-  await page.getByRole("button", { name: "Unbundle" }).click();
+  await expect(page.getByRole("button", { name: "Pull from tie" })).toBeVisible();
+  await page.getByRole("button", { name: "Pull from tie" }).click();
   await expect(startWaypoint).toBeHidden();
   await expect(endWaypoint).toBeHidden();
   await expect(endpointWire).toHaveCount(1);
@@ -728,52 +726,45 @@ test("modifier-selected wires can be bundled, moved, recolored, and unbundled", 
   expect(errors).toEqual([]);
 });
 
-test("tidy graph keeps a mixed-source fan-in cable tie inside its target frame", async ({
-  page,
-}) => {
+test("wires pass through two tie pairs and each pair snips independently", async ({ page }) => {
   const errors = watchPageErrors(page);
   await page.goto("/");
-
-  const model = page.locator('.react-flow__node[data-id="model"]');
-  const loom = page.locator('.react-flow__node[data-id="loom"]');
-  await model.locator("header").click();
-  await page.keyboard.down("Control");
-  await loom.locator("header").click();
-  await page.keyboard.up("Control");
-  await model.locator("header").click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Group in collapsible frame" }).click();
 
   await clickWireAt(page, "endpoint-loom", 0.34);
   await clickWireAt(page, "model-loom", 0.34, true);
   await expect(page.getByText("2 wires", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Bundle" }).press("Enter");
+  await page.getByRole("button", { name: "Tie", exact: true }).click();
 
-  const frame = page.locator('.react-flow__node[data-id^="frame-"]');
-  const trunk = page.locator('path[class*="bundleTrunkHitArea"]').last();
-  await expect(trunk).toBeVisible();
-  await page.locator(".react-flow__pane").click({
-    button: "right",
-    position: { x: 400, y: 20 },
-  });
-  await page.getByRole("menuitem", { name: "Tidy graph" }).click();
+  const trunks = page.locator('path[class*="bundleTrunkHitArea"]');
+  const tieHandles = page.locator('button[class*="tieHandle"]');
+  await expect(trunks).toHaveCount(1);
+  await expect(tieHandles).toHaveCount(2);
 
-  await expect
-    .poll(async () => {
-      const frameBox = await frame.boundingBox();
-      const trunkBox = await trunk.boundingBox();
-      if (!frameBox || !trunkBox) return false;
-      const center = {
-        x: trunkBox.x + trunkBox.width / 2,
-        y: trunkBox.y + trunkBox.height / 2,
-      };
-      return (
-        center.x >= frameBox.x &&
-        center.y >= frameBox.y &&
-        center.x <= frameBox.x + frameBox.width &&
-        center.y <= frameBox.y + frameBox.height
-      );
-    })
-    .toBe(true);
+  const trunkBox = await trunks.first().boundingBox();
+  expect(trunkBox).not.toBeNull();
+  if (trunkBox) {
+    const center = {
+      x: trunkBox.x + trunkBox.width / 2,
+      y: trunkBox.y + trunkBox.height / 2,
+    };
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.move(center.x - 60, center.y - 40, { steps: 8 });
+    await page.mouse.up();
+  }
+  await page.locator(".react-flow__pane").click({ position: { x: 400, y: 20 } });
+
+  await clickWireAt(page, "endpoint-loom", 0.12);
+  await clickWireAt(page, "model-loom", 0.12, true);
+  await page.getByRole("button", { name: "Tie", exact: true }).click();
+  await expect(trunks).toHaveCount(2);
+  await expect(tieHandles).toHaveCount(4);
+
+  await trunks.last().click();
+  await expect(page.getByRole("button", { name: "Snip" })).toBeVisible();
+  await page.getByRole("button", { name: "Snip" }).click();
+  await expect(trunks).toHaveCount(1);
+  await expect(tieHandles).toHaveCount(2);
   expect(errors).toEqual([]);
 });
 

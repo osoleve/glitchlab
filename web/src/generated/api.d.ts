@@ -1210,22 +1210,21 @@ export interface components {
         };
         /**
          * WireBundlePresentation
-         * @description A visual-only routed bundle of graph edges.
+         * @description A visual-only pair of cable ties clamping graph edges together.
+         *
+         *     Wires may pass through any number of tie pairs; the ties only pin where
+         *     the clamped run sits on the canvas, never the wires' full lengths.
          */
         WireBundlePresentation: {
-            /**
-             * Collapsed
-             * @default false
-             */
-            collapsed: boolean;
             /** Edge Ids */
             edge_ids: string[];
             /** Id */
             id: string;
-            /** Label */
-            label?: string | null;
-            /** Waypoints */
-            waypoints: components["schemas"]["Position"][];
+            /** Ties */
+            ties: [
+                components["schemas"]["Position"],
+                components["schemas"]["Position"]
+            ];
         };
         /**
          * WirePresentation

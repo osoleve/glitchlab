@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assertWirePresentationPreserved, hydrateGraph, serializeGraph } from "./graph";
-import type { NodeDefinition, WorkflowFrame, WorkflowNode, WorkflowNote } from "./types";
+import type { NodeDefinition, WireBundle, WorkflowFrame, WorkflowNode, WorkflowNote } from "./types";
 
 const definition = {
   kind: "test",
@@ -58,10 +58,11 @@ describe("graph presentation", () => {
       [
         {
           id: "bundle-a",
-          edgeIds: ["edge-a"],
-          waypoints: [{ x: 12, y: 24 }],
-          collapsed: true,
-          label: "comparison",
+          edgeIds: ["edge-a", "edge-b"],
+          ties: [
+            { x: 12, y: 24 },
+            { x: 64, y: 24 },
+          ],
         },
       ],
     );
@@ -148,15 +149,22 @@ describe("graph presentation", () => {
       },
     ];
     const wires = [{ edgeId: "edge-a", color: "rose" as const }];
-    const wireBundles = [
+    const wireBundles: WireBundle[] = [
       {
         id: "bundle-a",
         edgeIds: ["edge-a", "edge-b"],
-        waypoints: [
+        ties: [
           { x: 180, y: 120 },
           { x: 320, y: 180 },
         ],
-        collapsed: false,
+      },
+      {
+        id: "bundle-b",
+        edgeIds: ["edge-a", "edge-b"],
+        ties: [
+          { x: 420, y: 160 },
+          { x: 520, y: 160 },
+        ],
       },
     ];
 
@@ -166,11 +174,18 @@ describe("graph presentation", () => {
       {
         id: "bundle-a",
         edge_ids: ["edge-a", "edge-b"],
-        waypoints: [
+        ties: [
           { x: 180, y: 120 },
           { x: 320, y: 180 },
         ],
-        collapsed: false,
+      },
+      {
+        id: "bundle-b",
+        edge_ids: ["edge-a", "edge-b"],
+        ties: [
+          { x: 420, y: 160 },
+          { x: 520, y: 160 },
+        ],
       },
     ]);
     const hydrated = hydrateGraph(graph, [definition]);

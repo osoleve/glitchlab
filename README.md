@@ -19,7 +19,7 @@ Glitchlab is the distribution, Python package, CLI, API, and workbench.
 
 ## Features
 
-- **Cable ties!** Bundle related wires into tidy, draggable routes.
+- **Cable ties!** Clamp wires together with draggable tie pairs — a wire can run through several, snipping a tie frees just that stretch, and tidy layout arranges nodes around wherever you left the ties.
 - **Canvas notes.** Leave resizable, color-coded guidance inside saved graphs and templates.
 - **A basic loom!** Grow and compare branching text histories without flattening them into a single prompt.
 - **Glitchlings integration for text perturbation.** Discover operations from the public registry, seed them deterministically, and record what happened.

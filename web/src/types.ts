@@ -48,7 +48,7 @@ export type FrameColor = "violet" | "teal" | "amber" | "rose" | "slate";
 export type NoteColor = FrameColor;
 export type EdgeRouting = "smoothstep" | "bezier";
 export type FlowPosition = { x: number; y: number };
-export type SelectionKind = "node" | "wire";
+export type SelectionKind = "node" | "wire" | "bundle";
 export type WireColor = "slate" | "amber" | "cyan" | "teal" | "violet" | "coral" | "blue" | "rose";
 
 export interface WirePresentation {
@@ -59,9 +59,14 @@ export interface WirePresentation {
 export interface WireBundle {
   id: string;
   edgeIds: string[];
-  waypoints: FlowPosition[];
-  collapsed: boolean;
-  label?: string;
+  ties: [FlowPosition, FlowPosition];
+}
+
+export interface WireBundleMembership {
+  bundle: WireBundle;
+  edgeIndex: number;
+  edgeCount: number;
+  ownsHandles: boolean;
 }
 
 export interface WireEdgeData extends Record<string, unknown> {
@@ -69,11 +74,7 @@ export interface WireEdgeData extends Record<string, unknown> {
   wireColor?: WireColor;
   wireColorValue?: string;
   routing?: EdgeRouting;
-  bundle?: WireBundle & {
-    edgeIndex: number;
-    edgeCount: number;
-    ownsHandles: boolean;
-  };
+  bundles?: WireBundleMembership[];
   presentationProxy?: boolean;
   semanticEdgeIds?: string[];
 }
@@ -122,9 +123,7 @@ export interface GraphPresentation {
   wire_bundles: Array<{
     id: string;
     edge_ids: string[];
-    waypoints: FlowPosition[];
-    collapsed: boolean;
-    label?: string | null;
+    ties: [FlowPosition, FlowPosition];
   }>;
   node_previews: Array<{ node_id: string; visible: boolean }>;
   notes: Array<{

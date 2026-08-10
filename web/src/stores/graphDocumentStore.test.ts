@@ -299,11 +299,10 @@ describe("graph document store", () => {
         {
           id: "bundle-a",
           edgeIds: ["incoming", "outgoing"],
-          waypoints: [
+          ties: [
             { x: 100, y: 100 },
             { x: 200, y: 100 },
           ],
-          collapsed: false,
         },
       ],
     });
@@ -345,7 +344,7 @@ describe("graph document store", () => {
         { x: 280, y: 160 },
         () => "fixed-id",
       );
-    useGraphDocumentStore.getState().moveWireBundleWaypoint(bundleId!, 0, { x: 132, y: 144 });
+    useGraphDocumentStore.getState().moveWireBundleTie(bundleId!, 0, { x: 132, y: 144 });
 
     const state = useGraphDocumentStore.getState();
     expect(bundleId).toBe("bundle-fixed-id");
@@ -353,18 +352,19 @@ describe("graph document store", () => {
       {
         id: "bundle-fixed-id",
         edgeIds: ["edge-a", "edge-b", "edge-c"],
-        waypoints: [
+        ties: [
           { x: 132, y: 144 },
           { x: 280, y: 160 },
         ],
-        collapsed: false,
       },
     ]);
+    expect(state.selectionKind).toBe("bundle");
+    expect(state.selectedWireBundleId).toBe("bundle-fixed-id");
     expect(state.nodes[0]?.data.runStatus).toBe("completed");
     expect(state.isDirty).toBe(true);
   });
 
-  it("prunes wire bundles as bundled edges are removed or unbundled", () => {
+  it("prunes a tie pair as its wires are removed or pulled out", () => {
     useGraphDocumentStore.setState({
       edges: [
         { id: "edge-a", source: "one", target: "two" },
@@ -375,11 +375,10 @@ describe("graph document store", () => {
         {
           id: "bundle-a",
           edgeIds: ["edge-a", "edge-b", "edge-c"],
-          waypoints: [
+          ties: [
             { x: 10, y: 20 },
             { x: 30, y: 40 },
           ],
-          collapsed: false,
         },
       ],
     });
@@ -387,8 +386,45 @@ describe("graph document store", () => {
     useGraphDocumentStore.getState().removeEdge("edge-a");
     expect(useGraphDocumentStore.getState().wireBundles[0]?.edgeIds).toEqual(["edge-b", "edge-c"]);
 
-    useGraphDocumentStore.getState().unbundleEdges(["edge-b"]);
+    useGraphDocumentStore.getState().removeEdgesFromBundle("bundle-a", ["edge-b"]);
     expect(useGraphDocumentStore.getState().wireBundles).toEqual([]);
+  });
+
+  it("lets a wire pass through overlapping tie pairs without dissolving earlier ones", () => {
+    useGraphDocumentStore.setState({
+      edges: [
+        { id: "edge-a", source: "one", target: "two" },
+        { id: "edge-b", source: "one", target: "two" },
+        { id: "edge-c", source: "one", target: "two" },
+      ],
+      wireBundles: [
+        {
+          id: "bundle-a",
+          edgeIds: ["edge-a", "edge-b"],
+          ties: [
+            { x: 10, y: 20 },
+            { x: 30, y: 40 },
+          ],
+        },
+      ],
+    });
+
+    const createdId = useGraphDocumentStore
+      .getState()
+      .bundleEdges(["edge-a", "edge-c"], { x: 200, y: 20 }, { x: 260, y: 40 }, () => "second");
+
+    const state = useGraphDocumentStore.getState();
+    expect(createdId).toBe("bundle-second");
+    expect(state.wireBundles.map((bundle) => bundle.edgeIds)).toEqual([
+      ["edge-a", "edge-b"],
+      ["edge-a", "edge-c"],
+    ]);
+
+    useGraphDocumentStore.getState().snipWireBundle("bundle-second");
+    expect(useGraphDocumentStore.getState().wireBundles.map((bundle) => bundle.id)).toEqual([
+      "bundle-a",
+    ]);
+    expect(useGraphDocumentStore.getState().selectionKind).toBeUndefined();
   });
 
   it("adds wires to an existing bundle and stores optional color overrides", () => {
@@ -402,11 +438,10 @@ describe("graph document store", () => {
         {
           id: "bundle-a",
           edgeIds: ["edge-a", "edge-b"],
-          waypoints: [
+          ties: [
             { x: 10, y: 20 },
             { x: 30, y: 40 },
           ],
-          collapsed: false,
         },
       ],
     });

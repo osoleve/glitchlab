@@ -186,13 +186,15 @@ class WirePresentation(BaseModel):
 
 
 class WireBundlePresentation(BaseModel):
-    """A visual-only routed bundle of graph edges."""
+    """A visual-only pair of cable ties clamping graph edges together.
+
+    Wires may pass through any number of tie pairs; the ties only pin where
+    the clamped run sits on the canvas, never the wires' full lengths.
+    """
 
     id: str
     edge_ids: list[str] = Field(min_length=2)
-    waypoints: list[Position] = Field(min_length=2)
-    collapsed: bool = False
-    label: str | None = None
+    ties: tuple[Position, Position]
 
 
 class NodePreviewPresentation(BaseModel):
@@ -391,7 +393,6 @@ class GraphSpec(BaseModel):
                 )
 
         wire_bundle_ids: set[str] = set()
-        bundled_edge_ids: set[str] = set()
         for wire_bundle in self.presentation.wire_bundles:
             if wire_bundle.id in wire_bundle_ids:
                 raise ValueError(
@@ -409,13 +410,6 @@ class GraphSpec(BaseModel):
                 raise ValueError(
                     f"Wire bundle {wire_bundle.id!r} references unknown edge {unknown!r}."
                 )
-            reused_edge_ids = unique_edge_ids & bundled_edge_ids
-            if reused_edge_ids:
-                reused = sorted(reused_edge_ids)[0]
-                raise ValueError(
-                    f"Edge {reused!r} cannot belong to more than one wire bundle."
-                )
-            bundled_edge_ids.update(unique_edge_ids)
 
         preview_node_ids: set[str] = set()
         node_kinds = {node.id: node.kind for node in self.nodes}

@@ -87,6 +87,7 @@ import type {
   CanvasNode,
   CatalogResponse,
   ControlPortMode,
+  FlowPosition,
   GraphDocument,
   GraphDocumentSummary,
   GraphSpec,
@@ -239,7 +240,7 @@ export function GlitchlabWorkbench() {
     setEdgeRouting,
     bundleEdges,
     addEdgesToBundle,
-    unbundleEdges,
+    removeEdgesFromBundle,
     setWireColor,
     setSelectedId,
     setGraphName,
@@ -1008,6 +1009,10 @@ export function GlitchlabWorkbench() {
     if (included && new Set(targets.map((node) => node.parentId ?? "")).size > 1) {
       return;
     }
+    const parentId = included ? targets[0]?.parentId : undefined;
+    const parentPosition = parentId
+      ? (frames.find((frame) => frame.id === parentId)?.position ?? { x: 0, y: 0 })
+      : { x: 0, y: 0 };
     try {
       const layout = await tidyGraphLayout(
         targets.map((node) => ({
@@ -1017,7 +1022,16 @@ export function GlitchlabWorkbench() {
           ...(!included && node.parentId ? { parentId: node.parentId } : {}),
         })),
         edges,
-        wireBundles,
+        // Tie pairs stay where the user placed them and constrain the layout,
+        // expressed in the same coordinate frame as the laid-out nodes.
+        wireBundles.map((bundle) => ({
+          id: bundle.id,
+          edgeIds: bundle.edgeIds,
+          ties: [
+            { x: bundle.ties[0].x - parentPosition.x, y: bundle.ties[0].y - parentPosition.y },
+            { x: bundle.ties[1].x - parentPosition.x, y: bundle.ties[1].y - parentPosition.y },
+          ] as [FlowPosition, FlowPosition],
+        })),
         included
           ? []
           : frames.map((frame) => ({
@@ -1029,19 +1043,6 @@ export function GlitchlabWorkbench() {
             })),
       );
       const positions = layout.nodePositions;
-      const parentId = included ? targets[0]?.parentId : undefined;
-      const parentPosition = parentId
-        ? (frames.find((frame) => frame.id === parentId)?.position ?? { x: 0, y: 0 })
-        : { x: 0, y: 0 };
-      const positionedWireBundles = new Map(
-        [...layout.wireBundleWaypoints].map(([bundleId, waypoints]) => [
-          bundleId,
-          waypoints.map((waypoint) => ({
-            x: waypoint.x + parentPosition.x,
-            y: waypoint.y + parentPosition.y,
-          })),
-        ]),
-      );
       const changed =
         targets.some((node) => {
           const position = positions.get(node.id);
@@ -1064,23 +1065,10 @@ export function GlitchlabWorkbench() {
                     Math.abs(size.height - (frame.measured?.height ?? frame.height ?? 260)) >
                       0.01)),
             );
-          })) ||
-        wireBundles.some((wireBundle) => {
-          const waypoints = positionedWireBundles.get(wireBundle.id);
-          return Boolean(
-            waypoints?.some((waypoint, index) => {
-              const current = wireBundle.waypoints[index];
-              return (
-                !current ||
-                Math.abs(waypoint.x - current.x) > 0.01 ||
-                Math.abs(waypoint.y - current.y) > 0.01
-              );
-            }),
-          );
-        });
+          }));
       if (changed) {
         updateDocument(
-          ({ nodes: current, frames: currentFrames, wireBundles: currentWireBundles }) => ({
+          ({ nodes: current, frames: currentFrames }) => ({
             nodes: current.map((node) => {
               const position = positions.get(node.id);
               return position ? { ...node, position } : node;
@@ -1094,10 +1082,6 @@ export function GlitchlabWorkbench() {
                 ...(position ? { position } : {}),
                 ...(size ? { width: size.width, height: size.height, measured: undefined } : {}),
               };
-            }),
-            wireBundles: currentWireBundles.map((wireBundle) => {
-              const waypoints = positionedWireBundles.get(wireBundle.id);
-              return waypoints ? { ...wireBundle, waypoints } : wireBundle;
             }),
           }),
           false,
@@ -2268,6 +2252,22 @@ export function GlitchlabWorkbench() {
     })),
   ];
   const presentationEdges = collapseFrameEdges(edges, nodes, collapsedFrameIds);
+  const renderedEdgeOrder = new Map(
+    presentationEdges
+      .filter((edge) => !edge.data?.presentationProxy)
+      .map((edge, index) => [edge.id, index] as const),
+  );
+  // The topmost rendered member draws the bundle's trunk and tie handles so
+  // they stay clickable above the other members' interaction strokes.
+  const bundleHandleOwners = new Map(
+    wireBundles.flatMap((bundle) => {
+      const owner = bundle.edgeIds
+        .filter((edgeId) => renderedEdgeOrder.has(edgeId))
+        .sort((left, right) => renderedEdgeOrder.get(left)! - renderedEdgeOrder.get(right)!)
+        .at(-1);
+      return owner ? [[bundle.id, owner] as const] : [];
+    }),
+  );
   const flowEdges = presentationEdges.map((edge) => {
     const semanticIds = edge.data?.presentationProxy
       ? ((edge.data.semanticEdgeIds as string[] | undefined) ?? [edge.id])
@@ -2285,30 +2285,27 @@ export function GlitchlabWorkbench() {
     const transferring = activity?.recentEdgeIds.some((id) => semanticIds.includes(id)) ?? false;
     const semanticEdge = edges.find((candidate) => candidate.id === semanticIds[0]) ?? edge;
     const appearance = wireAppearance(semanticEdge, nodes, wires);
-    const wireBundle = edge.data?.presentationProxy
-      ? undefined
-      : wireBundles.find((candidate) => candidate.edgeIds.includes(edge.id));
-    const wireIndex = wireBundle?.edgeIds.indexOf(edge.id) ?? -1;
+    const memberships = edge.data?.presentationProxy
+      ? []
+      : wireBundles
+          .filter((candidate) => candidate.edgeIds.includes(edge.id))
+          .map((candidate) => ({
+            bundle: candidate,
+            edgeIndex: candidate.edgeIds.indexOf(edge.id),
+            edgeCount: candidate.edgeIds.length,
+            ownsHandles: bundleHandleOwners.get(candidate.id) === edge.id,
+          }));
     return {
       ...edge,
       type: "wire",
-      reconnectable: !wireBundle,
+      reconnectable: memberships.length === 0,
       data: {
         ...edge.data,
         routing: edgeRouting,
         valueType: appearance.valueType,
         wireColor: appearance.colorName,
         wireColorValue: appearance.color,
-        ...(wireBundle
-          ? {
-              bundle: {
-                ...wireBundle,
-                edgeIndex: wireIndex,
-                edgeCount: wireBundle.edgeIds.length,
-                ownsHandles: wireIndex === 0,
-              },
-            }
-          : {}),
+        ...(memberships.length > 0 ? { bundles: memberships } : {}),
       },
       className: [scopeClassName, transferring ? styles["edge-transfer-pulse"] : undefined]
         .filter(Boolean)
@@ -2446,7 +2443,7 @@ export function GlitchlabWorkbench() {
           }}
           onBundleEdges={(edgeIds, start, end) => bundleEdges(edgeIds, start, end)}
           onAddEdgesToBundle={addEdgesToBundle}
-          onUnbundleEdges={unbundleEdges}
+          onRemoveEdgesFromBundle={removeEdgesFromBundle}
           onSetWireColor={setWireColor}
           onFitExecutionScope={fitExecutionScope}
           onNodeDragStop={finishNodeDragHistory}

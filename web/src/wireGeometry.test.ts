@@ -1,47 +1,111 @@
 import { Position } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
-import type { WireBundle } from "./types";
-import { bundledWireGeometry, wireBundleForSelection, wireBundleOrder } from "./wireGeometry";
+import type { WireBundle, WireBundleMembership } from "./types";
+import {
+  bundleTrunkPath,
+  sortBundlesAlongWire,
+  wireBundleOrder,
+  wireGeometry,
+} from "./wireGeometry";
 
 const bundle: WireBundle = {
   id: "bundle-a",
   edgeIds: ["a", "b", "c"],
-  waypoints: [
+  ties: [
     { x: 100, y: 80 },
     { x: 220, y: 80 },
   ],
-  collapsed: false,
 };
 
+function membership(
+  tie: WireBundle,
+  edgeIndex: number,
+  edgeCount: number,
+): WireBundleMembership {
+  return { bundle: tie, edgeIndex, edgeCount, ownsHandles: edgeIndex === 0 };
+}
+
 describe("wire bundle geometry", () => {
-  it("routes bundle members in stable parallel lanes through waypoints", () => {
-    const top = bundledWireGeometry(
+  it("routes bundle members in stable parallel lanes between the tie pair", () => {
+    const top = wireGeometry(
       { x: 0, y: 20 },
       { x: 320, y: 20 },
       Position.Right,
       Position.Left,
-      bundle,
-      0,
-      3,
+      [membership(bundle, 0, 3)],
     );
-    const middle = bundledWireGeometry(
+    const middle = wireGeometry(
       { x: 0, y: 80 },
       { x: 320, y: 80 },
       Position.Right,
       Position.Left,
-      bundle,
-      1,
-      3,
+      [membership(bundle, 1, 3)],
     );
-    expect(top.offsetWaypoints[0].y).toBeLessThan(middle.offsetWaypoints[0].y);
-    expect(middle.offsetWaypoints).toEqual(bundle.waypoints);
-    expect(middle.trunkPath).toContain("M 100.00,80.00 L 220.00,80.00");
+    expect(top.bundles[0].laneTies[0].y).toBeLessThan(middle.bundles[0].laneTies[0].y);
+    expect(middle.bundles[0].laneTies).toEqual(bundle.ties);
+    expect(middle.path).toContain("L 220.00,80.00");
+    expect(bundleTrunkPath(bundle)).toBe("M 100.00,80.00 L 220.00,80.00");
   });
 
-  it("recognizes a bundle containing every selected wire", () => {
-    expect(wireBundleForSelection([bundle], ["a", "c"])?.id).toBe("bundle-a");
-    expect(wireBundleForSelection([bundle], ["a", "missing"])).toBeUndefined();
-    expect(wireBundleForSelection([bundle], ["a"])).toBeUndefined();
+  it("lerps through every tie pair on the wire in order along its length", () => {
+    const late: WireBundle = {
+      id: "bundle-late",
+      edgeIds: ["a", "b"],
+      ties: [
+        { x: 400, y: 60 },
+        { x: 500, y: 60 },
+      ],
+    };
+    const geometry = wireGeometry(
+      { x: 0, y: 80 },
+      { x: 620, y: 60 },
+      Position.Right,
+      Position.Left,
+      [membership(late, 0, 2), membership(bundle, 1, 3)],
+    );
+    expect(geometry.bundles.map((entry) => entry.bundle.id)).toEqual(["bundle-a", "bundle-late"]);
+    const trunkRuns = geometry.path.match(/L /g) ?? [];
+    expect(trunkRuns).toHaveLength(2);
+    expect(geometry.path.indexOf("100.00,80.00")).toBeLessThan(geometry.path.indexOf("400.00"));
+    expect(geometry.path.endsWith("620.00,60.00")).toBe(true);
+  });
+
+  it("keeps bezier controls inside small gaps between tie pairs", () => {
+    const near: WireBundle = {
+      id: "bundle-near",
+      edgeIds: ["a", "b"],
+      ties: [
+        { x: 240, y: 80 },
+        { x: 320, y: 80 },
+      ],
+    };
+    const geometry = wireGeometry(
+      { x: 0, y: 80 },
+      { x: 420, y: 80 },
+      Position.Right,
+      Position.Left,
+      [membership(bundle, 0, 2), membership(near, 0, 2)],
+    );
+    const controls = [...geometry.path.matchAll(/C ([\d.-]+),[\d.-]+ ([\d.-]+),[\d.-]+/g)];
+    const between = controls[1];
+    expect(Number(between[1])).toBeGreaterThan(220);
+    expect(Number(between[2])).toBeLessThan(240);
+  });
+
+  it("sorts tie pairs by their position along the wire", () => {
+    const early: WireBundle = {
+      id: "z-early",
+      edgeIds: ["a", "b"],
+      ties: [
+        { x: 40, y: 100 },
+        { x: 80, y: 100 },
+      ],
+    };
+    const sorted = sortBundlesAlongWire({ x: 0, y: 80 }, { x: 320, y: 80 }, [
+      { bundle },
+      { bundle: early },
+    ]);
+    expect(sorted.map((entry) => entry.bundle.id)).toEqual(["z-early", "bundle-a"]);
   });
 
   it("orders bundle lanes by their input-side targets", () => {
