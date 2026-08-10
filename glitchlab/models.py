@@ -23,6 +23,8 @@ ValueType = Literal[
     "file",
 ]
 ControlPortMode = Literal["input", "output", "passthrough"]
+FoldInputRole = Literal["accumulator", "item"]
+FoldOutputRole = Literal["step"]
 FieldControl = Literal[
     "text",
     "textarea",
@@ -93,6 +95,14 @@ class NodeDefinition(BaseModel):
         exclude_if=lambda value: value is None,
     )
     workflow: WorkflowReference | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+    workflow_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+    workflow_persisted: bool | None = Field(
         default=None,
         exclude_if=lambda value: value is None,
     )
@@ -363,18 +373,12 @@ class GraphSpec(BaseModel):
                 raise ValueError(f"Frame IDs must be unique; duplicate {frame.id!r}.")
             frame_ids.add(frame.id)
             if frame.id in semantic_node_ids:
-                raise ValueError(
-                    f"Frame ID {frame.id!r} collides with a semantic node ID."
-                )
+                raise ValueError(f"Frame ID {frame.id!r} collides with a semantic node ID.")
             for node_id in frame.node_ids:
                 if node_id not in semantic_node_ids:
-                    raise ValueError(
-                        f"Frame {frame.id!r} references unknown node {node_id!r}."
-                    )
+                    raise ValueError(f"Frame {frame.id!r} references unknown node {node_id!r}.")
                 if node_id in framed_node_ids:
-                    raise ValueError(
-                        f"Node {node_id!r} cannot belong to more than one frame."
-                    )
+                    raise ValueError(f"Node {node_id!r} cannot belong to more than one frame.")
                 framed_node_ids.add(node_id)
 
         semantic_edge_ids = {edge.id for edge in self.edges}
@@ -386,23 +390,17 @@ class GraphSpec(BaseModel):
                 )
             wire_edge_ids.add(wire.edge_id)
             if wire.edge_id not in semantic_edge_ids:
-                raise ValueError(
-                    f"Wire presentation references unknown edge {wire.edge_id!r}."
-                )
+                raise ValueError(f"Wire presentation references unknown edge {wire.edge_id!r}.")
 
         wire_bundle_ids: set[str] = set()
         bundled_edge_ids: set[str] = set()
         for wire_bundle in self.presentation.wire_bundles:
             if wire_bundle.id in wire_bundle_ids:
-                raise ValueError(
-                    f"Wire bundle IDs must be unique; duplicate {wire_bundle.id!r}."
-                )
+                raise ValueError(f"Wire bundle IDs must be unique; duplicate {wire_bundle.id!r}.")
             wire_bundle_ids.add(wire_bundle.id)
             unique_edge_ids = set(wire_bundle.edge_ids)
             if len(unique_edge_ids) != len(wire_bundle.edge_ids):
-                raise ValueError(
-                    f"Wire bundle {wire_bundle.id!r} cannot repeat an edge."
-                )
+                raise ValueError(f"Wire bundle {wire_bundle.id!r} cannot repeat an edge.")
             unknown_edge_ids = unique_edge_ids - semantic_edge_ids
             if unknown_edge_ids:
                 unknown = sorted(unknown_edge_ids)[0]
@@ -412,9 +410,7 @@ class GraphSpec(BaseModel):
             reused_edge_ids = unique_edge_ids & bundled_edge_ids
             if reused_edge_ids:
                 reused = sorted(reused_edge_ids)[0]
-                raise ValueError(
-                    f"Edge {reused!r} cannot belong to more than one wire bundle."
-                )
+                raise ValueError(f"Edge {reused!r} cannot belong to more than one wire bundle.")
             bundled_edge_ids.update(unique_edge_ids)
 
         preview_node_ids: set[str] = set()
@@ -426,9 +422,7 @@ class GraphSpec(BaseModel):
                 )
             preview_node_ids.add(node_preview.node_id)
             if node_preview.node_id not in semantic_node_ids:
-                raise ValueError(
-                    f"Node preview references unknown node {node_preview.node_id!r}."
-                )
+                raise ValueError(f"Node preview references unknown node {node_preview.node_id!r}.")
             if node_kinds[node_preview.node_id] not in {"preview", "compare_preview"}:
                 raise ValueError(
                     f"Node preview {node_preview.node_id!r} must reference an inspect node."
@@ -562,6 +556,10 @@ class WorkflowInput(BaseModel):
     type: ValueType
     required: bool = True
     multiple: bool = False
+    fold_role: FoldInputRole | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
     node_id: str
     node_port: str
 
@@ -572,6 +570,10 @@ class WorkflowOutput(BaseModel):
     name: str
     label: str
     type: ValueType
+    fold_role: FoldOutputRole | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
     node_id: str
     node_port: str
 
@@ -602,10 +604,10 @@ class WorkflowListResponse(BaseModel):
 
 
 class SaveWorkflowResponse(BaseModel):
-    """A saved workflow and its catalog node definition."""
+    """A saved workflow and every catalog definition derived from it."""
 
     workflow: WorkflowSpec
-    definition: NodeDefinition
+    definitions: list[NodeDefinition]
 
 
 class LoadWorkflowResponse(BaseModel):

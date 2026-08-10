@@ -44,7 +44,7 @@ from .models import (
     WorkflowDraft,
     WorkflowListResponse,
 )
-from .workflows import WorkflowInUseError, WorkflowStore, workflow_definition
+from .workflows import WorkflowInUseError, WorkflowStore, workflow_definitions
 
 app = FastAPI(title="Glitchlab", version=__version__)
 app.add_middleware(
@@ -91,16 +91,17 @@ def catalog() -> dict[str, Any]:
     discovered: list[dict[str, Any]] = []
     if status["available"]:
         discovered = discover_glitchlings()
-    options = [
-        {"label": item["label"], "value": item["name"]}
-        for item in discovered
-    ]
+    options = [{"label": item["label"], "value": item["name"]} for item in discovered]
     engine = GraphEngine()
     workflows = engine.workflow_store.list_latest()
     return {
         "nodes": [
             *get_catalog(options),
-            *(workflow_definition(workflow) for workflow in workflows),
+            *(
+                definition
+                for workflow in workflows
+                for definition in workflow_definitions(workflow)
+            ),
         ],
         "glitchlings": discovered,
         "plugin": status,
@@ -112,9 +113,7 @@ def list_graphs() -> dict[str, Any]:
     """Return saved editable graph documents without their full graph bodies."""
 
     store = GraphStore(GraphEngine().workspace)
-    return {
-        "graphs": [graph.model_dump(mode="json") for graph in store.list()]
-    }
+    return {"graphs": [graph.model_dump(mode="json") for graph in store.list()]}
 
 
 @app.post("/api/graphs", status_code=201, response_model=GraphDocumentResponse)
@@ -196,11 +195,7 @@ def list_graph_templates() -> dict[str, Any]:
     """List checked-in graphs that always open as unsaved copies."""
 
     store = GraphTemplateStore(GraphEngine().workspace)
-    return {
-        "templates": [
-            template.model_dump(mode="json") for template in store.list()
-        ]
-    }
+    return {"templates": [template.model_dump(mode="json") for template in store.list()]}
 
 
 @app.get(
@@ -227,11 +222,7 @@ def list_workflows() -> dict[str, Any]:
     """Return the latest immutable version of each named workflow."""
 
     store = WorkflowStore(GraphEngine().workspace)
-    return {
-        "workflows": [
-            workflow.model_dump(mode="json") for workflow in store.list_latest()
-        ]
-    }
+    return {"workflows": [workflow.model_dump(mode="json") for workflow in store.list_latest()]}
 
 
 @app.post("/api/workflows", status_code=201, response_model=SaveWorkflowResponse)
@@ -246,7 +237,7 @@ def save_workflow(draft: WorkflowDraft) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
     return {
         "workflow": workflow.model_dump(mode="json"),
-        "definition": workflow_definition(workflow),
+        "definitions": workflow_definitions(workflow),
     }
 
 
@@ -279,7 +270,7 @@ def get_workflow(workflow_id: str, version: int) -> dict[str, Any]:
     try:
         workflow = store.get(workflow_id, version)
         definitions = {
-            node.kind: store.node_definition(node.kind)
+            node.kind: store.node_definition(node.kind, node.config)
             for node in workflow.graph.nodes
         }
     except ValueError as exc:
@@ -309,7 +300,7 @@ def update_workflow(
         raise HTTPException(status_code=422, detail={"message": str(exc)}) from exc
     return {
         "workflow": workflow.model_dump(mode="json"),
-        "definition": workflow_definition(workflow),
+        "definitions": workflow_definitions(workflow),
     }
 
 
@@ -404,9 +395,7 @@ async def _run_event_lines(request: RunRequest) -> AsyncIterator[bytes]:
         422: {
             "description": "Request validation error.",
             "content": {
-                "application/json": {
-                    "schema": {"$ref": "#/components/schemas/RunErrorResponse"}
-                }
+                "application/json": {"schema": {"$ref": "#/components/schemas/RunErrorResponse"}}
             },
         },
     },

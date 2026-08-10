@@ -1137,6 +1137,29 @@
                 "type": "null"
               }
             ]
+          },
+          "workflow_persisted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Persisted"
+          },
+          "workflow_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Snapshot"
           }
         },
         "required": [
@@ -1977,10 +2000,14 @@
         "title": "RunStreamEvent"
       },
       "SaveWorkflowResponse": {
-        "description": "A saved workflow and its catalog node definition.",
+        "description": "A saved workflow and every catalog definition derived from it.",
         "properties": {
-          "definition": {
-            "$ref": "#/components/schemas/NodeDefinition"
+          "definitions": {
+            "items": {
+              "$ref": "#/components/schemas/NodeDefinition"
+            },
+            "title": "Definitions",
+            "type": "array"
           },
           "workflow": {
             "$ref": "#/components/schemas/WorkflowSpec"
@@ -1988,7 +2015,7 @@
         },
         "required": [
           "workflow",
-          "definition"
+          "definitions"
         ],
         "title": "SaveWorkflowResponse",
         "type": "object"
@@ -2205,6 +2232,21 @@
       "WorkflowInput": {
         "description": "One public workflow input bound to an internal node port.",
         "properties": {
+          "fold_role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "accumulator",
+                  "item"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fold Role"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -2282,6 +2324,18 @@
       "WorkflowOutput": {
         "description": "One public workflow output sourced from an internal node port.",
         "properties": {
+          "fold_role": {
+            "anyOf": [
+              {
+                "const": "step",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fold Role"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -2414,7 +2468,7 @@
   },
   "info": {
     "title": "Glitchlab",
-    "version": "0.10.0"
+    "version": "0.11.0"
   },
   "openapi": "3.1.0",
   "paths": {

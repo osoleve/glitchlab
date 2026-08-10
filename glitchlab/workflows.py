@@ -18,6 +18,13 @@ WORKFLOW_KIND_PREFIX = "workflow:"
 WORKFLOW_KIND_PATTERN = re.compile(
     r"^workflow:(?P<workflow_id>[0-9a-f-]+):v(?P<version>[1-9][0-9]*)$"
 )
+FOLD_KIND_PREFIX = "fold:"
+FOLD_KIND_PATTERN = re.compile(r"^fold:(?P<workflow_id>[0-9a-f-]+):v(?P<version>[1-9][0-9]*)$")
+FOLD_INITIAL_PORT = "fold:initial"
+FOLD_ITEMS_PORT = "fold:items"
+FOLD_ACCUMULATOR_PORT = "fold:accumulator"
+FOLD_ITERATIONS_PORT = "fold:iterations"
+FOLD_COUNT_PORT = "fold:count"
 
 
 class WorkflowInUseError(ValueError):
@@ -25,15 +32,28 @@ class WorkflowInUseError(ValueError):
 
     def __init__(self, dependents: list[str]) -> None:
         self.dependents = dependents
-        super().__init__(
-            "Workflow is used by: " + ", ".join(dependents)
-        )
+        super().__init__("Workflow is used by: " + ", ".join(dependents))
 
 
 def workflow_kind(workflow_id: str, version: int) -> str:
     """Return the stable node kind for one immutable workflow version."""
 
     return f"{WORKFLOW_KIND_PREFIX}{workflow_id}:v{version}"
+
+
+def fold_kind(workflow_id: str, version: int) -> str:
+    """Return the stable fold-node kind for one immutable workflow version."""
+
+    return f"{FOLD_KIND_PREFIX}{workflow_id}:v{version}"
+
+
+def workflow_reference(kind: str) -> tuple[str, int]:
+    """Resolve a direct-call or fold kind to its immutable workflow identity."""
+
+    match = WORKFLOW_KIND_PATTERN.fullmatch(kind) or FOLD_KIND_PATTERN.fullmatch(kind)
+    if not match:
+        raise ValueError(f"Invalid workflow node kind {kind!r}.")
+    return match["workflow_id"], int(match["version"])
 
 
 def _display_binding_label(
@@ -57,11 +77,7 @@ def _display_binding_label(
         return label
     definition = with_control_ports(definition, node.control_ports)
     port = next(
-        (
-            candidate
-            for candidate in definition[direction]
-            if candidate["name"] == node_port
-        ),
+        (candidate for candidate in definition[direction] if candidate["name"] == node_port),
         None,
     )
     if port is None:
@@ -71,7 +87,11 @@ def _display_binding_label(
     return port["label"] if label == legacy_label else label
 
 
-def workflow_definition(workflow: WorkflowSpec) -> dict[str, Any]:
+def workflow_definition(
+    workflow: WorkflowSpec,
+    *,
+    persisted: bool = True,
+) -> dict[str, Any]:
     """Expose a stored workflow through the ordinary node catalog contract."""
 
     return {
@@ -117,7 +137,146 @@ def workflow_definition(workflow: WorkflowSpec) -> dict[str, Any]:
             "version": workflow.version,
             "digest": workflow.digest,
         },
+        "workflow_snapshot": workflow.model_dump(mode="json"),
+        "workflow_persisted": persisted,
     }
+
+
+def fold_definition(
+    workflow: WorkflowSpec,
+    *,
+    persisted: bool = True,
+) -> dict[str, Any]:
+    """Expose one workflow as a bounded higher-order fold operator."""
+
+    step_outputs = [binding for binding in workflow.outputs if binding.fold_role == "step"]
+    if len(step_outputs) != 1:
+        raise ValueError(
+            f"Workflow {workflow.name!r} must mark exactly one output as its fold step."
+        )
+    accumulator_inputs = [
+        binding for binding in workflow.inputs if binding.fold_role == "accumulator"
+    ]
+    accumulator_input = accumulator_inputs[0] if accumulator_inputs else None
+    ordinary_inputs = [binding for binding in workflow.inputs if binding.fold_role is None]
+    return {
+        "kind": fold_kind(workflow.id, workflow.version),
+        "label": f"Fold · {workflow.name}",
+        "category": "Workflows",
+        "description": (
+            f"Run {workflow.name} once per item while updating one explicit accumulator."
+        ),
+        "inputs": [
+            {
+                "name": FOLD_INITIAL_PORT,
+                "label": "Initial accumulator",
+                "type": accumulator_input.type if accumulator_input else "any",
+                "required": True,
+                "multiple": False,
+            },
+            {
+                "name": FOLD_ITEMS_PORT,
+                "label": "Items",
+                "type": "collection",
+                "required": True,
+                "multiple": False,
+            },
+            *[
+                {
+                    "name": binding.name,
+                    "label": _display_binding_label(
+                        workflow,
+                        node_id=binding.node_id,
+                        node_port=binding.node_port,
+                        label=binding.label,
+                        direction="inputs",
+                    ),
+                    "type": binding.type,
+                    "required": binding.required,
+                    "multiple": binding.multiple,
+                }
+                for binding in ordinary_inputs
+            ],
+        ],
+        "outputs": [
+            {
+                "name": FOLD_ACCUMULATOR_PORT,
+                "label": "Accumulator",
+                "type": "any",
+                "required": True,
+                "multiple": False,
+            },
+            {
+                "name": FOLD_ITERATIONS_PORT,
+                "label": "Iteration trace",
+                "type": "collection",
+                "required": True,
+                "multiple": False,
+            },
+            {
+                "name": FOLD_COUNT_PORT,
+                "label": "Iteration count",
+                "type": "number",
+                "required": True,
+                "multiple": False,
+            },
+        ],
+        "fields": [
+            {
+                "name": "reducer",
+                "label": "Accumulator update",
+                "control": "select",
+                "type": "text",
+                "default": "replace",
+                "help": "Choose how each workflow step updates the accumulator.",
+                "options": [
+                    {"label": "Replace with step result", "value": "replace"},
+                    {"label": "Append step text", "value": "append_text"},
+                    {"label": "Collect step as list item", "value": "collect"},
+                ],
+                "placeholder": "",
+                "inline": True,
+            },
+            {
+                "name": "separator",
+                "label": "Text separator",
+                "control": "text",
+                "type": "text",
+                "default": " ",
+                "help": "Inserted between non-empty accumulator and step text.",
+                "options": [],
+                "placeholder": "",
+                "inline": True,
+            },
+            {
+                "name": "max_iterations",
+                "label": "Maximum iterations",
+                "control": "number",
+                "type": "number",
+                "default": 100,
+                "help": "Fail before execution when the input collection is larger (1-10,000).",
+                "options": [],
+                "placeholder": "",
+                "inline": True,
+            },
+        ],
+        "workflow": {
+            "id": workflow.id,
+            "version": workflow.version,
+            "digest": workflow.digest,
+        },
+        "workflow_snapshot": workflow.model_dump(mode="json"),
+        "workflow_persisted": persisted,
+    }
+
+
+def workflow_definitions(workflow: WorkflowSpec) -> list[dict[str, Any]]:
+    """Return the direct-call definition and an eligible fold companion."""
+
+    definitions = [workflow_definition(workflow)]
+    if any(binding.fold_role == "step" for binding in workflow.outputs):
+        definitions.append(fold_definition(workflow))
+    return definitions
 
 
 class WorkflowStore:
@@ -132,9 +291,7 @@ class WorkflowStore:
         records: list[WorkflowSpec] = []
         for path in sorted(self.root.glob("*/v*.json")):
             try:
-                records.append(
-                    WorkflowSpec.model_validate_json(path.read_text(encoding="utf-8"))
-                )
+                records.append(WorkflowSpec.model_validate_json(path.read_text(encoding="utf-8")))
             except (OSError, ValueError):
                 continue
         return records
@@ -165,11 +322,7 @@ class WorkflowStore:
 
         workflow_id = self._validated_id(workflow_id)
         return sorted(
-            (
-                record
-                for record in self._records()
-                if record.id == workflow_id
-            ),
+            (record for record in self._records() if record.id == workflow_id),
             key=lambda item: item.version,
         )
 
@@ -187,26 +340,77 @@ class WorkflowStore:
                 f"Workflow {workflow_id!r} version {version} could not be loaded."
             ) from exc
 
-    def get_by_kind(self, kind: str) -> WorkflowSpec:
-        """Resolve a workflow node kind to its exact stored record."""
+    @staticmethod
+    def digest(workflow: WorkflowDraft, *, workflow_id: str, version: int) -> str:
+        """Return the canonical digest for one immutable workflow identity."""
 
-        match = WORKFLOW_KIND_PATTERN.fullmatch(kind)
-        if not match:
-            raise ValueError(f"Invalid workflow node kind {kind!r}.")
-        return self.get(match["workflow_id"], int(match["version"]))
+        canonical = {
+            **workflow.model_dump(mode="json"),
+            "name": workflow.name.strip(),
+            "id": workflow_id,
+            "version": version,
+        }
+        return hashlib.sha256(
+            json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
 
-    def definition_for_kind(self, kind: str) -> dict[str, Any]:
+    def get_by_kind(
+        self,
+        kind: str,
+        config: dict[str, Any] | None = None,
+    ) -> WorkflowSpec:
+        """Resolve a workflow node to its embedded snapshot or exact stored record."""
+
+        workflow_id, version = workflow_reference(kind)
+        snapshot = (config or {}).get("workflow_snapshot")
+        if snapshot is None:
+            return self.get(workflow_id, version)
+        try:
+            workflow = WorkflowSpec.model_validate(snapshot)
+        except ValueError as exc:
+            raise ValueError("Embedded workflow snapshot is invalid.") from exc
+        if (workflow.id, workflow.version) != (workflow_id, version):
+            raise ValueError("Embedded workflow identity does not match its node kind.")
+        expected_digest = self.digest(
+            WorkflowDraft.model_validate(workflow.model_dump(mode="json")),
+            workflow_id=workflow.id,
+            version=workflow.version,
+        )
+        if workflow.digest != expected_digest:
+            raise ValueError("Embedded workflow snapshot digest is invalid.")
+        return workflow
+
+    def definition_for_kind(
+        self,
+        kind: str,
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Return a catalog definition for an exact workflow node kind."""
 
-        return workflow_definition(self.get_by_kind(kind))
+        workflow = self.get_by_kind(kind, config)
+        persisted = True
+        if (config or {}).get("workflow_snapshot") is not None:
+            try:
+                stored = self.get(workflow.id, workflow.version)
+            except ValueError:
+                persisted = False
+            else:
+                persisted = stored.digest == workflow.digest
+        if kind.startswith(FOLD_KIND_PREFIX):
+            return fold_definition(workflow, persisted=persisted)
+        return workflow_definition(workflow, persisted=persisted)
 
-    def node_definition(self, kind: str) -> dict[str, Any]:
+    def node_definition(
+        self,
+        kind: str,
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Resolve either a native or reusable node definition."""
 
         static = definitions_by_kind().get(kind)
         if static is not None:
             return static
-        return self.definition_for_kind(kind)
+        return self.definition_for_kind(kind, config)
 
     def validate(self, draft: WorkflowDraft) -> None:
         """Validate workflow metadata and interface bindings without writing."""
@@ -225,6 +429,7 @@ class WorkflowStore:
 
         input_names: set[str] = set()
         input_targets: set[tuple[str, str]] = set()
+        fold_input_roles: dict[str, str] = {}
         for binding in draft.inputs:
             if binding.name in input_names:
                 raise ValueError(f"Workflow input name {binding.name!r} is duplicated.")
@@ -239,15 +444,13 @@ class WorkflowStore:
             if node is None:
                 raise ValueError(f"Workflow input {binding.name!r} references a missing node.")
             definition = with_control_ports(
-                self.node_definition(node.kind),
+                self.node_definition(node.kind, node.config),
                 node.control_ports,
             )
             ports = {port["name"]: port for port in definition["inputs"]}
             port = ports.get(binding.node_port)
             if port is None:
-                raise ValueError(
-                    f"Workflow input {binding.name!r} references a missing port."
-                )
+                raise ValueError(f"Workflow input {binding.name!r} references a missing port.")
             if binding.type != port["type"]:
                 raise ValueError(
                     f"Workflow input {binding.name!r} declares {binding.type}, "
@@ -261,8 +464,19 @@ class WorkflowStore:
                 raise ValueError(
                     f"Workflow input {binding.name!r} has the wrong connection cardinality."
                 )
+            if binding.fold_role is not None:
+                if binding.fold_role in fold_input_roles:
+                    raise ValueError(
+                        f"Fold role {binding.fold_role!r} is assigned to more than one input."
+                    )
+                if binding.multiple:
+                    raise ValueError(
+                        f"Fold {binding.fold_role} input {binding.name!r} cannot be multiple."
+                    )
+                fold_input_roles[binding.fold_role] = binding.name
 
         output_names: set[str] = set()
+        fold_step_outputs: list[str] = []
         for binding in draft.outputs:
             if binding.name in output_names:
                 raise ValueError(f"Workflow output name {binding.name!r} is duplicated.")
@@ -271,20 +485,27 @@ class WorkflowStore:
             if node is None:
                 raise ValueError(f"Workflow output {binding.name!r} references a missing node.")
             definition = with_control_ports(
-                self.node_definition(node.kind),
+                self.node_definition(node.kind, node.config),
                 node.control_ports,
             )
             ports = {port["name"]: port for port in definition["outputs"]}
             port = ports.get(binding.node_port)
             if port is None:
-                raise ValueError(
-                    f"Workflow output {binding.name!r} references a missing port."
-                )
+                raise ValueError(f"Workflow output {binding.name!r} references a missing port.")
             if binding.type != port["type"]:
                 raise ValueError(
                     f"Workflow output {binding.name!r} declares {binding.type}, "
                     f"but its source emits {port['type']}."
                 )
+            if binding.fold_role == "step":
+                fold_step_outputs.append(binding.name)
+
+        if len(fold_step_outputs) > 1:
+            raise ValueError("A foldable workflow must mark exactly one step output.")
+        if fold_input_roles and not fold_step_outputs:
+            raise ValueError(
+                "Fold accumulator/item roles require one output marked as the fold step."
+            )
 
     def save(
         self,
@@ -298,11 +519,7 @@ class WorkflowStore:
         normalized_name = draft.name.strip()
         latest = self.list_latest()
         named_match = next(
-            (
-                record
-                for record in latest
-                if record.name.casefold() == normalized_name.casefold()
-            ),
+            (record for record in latest if record.name.casefold() == normalized_name.casefold()),
             None,
         )
         if workflow_id is not None:
@@ -314,22 +531,12 @@ class WorkflowStore:
             if existing is None:
                 raise ValueError(f"Workflow {workflow_id!r} does not exist.")
             if named_match is not None and named_match.id != workflow_id:
-                raise ValueError(
-                    f"Another workflow is already named {normalized_name!r}."
-                )
+                raise ValueError(f"Another workflow is already named {normalized_name!r}.")
         else:
             existing = named_match
             workflow_id = existing.id if existing else str(uuid.uuid4())
         version = existing.version + 1 if existing else 1
-        canonical = {
-            **draft.model_dump(mode="json"),
-            "name": normalized_name,
-            "id": workflow_id,
-            "version": version,
-        }
-        digest = hashlib.sha256(
-            json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
+        digest = self.digest(draft, workflow_id=workflow_id, version=version)
         record_data = draft.model_dump()
         record_data["name"] = normalized_name
         record = WorkflowSpec(
@@ -364,9 +571,14 @@ class WorkflowStore:
             if record.id == workflow_id:
                 continue
             references_target = any(
-                (
-                    match := WORKFLOW_KIND_PATTERN.fullmatch(node.kind)
-                ) is not None
+                node.config.get("workflow_snapshot") is None
+                and (
+                    match := (
+                        WORKFLOW_KIND_PATTERN.fullmatch(node.kind)
+                        or FOLD_KIND_PATTERN.fullmatch(node.kind)
+                    )
+                )
+                is not None
                 and match["workflow_id"] == workflow_id
                 for node in record.graph.nodes
             )
@@ -380,9 +592,14 @@ class WorkflowStore:
                 except (OSError, ValueError):
                     continue
                 references_target = any(
-                    (
-                        match := WORKFLOW_KIND_PATTERN.fullmatch(node.kind)
-                    ) is not None
+                    node.config.get("workflow_snapshot") is None
+                    and (
+                        match := (
+                            WORKFLOW_KIND_PATTERN.fullmatch(node.kind)
+                            or FOLD_KIND_PATTERN.fullmatch(node.kind)
+                        )
+                    )
+                    is not None
                     and match["workflow_id"] == workflow_id
                     for node in graph.graph.nodes
                 )
@@ -408,9 +625,19 @@ class WorkflowStore:
 
 
 __all__ = [
+    "FOLD_ACCUMULATOR_PORT",
+    "FOLD_COUNT_PORT",
+    "FOLD_INITIAL_PORT",
+    "FOLD_ITEMS_PORT",
+    "FOLD_ITERATIONS_PORT",
+    "FOLD_KIND_PREFIX",
     "WORKFLOW_KIND_PREFIX",
     "WorkflowInUseError",
     "WorkflowStore",
+    "fold_definition",
+    "fold_kind",
     "workflow_definition",
+    "workflow_definitions",
     "workflow_kind",
+    "workflow_reference",
 ]

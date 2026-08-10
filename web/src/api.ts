@@ -226,7 +226,7 @@ function isWorkflowSpec(value: unknown): value is SaveWorkflowResponse["workflow
 function isSaveWorkflowPayload(
   value: unknown,
 ): value is SaveWorkflowPayload & UpdateWorkflowPayload & SaveWorkflowResponse {
-  return isRecord(value) && isWorkflowSpec(value.workflow) && isRecord(value.definition);
+  return isRecord(value) && isWorkflowSpec(value.workflow) && Array.isArray(value.definitions);
 }
 
 function isLoadWorkflowPayload(

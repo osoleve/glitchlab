@@ -43,5 +43,6 @@ export interface GraphTab {
   graph?: GraphDocument;
   sourceTemplateId?: string;
   workflow?: WorkflowSpec;
+  workflowPersisted?: boolean;
   snapshot: GraphSnapshot;
 }

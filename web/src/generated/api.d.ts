@@ -777,6 +777,12 @@ export interface components {
             /** Outputs */
             outputs: components["schemas"]["PortDefinition"][];
             workflow?: components["schemas"]["WorkflowReference"] | null;
+            /** Workflow Persisted */
+            workflow_persisted?: boolean | null;
+            /** Workflow Snapshot */
+            workflow_snapshot?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * NodeFailedEvent
@@ -1171,10 +1177,11 @@ export interface components {
         RunStreamEvent: components["schemas"]["RunEvent"];
         /**
          * SaveWorkflowResponse
-         * @description A saved workflow and its catalog node definition.
+         * @description A saved workflow and every catalog definition derived from it.
          */
         SaveWorkflowResponse: {
-            definition: components["schemas"]["NodeDefinition"];
+            /** Definitions */
+            definitions: components["schemas"]["NodeDefinition"][];
             workflow: components["schemas"]["WorkflowSpec"];
         };
         /** ValidationError */
@@ -1260,6 +1267,8 @@ export interface components {
          * @description One public workflow input bound to an internal node port.
          */
         WorkflowInput: {
+            /** Fold Role */
+            fold_role?: ("accumulator" | "item") | null;
             /** Label */
             label: string;
             /**
@@ -1297,6 +1306,8 @@ export interface components {
          * @description One public workflow output sourced from an internal node port.
          */
         WorkflowOutput: {
+            /** Fold Role */
+            fold_role?: "step" | null;
             /** Label */
             label: string;
             /** Name */

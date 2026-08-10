@@ -285,9 +285,9 @@ test("inline endpoint editing preserves the caret and recent values are reusable
     await inspectorEndpoint.evaluate((element: HTMLInputElement) => element.selectionStart),
   ).toBe(inspectorInsertionPoint + 10);
   await inspectorEndpoint.blur();
-  await expect(
-    inspector.getByRole("combobox", { name: "Recent endpoint URLs" }),
-  ).toContainText("inspector.");
+  await expect(inspector.getByRole("combobox", { name: "Recent endpoint URLs" })).toContainText(
+    "inspector.",
+  );
   expect(errors).toEqual([]);
 });
 
@@ -368,15 +368,26 @@ test("public starter templates load with canvas guidance", async ({ page }) => {
   await page.goto("/");
 
   await page.getByRole("button", { name: "Open", exact: true }).click();
-  await expect(page.getByRole("button", { name: /Phased math worksheet/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Fold-generated math worksheet/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Two-model synthesis/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Prompt corruption A\/B lab/ })).toBeVisible();
-  await page.getByRole("button", { name: /Phased math worksheet/ }).click();
+  await page.getByRole("button", { name: /Fold-generated math worksheet/ }).click();
 
   await expect(page.locator('.react-flow__node[data-id="worksheet-preview"]')).toBeVisible();
+  const fold = page.locator('.react-flow__node[data-id="question-fold"]');
+  await expect(fold).toBeVisible();
+  await fold.click();
+  await expect(page.getByRole("combobox", { name: "Accumulator update", exact: true })).toHaveValue(
+    "collect",
+  );
+  await expect(
+    page.getByRole("spinbutton", { name: "Maximum iterations", exact: true }),
+  ).toHaveValue("5");
+  await page.getByRole("button", { name: "Close inspector" }).click();
+  await page.getByRole("button", { name: "Fit View" }).click();
   await expect(page.locator(".react-flow__node-workflowNote")).toHaveCount(3);
   await expect(page.getByLabel("Canvas note").nth(1)).toHaveValue(
-    /Select field node takes the completion's text field/,
+    /portable, immutable question-generation subgraph/,
   );
   await expect(page.locator(".react-flow__minimap")).toBeVisible();
   const canvasBox = await page.locator(".react-flow").boundingBox();

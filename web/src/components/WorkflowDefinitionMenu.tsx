@@ -46,17 +46,21 @@ export function WorkflowDefinitionMenu({
         ) : (
           <Pencil size={14} />
         )}
-        Edit in new tab
+        {menu.definition.workflow_persisted === false
+          ? "Open snapshot in new tab"
+          : "Edit in new tab"}
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        className={cx(styles, "is-danger")}
-        onClick={() => onDelete(menu.definition)}
-      >
-        <Trash2 size={14} />
-        Delete saved workflow
-      </button>
+      {menu.definition.workflow_persisted !== false && (
+        <button
+          type="button"
+          role="menuitem"
+          className={cx(styles, "is-danger")}
+          onClick={() => onDelete(menu.definition)}
+        >
+          <Trash2 size={14} />
+          Delete saved workflow
+        </button>
+      )}
     </div>
   );
 }

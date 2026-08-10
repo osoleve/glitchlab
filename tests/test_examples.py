@@ -37,7 +37,7 @@ def test_new_public_starters_include_canvas_guidance(name: str) -> None:
 @pytest.mark.parametrize(
     ("name", "expected_completion_calls"),
     [
-        ("phased-math-worksheet", 3),
+        ("phased-math-worksheet", 6),
         ("prompt-corruption-ab", 2),
         ("two-model-synthesis", 3),
     ],
@@ -72,5 +72,14 @@ async def test_new_public_starters_run_with_plain_completion_text(
 
     assert len(calls) == expected_completion_calls
     assert all(node.status == "completed" for node in response.nodes)
+    if name == "phased-math-worksheet":
+        fold_node = next(node for node in graph.nodes if node.kind.startswith("fold:"))
+        fold_result = next(node for node in response.nodes if node.node_id == fold_node.id)
+        assert fold_result.outputs["fold:count"] == 5
+        assert fold_result.outputs["fold:accumulator"] == [
+            f"Plain completion {index} without special markers." for index in range(1, 6)
+        ]
+        prompts = [request.read().decode() for request in calls[:5]]
+        assert all(f"question {index}" in prompt.lower() for index, prompt in enumerate(prompts, 1))
     if name == "prompt-corruption-ab":
         assert {node.kind for node in graph.nodes} >= {"glitchling", "corrupt"}

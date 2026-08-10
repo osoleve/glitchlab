@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchCatalog, runGraph, runGraphStreaming } from "./api";
+import { fetchCatalog, runGraph, runGraphStreaming, saveWorkflow } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -99,5 +99,41 @@ describe("API response boundaries", () => {
       ),
     ).rejects.toThrow("before a terminal event");
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("accepts all generated definitions returned by a workflow save", async () => {
+    const graph = { name: "Fold body", nodes: [], edges: [] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            workflow: {
+              id: "workflow-id",
+              version: 1,
+              name: "Fold body",
+              description: "",
+              digest: "digest",
+              created_at: "2026-08-10T00:00:00Z",
+              graph,
+              inputs: [],
+              outputs: [],
+            },
+            definitions: [{ kind: "workflow:workflow-id:v1" }, { kind: "fold:workflow-id:v1" }],
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    const response = await saveWorkflow({
+      name: "Fold body",
+      description: "",
+      graph,
+      inputs: [],
+      outputs: [],
+    });
+
+    expect(response.definitions).toHaveLength(2);
   });
 });

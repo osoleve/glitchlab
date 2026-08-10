@@ -170,17 +170,21 @@ export function CanvasContextMenu({
                 onClick={() => onOpenWorkflowEditor(contextualWorkflowDefinition)}
               >
                 <Pencil size={14} />
-                Edit saved workflow
+                {contextualWorkflowDefinition.workflow_persisted === false
+                  ? "Open workflow snapshot"
+                  : "Edit saved workflow"}
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={cx(styles, "is-danger")}
-                onClick={() => onDeleteWorkflow(contextualWorkflowDefinition)}
-              >
-                <Trash2 size={14} />
-                Delete saved workflow
-              </button>
+              {contextualWorkflowDefinition.workflow_persisted !== false && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={cx(styles, "is-danger")}
+                  onClick={() => onDeleteWorkflow(contextualWorkflowDefinition)}
+                >
+                  <Trash2 size={14} />
+                  Delete saved workflow
+                </button>
+              )}
               <span className={cx(styles, "context-menu-separator")} />
             </>
           )}

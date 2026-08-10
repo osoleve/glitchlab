@@ -1741,7 +1741,8 @@ button.graph-library-item:hover,
 }
 
 .workflow-dialog input,
-.workflow-dialog textarea {
+.workflow-dialog textarea,
+.workflow-dialog select {
   width: 100%;
   padding: 9px 10px;
   color: #e7e0e9;
@@ -1753,7 +1754,8 @@ button.graph-library-item:hover,
 }
 
 .workflow-dialog input:focus,
-.workflow-dialog textarea:focus {
+.workflow-dialog textarea:focus,
+.workflow-dialog select:focus {
   border-color: #7e5c7c;
 }
 
@@ -1777,6 +1779,9 @@ button.graph-library-item:hover,
 .workflow-boundary-port {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name type"
+    "role role";
   align-items: center;
   gap: 8px;
   color: #bbb1bf;
@@ -1784,16 +1789,37 @@ button.graph-library-item:hover,
 }
 
 .workflow-dialog .workflow-boundary-port input {
+  grid-area: name;
   min-width: 0;
   padding: 5px 6px;
   font-size: 8.5px;
 }
 
+.workflow-dialog .workflow-boundary-port select {
+  grid-area: role;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  color: #bbb1bf;
+  background: #151119;
+  border: 1px solid #342d38;
+  border-radius: 4px;
+  font-size: 8px;
+}
+
 .workflow-boundary em {
+  grid-area: type;
   color: #a879a1;
   font-family: var(--mono);
   font-size: 7.5px;
   font-style: normal;
+}
+
+.workflow-fold-help {
+  margin: 0;
+  color: #817786;
+  font-size: 8.5px;
+  line-height: 1.5;
 }
 
 .workflow-boundary small {

@@ -58,10 +58,10 @@ def _field(
     }
 
 
-def _completion_fields() -> list[dict[str, Any]]:
+def _completion_fields(*, include_boundary_trim: bool = False) -> list[dict[str, Any]]:
     """Controls shared by direct completion and interactive Loom generation."""
 
-    return [
+    fields = [
         _field("temperature", "number", 0.8, inline=True),
         _field("top_p", "number", 0.95),
         _field("max_tokens", "number", 96, inline=True),
@@ -80,6 +80,26 @@ def _completion_fields() -> list[dict[str, Any]]:
             ],
         ),
     ]
+    if include_boundary_trim:
+        fields.insert(
+            5,
+            _field(
+                "boundary_trim",
+                "select",
+                "off",
+                label="Trim output at",
+                help_text=(
+                    "Keep content through the last complete sentence or line boundary; "
+                    "return empty text when no selected boundary exists."
+                ),
+                options=[
+                    {"label": "Off", "value": "off"},
+                    {"label": "Final sentence", "value": "sentence"},
+                    {"label": "Final line", "value": "line"},
+                ],
+            ),
+        )
+    return fields
 
 
 NODE_DEFINITIONS: list[dict[str, Any]] = [
@@ -252,6 +272,19 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
         ],
     },
     {
+        "kind": "range",
+        "label": "Range",
+        "category": "Flow",
+        "description": "Create a bounded integer collection using Python-style range semantics.",
+        "inputs": [],
+        "outputs": [_port("items", "collection")],
+        "fields": [
+            _field("start", "number", 0, inline=True),
+            _field("stop", "number", 5, inline=True),
+            _field("step", "number", 1, inline=True),
+        ],
+    },
+    {
         "kind": "collect",
         "label": "Collect",
         "category": "Flow",
@@ -397,7 +430,7 @@ NODE_DEFINITIONS: list[dict[str, Any]] = [
             _port("prompt", "any"),
         ],
         "outputs": [_port("result", "completion")],
-        "fields": _completion_fields(),
+        "fields": _completion_fields(include_boundary_trim=True),
     },
     {
         "kind": "glitchling",

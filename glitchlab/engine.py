@@ -51,10 +51,24 @@ from .models import (
     RunScope,
     RunStartedEvent,
 )
-from .workflows import WORKFLOW_KIND_PREFIX, WorkflowStore
+from .workflows import (
+    FOLD_ACCUMULATOR_PORT,
+    FOLD_COUNT_PORT,
+    FOLD_INITIAL_PORT,
+    FOLD_ITEMS_PORT,
+    FOLD_ITERATIONS_PORT,
+    FOLD_KIND_PREFIX,
+    WORKFLOW_KIND_PREFIX,
+    WorkflowStore,
+    workflow_kind,
+)
 
 HOLE_PATTERN = re.compile(r"(?<!\?)\?([A-Za-z_][A-Za-z0-9_]*)")
 ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+SENTENCE_BOUNDARY_PATTERN = re.compile(r"[.!?](?=\s|$)")
+LINE_BOUNDARY_PATTERN = re.compile(r"\r\n|\r|\n")
+MAX_RANGE_ITEMS = 10_000
+MAX_FOLD_ITERATIONS = 10_000
 RunEventSink = Callable[[RunEvent], Awaitable[None]]
 type RunEventType = (
     type[RunStartedEvent]
@@ -79,6 +93,39 @@ def _canonical_digest(value: Any) -> str:
 
 def _decode_escapes(value: str) -> str:
     return value.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+
+
+def _integer(value: Any, *, field: str) -> int:
+    """Parse an exact integer without silently truncating numeric controls."""
+
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be an integer.")
+    try:
+        parsed = int(value)
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field} must be an integer.") from exc
+    if numeric != parsed:
+        raise ValueError(f"{field} must be an integer.")
+    return parsed
+
+
+def _trim_at_boundary(text: str, mode: str) -> str:
+    """Keep text through the final explicit sentence or line boundary."""
+
+    if mode == "off":
+        return text
+    pattern = {
+        "sentence": SENTENCE_BOUNDARY_PATTERN,
+        "line": LINE_BOUNDARY_PATTERN,
+    }.get(mode)
+    if pattern is None:
+        raise ValueError(f"Unknown completion boundary trim mode {mode!r}.")
+    matches = list(pattern.finditer(text))
+    if not matches:
+        return ""
+    boundary = matches[-1]
+    return text[: boundary.end() if mode == "sentence" else boundary.start()]
 
 
 def _json_config(value: Any, *, field: str) -> Any:
@@ -122,9 +169,7 @@ def _stringify_template(value: dict[str, Any]) -> str:
     bindings = value.get("bindings") or {}
     rendered = HOLE_PATTERN.sub(
         lambda match: (
-            str(bindings[match.group(1)])
-            if match.group(1) in bindings
-            else match.group(0)
+            str(bindings[match.group(1)]) if match.group(1) in bindings else match.group(0)
         ),
         value["source"],
     )
@@ -208,9 +253,7 @@ def compute_execution_scope(
         raise GraphRunFailure("Node IDs must be unique.")
     missing_targets = [node_id for node_id in normalized_targets if node_id not in nodes]
     if missing_targets:
-        raise GraphRunFailure(
-            f"Target node(s) not found: {', '.join(missing_targets)}."
-        )
+        raise GraphRunFailure(f"Target node(s) not found: {', '.join(missing_targets)}.")
 
     incoming: dict[str, list[GraphEdge]] = defaultdict(list)
     for edge in graph.edges:
@@ -229,11 +272,7 @@ def compute_execution_scope(
     scoped_graph = GraphSpec(
         name=graph.name,
         nodes=[node for node in graph.nodes if node.id in node_ids],
-        edges=[
-            edge
-            for edge in graph.edges
-            if edge.source in node_ids and edge.target in node_ids
-        ],
+        edges=[edge for edge in graph.edges if edge.source in node_ids and edge.target in node_ids],
     )
     return ExecutionScope(
         mode="targets",
@@ -270,19 +309,23 @@ class GraphEngine:
         self.workflow_store = workflow_store or WorkflowStore(self.workspace)
         self.workflow_stack = workflow_stack
 
-    def _definition(self, kind: str) -> dict[str, Any]:
+    def _definition(
+        self,
+        kind: str,
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         definition = self.definitions.get(kind)
         if definition is not None:
             return definition
-        if kind.startswith(WORKFLOW_KIND_PREFIX):
-            return self.workflow_store.definition_for_kind(kind)
+        if kind.startswith((WORKFLOW_KIND_PREFIX, FOLD_KIND_PREFIX)):
+            return self.workflow_store.definition_for_kind(kind, config)
         raise ValueError(f"Unknown node kind {kind!r}.")
 
     def _node_definition(self, node: GraphNode) -> dict[str, Any]:
         """Return the exact port contract for one configured graph node."""
 
         return with_control_ports(
-            self._definition(node.kind),
+            self._definition(node.kind, node.config),
             node.control_ports,
         )
 
@@ -362,9 +405,7 @@ class GraphEngine:
         edge_ids: set[str] = set()
         for edge in graph.edges:
             if edge.id in edge_ids:
-                raise GraphRunFailure(
-                    f"Edge IDs must be unique; duplicate {edge.id!r}."
-                )
+                raise GraphRunFailure(f"Edge IDs must be unique; duplicate {edge.id!r}.")
             edge_ids.add(edge.id)
 
         nodes = {node.id: node for node in graph.nodes}
@@ -393,17 +434,11 @@ class GraphEngine:
         for node_id, supplied in (injected_inputs or {}).items():
             node = nodes.get(node_id)
             if node is None:
-                raise GraphRunFailure(
-                    f"Workflow input references missing node {node_id!r}."
-                )
-            target_ports = {
-                port["name"]: port for port in self._node_definition(node)["inputs"]
-            }
+                raise GraphRunFailure(f"Workflow input references missing node {node_id!r}.")
+            target_ports = {port["name"]: port for port in self._node_definition(node)["inputs"]}
             for port_name in supplied:
                 if port_name not in target_ports:
-                    raise GraphRunFailure(
-                        f"Node {node_id!r} has no input port {port_name!r}."
-                    )
+                    raise GraphRunFailure(f"Node {node_id!r} has no input port {port_name!r}.")
                 connected_targets.add((node_id, port_name))
         for edge in graph.edges:
             if edge.source not in nodes or edge.target not in nodes:
@@ -519,11 +554,9 @@ class GraphEngine:
     ) -> dict[str, Any]:
         """Add promoted local-control values to a node's runtime outputs."""
 
-        if not {"output", "passthrough"}.intersection(
-            node.control_ports.values()
-        ):
+        if not {"output", "passthrough"}.intersection(node.control_ports.values()):
             return outputs
-        definition = self._definition(node.kind)
+        definition = self._node_definition(node)
         fields = {field["name"]: field for field in definition["fields"]}
         expanded = dict(outputs)
         for field_name, mode in node.control_ports.items():
@@ -538,6 +571,30 @@ class GraphEngine:
                 value = _json_config(value, field=field_name)
             expanded[control_port_name(field_name)] = value
         return expanded
+
+    @staticmethod
+    def _postprocess_completion(
+        result: dict[str, Any] | list[dict[str, Any]],
+        config: dict[str, Any],
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Apply output-only transforms while keeping cached provider data raw."""
+
+        if isinstance(result, list):
+            return [GraphEngine._postprocess_completion(item, config) for item in result]
+        mode = str(config.get("boundary_trim", "off"))
+        original = str(result.get("text", ""))
+        trimmed = _trim_at_boundary(original, mode)
+        processed = dict(result)
+        processed["text"] = trimmed
+        processed["postprocessing"] = {
+            "boundary_trim": {
+                "mode": mode,
+                "applied": trimmed != original,
+                "original_length": len(original),
+                "output_length": len(trimmed),
+            }
+        }
+        return processed
 
     async def _generate_completion(
         self,
@@ -581,10 +638,7 @@ class GraphEngine:
         request_body.update(extra_body)
         cache_mode = str(config.get("cache_mode", "use"))
 
-        headers = {
-            str(name): str(value)
-            for name, value in (endpoint.get("headers") or {}).items()
-        }
+        headers = {str(name): str(value) for name, value in (endpoint.get("headers") or {}).items()}
         api_key_env = str(endpoint.get("api_key_env", "")).strip()
         credential_fingerprint: str | None = None
         if api_key_env:
@@ -620,7 +674,7 @@ class GraphEngine:
             mode=cache_mode,
         )
         if cached is not None:
-            return cached
+            return self._postprocess_completion(cached, config)
 
         started = time.perf_counter()
         if self.http_client is None:
@@ -658,7 +712,7 @@ class GraphEngine:
             result,
             mode=cache_mode,
         )
-        return result
+        return self._postprocess_completion(result, config)
 
     def _write_value(self, value: Any, config: dict[str, Any]) -> dict[str, Any]:
         path = self._resolve_workspace_path(str(config.get("path", "")))
@@ -686,6 +740,144 @@ class GraphEngine:
             "sha256": hashlib.sha256(payload.encode()).hexdigest(),
         }
 
+    async def _run_workflow(
+        self,
+        kind: str,
+        inputs: dict[str, Any],
+        config: dict[str, Any],
+    ) -> tuple[dict[str, Any], RunResponse]:
+        """Execute one immutable workflow call and return its public outputs."""
+
+        workflow = self.workflow_store.get_by_kind(kind, config)
+        identity = workflow_kind(workflow.id, workflow.version)
+        if identity in self.workflow_stack:
+            chain = " → ".join((*self.workflow_stack, identity))
+            raise ValueError(f"Recursive workflow expansion is not allowed: {chain}.")
+        if len(self.workflow_stack) >= 32:
+            raise ValueError("Workflow nesting exceeds the maximum depth of 32.")
+        expected_digest = str(config.get("workflow_digest", "")).strip()
+        if expected_digest and expected_digest != workflow.digest:
+            raise ValueError(
+                f"Workflow digest mismatch: expected {expected_digest}, loaded {workflow.digest}."
+            )
+        injected: dict[str, dict[str, Any]] = defaultdict(dict)
+        for binding in workflow.inputs:
+            if binding.name in inputs:
+                injected[binding.node_id][binding.node_port] = inputs[binding.name]
+        child = GraphEngine(
+            workspace=self.workspace,
+            http_client=self.http_client,
+            workflow_store=self.workflow_store,
+            workflow_stack=(*self.workflow_stack, identity),
+        )
+        response = await child.run(
+            workflow.graph,
+            injected_inputs=dict(injected),
+        )
+        child_outputs = {
+            result.node_id: result.outputs
+            for result in response.nodes
+            if result.status == "completed"
+        }
+        public_outputs = {
+            binding.name: child_outputs[binding.node_id][binding.node_port]
+            for binding in workflow.outputs
+        }
+        return public_outputs, response
+
+    async def _execute_fold(
+        self,
+        node: GraphNode,
+        inputs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Run a foldable workflow once per item with an explicit bounded reducer."""
+
+        workflow = self.workflow_store.get_by_kind(node.kind, node.config)
+        step_bindings = [binding for binding in workflow.outputs if binding.fold_role == "step"]
+        if len(step_bindings) != 1:
+            raise ValueError("Fold workflow must expose exactly one step output.")
+        accumulator_bindings = [
+            binding for binding in workflow.inputs if binding.fold_role == "accumulator"
+        ]
+        item_bindings = [binding for binding in workflow.inputs if binding.fold_role == "item"]
+        if len(accumulator_bindings) > 1 or len(item_bindings) > 1:
+            raise ValueError("Fold workflow input roles are ambiguous.")
+
+        items = inputs[FOLD_ITEMS_PORT]
+        if not isinstance(items, list):
+            raise ValueError("Fold items must be a collection.")
+        max_iterations = _integer(
+            node.config.get("max_iterations", 100),
+            field="max_iterations",
+        )
+        if not 1 <= max_iterations <= MAX_FOLD_ITERATIONS:
+            raise ValueError(f"max_iterations must be between 1 and {MAX_FOLD_ITERATIONS:,}.")
+        if len(items) > max_iterations:
+            raise ValueError(
+                f"Fold received {len(items):,} items, exceeding max_iterations={max_iterations:,}."
+            )
+
+        reducer = str(node.config.get("reducer", "replace"))
+        if reducer not in {"replace", "append_text", "collect"}:
+            raise ValueError(f"Unknown fold accumulator update {reducer!r}.")
+        separator = _decode_escapes(str(node.config.get("separator", " ")))
+        current = inputs[FOLD_INITIAL_PORT]
+        iterations: list[dict[str, Any]] = []
+        invariant_inputs = {
+            binding.name: inputs[binding.name]
+            for binding in workflow.inputs
+            if binding.fold_role is None and binding.name in inputs
+        }
+        step_binding = step_bindings[0]
+
+        for index, item in enumerate(items):
+            workflow_inputs = dict(invariant_inputs)
+            if accumulator_bindings:
+                workflow_inputs[accumulator_bindings[0].name] = current
+            if item_bindings:
+                workflow_inputs[item_bindings[0].name] = item
+            try:
+                workflow_outputs, response = await self._run_workflow(
+                    node.kind,
+                    workflow_inputs,
+                    node.config,
+                )
+            except GraphRunFailure as exc:
+                raise ValueError(f"Fold iteration {index} failed: {exc}") from exc
+            step = workflow_outputs[step_binding.name]
+            if reducer == "replace":
+                current = step
+            elif reducer == "append_text":
+                accumulator_text = _coerce_text(current)
+                step_text = _coerce_text(step)
+                joiner = separator if accumulator_text and step_text else ""
+                current = f"{accumulator_text}{joiner}{step_text}"
+            else:
+                if not isinstance(current, list):
+                    raise ValueError("Collect requires the initial accumulator to be a collection.")
+                current = [*current, step]
+
+            manifest = response.manifest
+            iterations.append(
+                {
+                    "index": index,
+                    "item": item,
+                    "step": step,
+                    "run": {
+                        "run_id": manifest.run_id,
+                        "graph_digest": manifest.graph_digest,
+                        "started_at": manifest.started_at,
+                        "finished_at": manifest.finished_at,
+                    },
+                }
+            )
+
+        return {
+            FOLD_ACCUMULATOR_PORT: current,
+            FOLD_ITERATIONS_PORT: iterations,
+            FOLD_COUNT_PORT: len(iterations),
+        }
+
     async def _execute_node(
         self,
         node: GraphNode,
@@ -693,42 +885,11 @@ class GraphEngine:
     ) -> dict[str, Any]:
         config = node.config
         kind = node.kind
+        if kind.startswith(FOLD_KIND_PREFIX):
+            return await self._execute_fold(node, inputs)
         if kind.startswith(WORKFLOW_KIND_PREFIX):
-            if kind in self.workflow_stack:
-                chain = " → ".join((*self.workflow_stack, kind))
-                raise ValueError(f"Recursive workflow expansion is not allowed: {chain}.")
-            if len(self.workflow_stack) >= 32:
-                raise ValueError("Workflow nesting exceeds the maximum depth of 32.")
-            workflow = self.workflow_store.get_by_kind(kind)
-            expected_digest = str(config.get("workflow_digest", "")).strip()
-            if expected_digest and expected_digest != workflow.digest:
-                raise ValueError(
-                    f"Workflow digest mismatch: expected {expected_digest}, "
-                    f"loaded {workflow.digest}."
-                )
-            injected: dict[str, dict[str, Any]] = defaultdict(dict)
-            for binding in workflow.inputs:
-                if binding.name in inputs:
-                    injected[binding.node_id][binding.node_port] = inputs[binding.name]
-            child = GraphEngine(
-                workspace=self.workspace,
-                http_client=self.http_client,
-                workflow_store=self.workflow_store,
-                workflow_stack=(*self.workflow_stack, kind),
-            )
-            response = await child.run(
-                workflow.graph,
-                injected_inputs=dict(injected),
-            )
-            child_outputs = {
-                result.node_id: result.outputs
-                for result in response.nodes
-                if result.status == "completed"
-            }
-            return {
-                binding.name: child_outputs[binding.node_id][binding.node_port]
-                for binding in workflow.outputs
-            }
+            outputs, _response = await self._run_workflow(kind, inputs, config)
+            return outputs
         if kind == "loom":
             if node.state is None:
                 raise ValueError("Loom node state is missing.")
@@ -769,8 +930,10 @@ class GraphEngine:
             text = _coerce_text(inputs["text"])
             find = str(config.get("find", ""))
             replacement = str(config.get("replacement", ""))
-            output = re.sub(find, replacement, text) if config.get("regex") else text.replace(
-                find, replacement
+            output = (
+                re.sub(find, replacement, text)
+                if config.get("regex")
+                else text.replace(find, replacement)
             )
             return {"text": output}
         if kind == "trim":
@@ -823,6 +986,22 @@ class GraphEngine:
                 else:
                     items = str(raw_items).splitlines()
             return {"items": items}
+        if kind == "range":
+            start = _integer(config.get("start", 0), field="start")
+            stop = _integer(config.get("stop", 5), field="stop")
+            step = _integer(config.get("step", 1), field="step")
+            if step == 0:
+                raise ValueError("Range step cannot be zero.")
+            sequence = range(start, stop, step)
+            try:
+                item_count = len(sequence)
+            except OverflowError as exc:
+                raise ValueError(f"Range exceeds the {MAX_RANGE_ITEMS:,}-item limit.") from exc
+            if item_count > MAX_RANGE_ITEMS:
+                raise ValueError(
+                    f"Range produces {item_count:,} items; the limit is {MAX_RANGE_ITEMS:,}."
+                )
+            return {"items": list(sequence)}
         if kind == "collect":
             values = list(inputs["item"])
             # Preserve the execution contract of saved spike-era graphs while the
@@ -830,8 +1009,7 @@ class GraphEngine:
             if config.get("flatten") is True:
                 values = list(
                     itertools.chain.from_iterable(
-                        value if isinstance(value, list) else [value]
-                        for value in values
+                        value if isinstance(value, list) else [value] for value in values
                     )
                 )
             return {"items": values}
@@ -839,8 +1017,7 @@ class GraphEngine:
             return {
                 "items": list(
                     itertools.chain.from_iterable(
-                        value if isinstance(value, list) else [value]
-                        for value in inputs["items"]
+                        value if isinstance(value, list) else [value] for value in inputs["items"]
                     )
                 )
             }
@@ -879,9 +1056,7 @@ class GraphEngine:
                     "kind": "endpoint_ref",
                     "provider": "openrouter",
                     "base_url": "https://openrouter.ai/api/v1",
-                    "api_key_env": str(
-                        config.get("api_key_env", "OPENROUTER_API_KEY")
-                    ),
+                    "api_key_env": str(config.get("api_key_env", "OPENROUTER_API_KEY")),
                     "timeout_seconds": float(config.get("timeout_seconds", 120)),
                     "headers": headers,
                 }
@@ -1083,7 +1258,7 @@ class GraphEngine:
                         error=failed_result.error or str(exc),
                     )
                     raise GraphRunFailure(
-                        f"{self._definition(node.kind)['label']} failed: {exc}",
+                        f"{self._node_definition(node)['label']} failed: {exc}",
                         node_id=node.id,
                         results=results,
                     ) from exc
@@ -1120,9 +1295,7 @@ class GraphEngine:
                 finished_at=finished_at,
                 python_version=platform.python_version(),
                 workspace=str(self.workspace),
-                glitchlings_version=(
-                    status.get("version") if status.get("available") else None
-                ),
+                glitchlings_version=(status.get("version") if status.get("available") else None),
                 scope=RunManifestScope(
                     mode=execution_scope.mode,
                     target_node_ids=list(execution_scope.target_node_ids),
@@ -1134,9 +1307,7 @@ class GraphEngine:
                 status="completed",
                 manifest=manifest,
                 nodes=results,
-                terminal_outputs={
-                    node_id: outputs[node_id] for node_id in terminal_nodes
-                },
+                terminal_outputs={node_id: outputs[node_id] for node_id in terminal_nodes},
             )
             await emit(
                 RunCompletedEvent,

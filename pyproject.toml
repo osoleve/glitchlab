@@ -1,6 +1,6 @@
 [project]
 name = "glitchlab"
-version = "0.10.0"
+version = "0.11.0"
 description = "A local-first typed inference workbench for structured experiments."
 readme = "README.md"
 license = "MIT"

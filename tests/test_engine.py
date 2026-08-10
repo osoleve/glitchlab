@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from glitchlab.catalog import control_port_name
-from glitchlab.engine import GraphEngine, compute_execution_scope
+from glitchlab.engine import GraphEngine, _trim_at_boundary, compute_execution_scope
 from glitchlab.graphs import GraphConflictError, GraphStore
 from glitchlab.models import (
     GraphDocumentDraft,
@@ -25,7 +25,17 @@ from glitchlab.models import (
     WorkflowInput,
     WorkflowOutput,
 )
-from glitchlab.workflows import WorkflowInUseError, WorkflowStore, workflow_kind
+from glitchlab.workflows import (
+    FOLD_ACCUMULATOR_PORT,
+    FOLD_COUNT_PORT,
+    FOLD_INITIAL_PORT,
+    FOLD_ITEMS_PORT,
+    FOLD_ITERATIONS_PORT,
+    WorkflowInUseError,
+    WorkflowStore,
+    fold_kind,
+    workflow_kind,
+)
 
 
 def node(node_id: str, kind: str, **config: object) -> GraphNode:
@@ -45,6 +55,52 @@ def edge(
         target=target,
         target_port=target_port,
     )
+
+
+@pytest.mark.asyncio
+async def test_range_uses_bounded_python_semantics(tmp_path: Path) -> None:
+    graph = GraphSpec(
+        nodes=[node("range", "range", start=1, stop=8, step=2)],
+        edges=[],
+    )
+
+    response = await GraphEngine(workspace=tmp_path).run(graph)
+
+    assert response.terminal_outputs["range"]["items"] == [1, 3, 5, 7]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        ({"start": 0, "stop": 5, "step": 0}, "step cannot be zero"),
+        ({"start": 0, "stop": 1_000_000, "step": 1}, "limit is 10,000"),
+    ],
+)
+async def test_range_rejects_unbounded_or_invalid_requests(
+    tmp_path: Path,
+    config: dict[str, int],
+    message: str,
+) -> None:
+    graph = GraphSpec(nodes=[node("range", "range", **config)], edges=[])
+
+    with pytest.raises(GraphRunFailure, match=message):
+        await GraphEngine(workspace=tmp_path).run(graph)
+
+
+@pytest.mark.parametrize(
+    ("mode", "source", "expected"),
+    [
+        ("off", "he said. Then,", "he said. Then,"),
+        ("sentence", "he said. Then,", "he said."),
+        ("sentence", "unfinished", ""),
+        ("sentence", "Done!", "Done!"),
+        ("line", "first\r\nsecond partial", "first"),
+        ("line", "one line only", ""),
+    ],
+)
+def test_completion_boundary_trim_modes(mode: str, source: str, expected: str) -> None:
+    assert _trim_at_boundary(source, mode) == expected
 
 
 @pytest.mark.asyncio
@@ -668,9 +724,7 @@ async def test_promoted_controls_connect_as_typed_ports(tmp_path: Path) -> None:
     response = await GraphEngine(workspace=tmp_path).run(graph)
 
     assert response.terminal_outputs["replace"]["text"] == "hello glow"
-    literal_result = next(
-        result for result in response.nodes if result.node_id == "literal"
-    )
+    literal_result = next(result for result in response.nodes if result.node_id == "literal")
     assert literal_result.outputs[literal_port] == "glow"
     assert response.manifest.graph.nodes[0].control_ports == {"text": "output"}
 
@@ -821,9 +875,7 @@ async def test_bound_text_can_drive_a_model_id_control(tmp_path: Path) -> None:
 
     response = await GraphEngine(workspace=tmp_path).run(graph)
 
-    assert response.terminal_outputs["model"]["model"]["model_id"] == (
-        "talkie-web-13b-base"
-    )
+    assert response.terminal_outputs["model"]["model"]["model_id"] == ("talkie-web-13b-base")
 
 
 @pytest.mark.asyncio
@@ -844,9 +896,7 @@ async def test_unbound_template_stops_at_render(tmp_path: Path) -> None:
         await GraphEngine(workspace=tmp_path).run(graph)
 
     assert error.value.node_id == "render"
-    fill_result = next(
-        result for result in error.value.results if result.node_id == "fill"
-    )
+    fill_result = next(result for result in error.value.results if result.node_id == "fill")
     assert fill_result.outputs["text"] == "Ada went to ?store."
 
 
@@ -1009,6 +1059,74 @@ async def test_completion_exact_request_cache_avoids_duplicate_calls(tmp_path: P
         first.terminal_outputs["complete"]["result"]["cache"]["key"]
         == second.terminal_outputs["complete"]["result"]["cache"]["key"]
     )
+
+
+@pytest.mark.asyncio
+async def test_completion_boundary_trim_reuses_raw_request_cache(tmp_path: Path) -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            200,
+            json={
+                "id": "cmpl-boundary",
+                "choices": [
+                    {
+                        "text": "he said. Then,",
+                        "finish_reason": "length",
+                        "logprobs": None,
+                    }
+                ],
+            },
+        )
+
+    def graph(boundary_trim: str) -> GraphSpec:
+        return GraphSpec(
+            nodes=[
+                node("prompt", "text_input", text="Continue"),
+                node(
+                    "endpoint",
+                    "endpoint",
+                    base_url="http://models.test/v1",
+                    api_key_env="",
+                    timeout_seconds=5,
+                ),
+                node("model", "model", model_id="model-id"),
+                node(
+                    "complete",
+                    "completion",
+                    max_tokens=8,
+                    cache_mode="use",
+                    boundary_trim=boundary_trim,
+                ),
+            ],
+            edges=[
+                edge("prompt", "text", "complete", "prompt"),
+                edge("endpoint", "endpoint", "complete", "endpoint"),
+                edge("model", "model", "complete", "model"),
+            ],
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        engine = GraphEngine(workspace=tmp_path, http_client=client)
+        trimmed = await engine.run(graph("sentence"))
+        untrimmed = await engine.run(graph("off"))
+
+    trimmed_result = trimmed.terminal_outputs["complete"]["result"]
+    untrimmed_result = untrimmed.terminal_outputs["complete"]["result"]
+    assert calls == 1
+    assert trimmed_result["text"] == "he said."
+    assert trimmed_result["raw"]["choices"][0]["text"] == "he said. Then,"
+    assert trimmed_result["postprocessing"]["boundary_trim"] == {
+        "mode": "sentence",
+        "applied": True,
+        "original_length": 14,
+        "output_length": 8,
+    }
+    assert untrimmed_result["text"] == "he said. Then,"
+    assert untrimmed_result["cache"]["hit"] is True
 
 
 @pytest.mark.asyncio
@@ -1194,9 +1312,7 @@ async def test_versioned_workflow_executes_as_a_typed_node(tmp_path: Path) -> No
     assert response.terminal_outputs["preview"]["value"] == "Hello!"
     workflow_result = next(result for result in response.nodes if result.node_id == "workflow")
     assert workflow_result.outputs == {"text": "Hello!"}
-    frozen_workflow = next(
-        item for item in response.manifest.graph.nodes if item.id == "workflow"
-    )
+    frozen_workflow = next(item for item in response.manifest.graph.nodes if item.id == "workflow")
     assert frozen_workflow.config["workflow_digest"] == workflow.digest
     assert [result.node_id for result in partial.nodes] == ["source", "workflow"]
     assert partial.terminal_outputs == {"workflow": {"text": "Hello!"}}
@@ -1294,12 +1410,260 @@ async def test_workflow_exposes_promoted_control_ports(tmp_path: Path) -> None:
         "find": "world",
     }
 
-    definition = store.definition_for_kind(
-        workflow_kind(workflow.id, workflow.version)
-    )
+    definition = store.definition_for_kind(workflow_kind(workflow.id, workflow.version))
     assert definition["inputs"][0]["type"] == "text"
     assert definition["inputs"][0]["required"] is False
     assert {port["name"] for port in definition["outputs"]} == {"text", "find"}
+
+
+@pytest.mark.asyncio
+async def test_fold_collects_step_results_and_ingests_range_items(tmp_path: Path) -> None:
+    store = WorkflowStore(tmp_path)
+    workflow = store.save(
+        WorkflowDraft(
+            name="Emit item",
+            graph=GraphSpec(nodes=[node("step", "passthrough")], edges=[]),
+            inputs=[
+                WorkflowInput(
+                    name="item",
+                    label="Current item",
+                    type="any",
+                    fold_role="item",
+                    node_id="step",
+                    node_port="value",
+                )
+            ],
+            outputs=[
+                WorkflowOutput(
+                    name="value",
+                    label="Step value",
+                    type="any",
+                    fold_role="step",
+                    node_id="step",
+                    node_port="value",
+                )
+            ],
+        )
+    )
+    definition = store.definition_for_kind(fold_kind(workflow.id, workflow.version))
+    graph = GraphSpec(
+        nodes=[
+            node("initial", "list_input", items=[]),
+            node("range", "range", start=0, stop=5, step=1),
+            node(
+                "fold",
+                fold_kind(workflow.id, workflow.version),
+                workflow_digest=workflow.digest,
+                reducer="collect",
+                separator=" ",
+                max_iterations=5,
+            ),
+        ],
+        edges=[
+            edge("initial", "items", "fold", FOLD_INITIAL_PORT),
+            edge("range", "items", "fold", FOLD_ITEMS_PORT),
+        ],
+    )
+
+    response = await GraphEngine(
+        workspace=tmp_path,
+        workflow_store=store,
+    ).run(graph)
+
+    result = response.terminal_outputs["fold"]
+    assert result[FOLD_ACCUMULATOR_PORT] == [0, 1, 2, 3, 4]
+    assert result[FOLD_COUNT_PORT] == 5
+    assert [entry["item"] for entry in result[FOLD_ITERATIONS_PORT]] == [0, 1, 2, 3, 4]
+    assert [entry["step"] for entry in result[FOLD_ITERATIONS_PORT]] == [0, 1, 2, 3, 4]
+    assert {port["name"] for port in definition["inputs"]} == {
+        FOLD_INITIAL_PORT,
+        FOLD_ITEMS_PORT,
+    }
+    assert definition["workflow"]["digest"] == workflow.digest
+    assert definition["workflow_snapshot"]["digest"] == workflow.digest
+    assert definition["workflow_persisted"] is True
+
+
+@pytest.mark.asyncio
+async def test_embedded_fold_snapshot_runs_without_workspace_workflow_state(
+    tmp_path: Path,
+) -> None:
+    authoring_store = WorkflowStore(tmp_path / "authoring")
+    workflow = authoring_store.save(
+        WorkflowDraft(
+            name="Portable item",
+            graph=GraphSpec(nodes=[node("step", "passthrough")], edges=[]),
+            inputs=[
+                WorkflowInput(
+                    name="item",
+                    label="Current item",
+                    type="any",
+                    fold_role="item",
+                    node_id="step",
+                    node_port="value",
+                )
+            ],
+            outputs=[
+                WorkflowOutput(
+                    name="value",
+                    label="Step value",
+                    type="any",
+                    fold_role="step",
+                    node_id="step",
+                    node_port="value",
+                )
+            ],
+        )
+    )
+    kind = fold_kind(workflow.id, workflow.version)
+    snapshot = workflow.model_dump(mode="json")
+    portable_store = WorkflowStore(tmp_path / "fresh-workspace")
+    graph = GraphSpec(
+        nodes=[
+            node("initial", "list_input", items=[]),
+            node("range", "range", start=2, stop=5, step=1),
+            node(
+                "fold",
+                kind,
+                workflow_digest=workflow.digest,
+                workflow_snapshot=snapshot,
+                reducer="collect",
+                max_iterations=3,
+            ),
+        ],
+        edges=[
+            edge("initial", "items", "fold", FOLD_INITIAL_PORT),
+            edge("range", "items", "fold", FOLD_ITEMS_PORT),
+        ],
+    )
+
+    response = await GraphEngine(
+        workspace=tmp_path / "fresh-workspace",
+        workflow_store=portable_store,
+    ).run(graph)
+
+    assert response.terminal_outputs["fold"][FOLD_ACCUMULATOR_PORT] == [2, 3, 4]
+    definition = portable_store.definition_for_kind(kind, graph.nodes[-1].config)
+    assert definition["workflow_persisted"] is False
+    assert definition["workflow_snapshot"] == snapshot
+
+
+@pytest.mark.asyncio
+async def test_fold_appends_boundary_trimmed_completion_text(tmp_path: Path) -> None:
+    prompts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        prompts.append(json.loads(request.content)["prompt"])
+        sentence = "First sentence. fragment" if len(prompts) == 1 else "Second sentence. trailing"
+        return httpx.Response(
+            200,
+            json={
+                "id": f"cmpl-fold-{len(prompts)}",
+                "choices": [
+                    {
+                        "text": sentence,
+                        "finish_reason": "length",
+                        "logprobs": None,
+                    }
+                ],
+            },
+        )
+
+    store = WorkflowStore(tmp_path)
+    workflow = store.save(
+        WorkflowDraft(
+            name="Generate one sentence",
+            graph=GraphSpec(
+                nodes=[
+                    node(
+                        "completion",
+                        "completion",
+                        max_tokens=24,
+                        boundary_trim="sentence",
+                        cache_mode="off",
+                    )
+                ],
+                edges=[],
+            ),
+            inputs=[
+                WorkflowInput(
+                    name="endpoint",
+                    label="Endpoint",
+                    type="endpoint",
+                    node_id="completion",
+                    node_port="endpoint",
+                ),
+                WorkflowInput(
+                    name="model",
+                    label="Model",
+                    type="model",
+                    node_id="completion",
+                    node_port="model",
+                ),
+                WorkflowInput(
+                    name="prompt",
+                    label="Current text",
+                    type="any",
+                    fold_role="accumulator",
+                    node_id="completion",
+                    node_port="prompt",
+                ),
+            ],
+            outputs=[
+                WorkflowOutput(
+                    name="result",
+                    label="Generated sentence",
+                    type="completion",
+                    fold_role="step",
+                    node_id="completion",
+                    node_port="result",
+                )
+            ],
+        )
+    )
+    graph = GraphSpec(
+        nodes=[
+            node("initial", "text_input", text="Seed"),
+            node("range", "range", stop=2),
+            node(
+                "endpoint",
+                "endpoint",
+                base_url="http://models.test/v1",
+                api_key_env="",
+                timeout_seconds=5,
+            ),
+            node("model", "model", model_id="model-id"),
+            node(
+                "fold",
+                fold_kind(workflow.id, workflow.version),
+                workflow_digest=workflow.digest,
+                reducer="append_text",
+                separator=" ",
+                max_iterations=2,
+            ),
+        ],
+        edges=[
+            edge("initial", "text", "fold", FOLD_INITIAL_PORT),
+            edge("range", "items", "fold", FOLD_ITEMS_PORT),
+            edge("endpoint", "endpoint", "fold", "endpoint"),
+            edge("model", "model", "fold", "model"),
+        ],
+    )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        response = await GraphEngine(
+            workspace=tmp_path,
+            http_client=client,
+            workflow_store=store,
+        ).run(graph)
+
+    result = response.terminal_outputs["fold"]
+    assert prompts == ["Seed", "Seed First sentence."]
+    assert result[FOLD_ACCUMULATOR_PORT] == "Seed First sentence. Second sentence."
+    assert [iteration["step"]["text"] for iteration in result[FOLD_ITERATIONS_PORT]] == [
+        "First sentence.",
+        "Second sentence.",
+    ]
 
 
 @pytest.mark.asyncio

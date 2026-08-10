@@ -99,6 +99,7 @@ import type {
   WorkflowFrame,
   WorkflowNode,
   WorkflowNote,
+  WorkflowSpec,
 } from "./types";
 import { wireAppearance } from "./wireAppearance";
 import { inferWorkflowDraft, reviseWorkflowDraft } from "./workflow";
@@ -113,9 +114,19 @@ function workflowBindingKey(
   return `${direction}\u0000${nodeId}\u0000${nodePort}`;
 }
 
-function applyWorkflowBoundaryLabels(
+function boundaryRole<T extends string>(
+  roles: Record<string, string>,
+  key: string,
+  current: T | undefined,
+): T | undefined {
+  if (!(key in roles)) return current;
+  return (roles[key] || undefined) as T | undefined;
+}
+
+function applyWorkflowBoundaryEdits(
   draft: WorkflowDraft,
   labels: Record<string, string>,
+  roles: Record<string, string>,
 ): WorkflowDraft {
   return {
     ...draft,
@@ -123,11 +134,21 @@ function applyWorkflowBoundaryLabels(
       ...binding,
       label:
         labels[workflowBindingKey("input", binding.node_id, binding.node_port)] ?? binding.label,
+      fold_role: boundaryRole<"accumulator" | "item">(
+        roles,
+        workflowBindingKey("input", binding.node_id, binding.node_port),
+        binding.fold_role ?? undefined,
+      ),
     })),
     outputs: draft.outputs.map((binding) => ({
       ...binding,
       label:
         labels[workflowBindingKey("output", binding.node_id, binding.node_port)] ?? binding.label,
+      fold_role: boundaryRole<"step">(
+        roles,
+        workflowBindingKey("output", binding.node_id, binding.node_port),
+        binding.fold_role ?? undefined,
+      ),
     })),
   };
 }
@@ -319,6 +340,7 @@ export function GlitchlabWorkbench() {
   const [workflowName, setWorkflowName] = useState("");
   const [workflowDescription, setWorkflowDescription] = useState("");
   const [workflowBoundaryLabels, setWorkflowBoundaryLabels] = useState<Record<string, string>>({});
+  const [workflowBoundaryRoles, setWorkflowBoundaryRoles] = useState<Record<string, string>>({});
   const [workflowError, setWorkflowError] = useState<string>();
   const [savingWorkflow, setSavingWorkflow] = useState(false);
   const [workflowNotice, setWorkflowNotice] = useState<string>();
@@ -818,6 +840,9 @@ export function GlitchlabWorkbench() {
                 config: {
                   ...defaultConfig(definition),
                   ...(definition.workflow ? { workflow_digest: definition.workflow.digest } : {}),
+                  ...(definition.workflow_snapshot
+                    ? { workflow_snapshot: structuredClone(definition.workflow_snapshot) }
+                    : {}),
                 },
                 controlPorts: {},
                 ...(definition.editor === "loom" ? { state: createLoomState() } : {}),
@@ -1202,7 +1227,13 @@ export function GlitchlabWorkbench() {
 
     setLoadingWorkflowId(metadata.id);
     try {
-      const response = await fetchWorkflow(metadata.id, metadata.version);
+      const embeddedWorkflow =
+        latestDefinition.workflow_persisted === false && latestDefinition.workflow_snapshot
+          ? (latestDefinition.workflow_snapshot as unknown as WorkflowSpec)
+          : undefined;
+      const response = embeddedWorkflow
+        ? { workflow: embeddedWorkflow, definitions: [] }
+        : await fetchWorkflow(metadata.id, metadata.version);
       const hydrated = hydrateGraph(
         response.workflow.graph,
         catalog?.nodes ?? [],
@@ -1228,6 +1259,7 @@ export function GlitchlabWorkbench() {
           id: tabId,
           type: "workflow",
           workflow: response.workflow,
+          workflowPersisted: !embeddedWorkflow,
           snapshot,
         },
       ]);
@@ -1476,7 +1508,7 @@ export function GlitchlabWorkbench() {
   };
 
   const requestDeleteWorkflow = (definition: NodeDefinition) => {
-    if (!definition.workflow) return;
+    if (!definition.workflow || definition.workflow_persisted === false) return;
     const latestDefinition =
       catalog?.nodes.find(
         (item) =>
@@ -1522,6 +1554,7 @@ export function GlitchlabWorkbench() {
     setWorkflowName(count === 1 ? `${selectedNodes[0].data.title} workflow` : "New workflow");
     setWorkflowDescription("");
     setWorkflowBoundaryLabels({});
+    setWorkflowBoundaryRoles({});
     setWorkflowError(undefined);
     setSaveDialogPurpose("selection");
     setSaveDialogOpen(true);
@@ -1533,6 +1566,7 @@ export function GlitchlabWorkbench() {
     setWorkflowName(graphName);
     setWorkflowDescription(activeWorkflow.description);
     setWorkflowBoundaryLabels({});
+    setWorkflowBoundaryRoles({});
     setWorkflowError(undefined);
     setSaveDialogPurpose("edit");
     setSaveDialogOpen(true);
@@ -1560,7 +1594,7 @@ export function GlitchlabWorkbench() {
           frames,
         );
       }
-      return applyWorkflowBoundaryLabels(inferred, workflowBoundaryLabels);
+      return applyWorkflowBoundaryEdits(inferred, workflowBoundaryLabels, workflowBoundaryRoles);
     } catch {
       return undefined;
     }
@@ -1573,6 +1607,7 @@ export function GlitchlabWorkbench() {
     saveDialogPurpose,
     selectedNodes,
     workflowBoundaryLabels,
+    workflowBoundaryRoles,
     workflowDescription,
     workflowName,
   ]);
@@ -1593,6 +1628,20 @@ export function GlitchlabWorkbench() {
       setWorkflowError("Every public socket needs a name.");
       return;
     }
+    const duplicateInputRole = (["accumulator", "item"] as const).find(
+      (role) => workflowDraft.inputs.filter((binding) => binding.fold_role === role).length > 1,
+    );
+    const stepCount = workflowDraft.outputs.filter(
+      (binding) => binding.fold_role === "step",
+    ).length;
+    if (duplicateInputRole || stepCount > 1) {
+      setWorkflowError("A fold role can be assigned to only one public socket.");
+      return;
+    }
+    if (workflowDraft.inputs.some((binding) => binding.fold_role) && stepCount === 0) {
+      setWorkflowError("Accumulator or item roles require one output marked Fold step.");
+      return;
+    }
     const draft: WorkflowDraft = {
       ...workflowDraft,
       inputs: workflowDraft.inputs.map((binding) => ({
@@ -1608,7 +1657,7 @@ export function GlitchlabWorkbench() {
     setWorkflowError(undefined);
     try {
       const response =
-        saveDialogPurpose === "edit" && activeWorkflow
+        saveDialogPurpose === "edit" && activeWorkflow && activeTab.workflowPersisted !== false
           ? await updateWorkflow(activeWorkflow.id, draft)
           : await saveWorkflow(draft);
       setCatalog((current) =>
@@ -1619,7 +1668,7 @@ export function GlitchlabWorkbench() {
                 ...current.nodes.filter(
                   (definition) => definition.workflow?.id !== response.workflow.id,
                 ),
-                response.definition,
+                ...response.definitions,
               ],
             }
           : current,
@@ -1636,6 +1685,7 @@ export function GlitchlabWorkbench() {
               ? {
                   ...tab,
                   workflow: response.workflow,
+                  workflowPersisted: true,
                   snapshot: nextSnapshot,
                 }
               : tab,
@@ -2876,14 +2926,18 @@ export function GlitchlabWorkbench() {
               <div>
                 <h2 id="workflow-dialog-title">
                   {saveDialogPurpose === "edit"
-                    ? "Save workflow version"
+                    ? activeTab.workflowPersisted === false
+                      ? "Save embedded workflow"
+                      : "Save workflow version"
                     : "Save reusable workflow"}
                 </h2>
                 <p>
                   {saveDialogPurpose === "edit"
-                    ? `Your edits will become v${
-                        (activeWorkflow?.version ?? 0) + 1
-                      }; existing nodes keep their exact older version.`
+                    ? activeTab.workflowPersisted === false
+                      ? "This portable snapshot will become a new saved workflow; the template keeps its embedded original."
+                      : `Your edits will become v${
+                          (activeWorkflow?.version ?? 0) + 1
+                        }; existing nodes keep their exact older version.`
                     : "The selected nodes become one versioned node with an inferred typed boundary."}
                 </p>
               </div>
@@ -2907,6 +2961,10 @@ export function GlitchlabWorkbench() {
                 disabled={savingWorkflow}
               />
             </label>
+            <p className={cx(styles, "workflow-fold-help")}>
+              Fold roles are optional. Mark one step output, then optionally expose the current
+              accumulator and current item to generate a typed Fold companion node.
+            </p>
             <div className={cx(styles, "workflow-boundary")}>
               <div>
                 <strong>Inputs</strong>
@@ -2925,6 +2983,22 @@ export function GlitchlabWorkbench() {
                         }
                         disabled={savingWorkflow}
                       />
+                      <select
+                        aria-label={`Fold role for input ${input.name}`}
+                        value={input.fold_role ?? ""}
+                        onChange={(event) =>
+                          setWorkflowBoundaryRoles((current) => ({
+                            ...current,
+                            [workflowBindingKey("input", input.node_id, input.node_port)]:
+                              event.target.value,
+                          }))
+                        }
+                        disabled={savingWorkflow}
+                      >
+                        <option value="">Fixed input</option>
+                        <option value="accumulator">Current accumulator</option>
+                        <option value="item">Current item</option>
+                      </select>
                       <em>
                         {input.type}
                         {!input.required && " · default"}
@@ -2952,6 +3026,21 @@ export function GlitchlabWorkbench() {
                         }
                         disabled={savingWorkflow}
                       />
+                      <select
+                        aria-label={`Fold role for output ${output.name}`}
+                        value={output.fold_role ?? ""}
+                        onChange={(event) =>
+                          setWorkflowBoundaryRoles((current) => ({
+                            ...current,
+                            [workflowBindingKey("output", output.node_id, output.node_port)]:
+                              event.target.value,
+                          }))
+                        }
+                        disabled={savingWorkflow}
+                      >
+                        <option value="">Ordinary output</option>
+                        <option value="step">Fold step</option>
+                      </select>
                       <em>{output.type}</em>
                     </label>
                   ))
@@ -2984,7 +3073,9 @@ export function GlitchlabWorkbench() {
                 {savingWorkflow
                   ? "Saving…"
                   : saveDialogPurpose === "edit"
-                    ? "Save new version"
+                    ? activeTab.workflowPersisted === false
+                      ? "Save as workflow"
+                      : "Save new version"
                     : "Save workflow"}
               </button>
             </div>

@@ -72,9 +72,7 @@ class GraphStore:
         records: list[GraphDocument] = []
         for path in sorted(self.root.glob("*.json")):
             try:
-                records.append(
-                    GraphDocument.model_validate_json(path.read_text(encoding="utf-8"))
-                )
+                records.append(GraphDocument.model_validate_json(path.read_text(encoding="utf-8")))
             except (OSError, ValueError):
                 continue
         return records
@@ -105,12 +103,10 @@ class GraphStore:
             if node.kind == "loom" and node.state is None:
                 raise ValueError(f"Loom node {node.id!r} is missing its embedded state.")
             if node.kind != "loom" and node.state is not None:
-                raise ValueError(
-                    f"Node {node.id!r} of kind {node.kind!r} cannot own Loom state."
-                )
+                raise ValueError(f"Node {node.id!r} of kind {node.kind!r} cannot own Loom state.")
             try:
                 definitions[node.id] = with_control_ports(
-                    self.workflow_store.node_definition(node.kind),
+                    self.workflow_store.node_definition(node.kind, node.config),
                     node.control_ports,
                 )
             except ValueError as exc:
@@ -128,27 +124,17 @@ class GraphStore:
             edge_ids.add(edge.id)
             if edge.source not in nodes or edge.target not in nodes:
                 raise ValueError(f"Edge {edge.id!r} references a missing node.")
-            source_ports = {
-                port["name"]: port for port in definitions[edge.source]["outputs"]
-            }
-            target_ports = {
-                port["name"]: port for port in definitions[edge.target]["inputs"]
-            }
+            source_ports = {port["name"]: port for port in definitions[edge.source]["outputs"]}
+            target_ports = {port["name"]: port for port in definitions[edge.target]["inputs"]}
             source_port = source_ports.get(edge.source_port)
             target_port = target_ports.get(edge.target_port)
             if source_port is None:
-                raise ValueError(
-                    f"Node {edge.source!r} has no output port {edge.source_port!r}."
-                )
+                raise ValueError(f"Node {edge.source!r} has no output port {edge.source_port!r}.")
             if target_port is None:
-                raise ValueError(
-                    f"Node {edge.target!r} has no input port {edge.target_port!r}."
-                )
+                raise ValueError(f"Node {edge.target!r} has no input port {edge.target_port!r}.")
             target_key = (edge.target, edge.target_port)
             if target_key in connected_targets and not target_port["multiple"]:
-                raise ValueError(
-                    f"Input {edge.target}.{edge.target_port} accepts one connection."
-                )
+                raise ValueError(f"Input {edge.target}.{edge.target_port} accepts one connection.")
             connected_targets.add(target_key)
             source_type = source_port["type"]
             target_type = target_port["type"]
@@ -266,7 +252,10 @@ class GraphStore:
 
         definitions: dict[str, dict[str, Any]] = {}
         for node in graph.nodes:
-            definitions[node.kind] = self.workflow_store.node_definition(node.kind)
+            definitions[node.kind] = self.workflow_store.node_definition(
+                node.kind,
+                node.config,
+            )
         return list(definitions.values())
 
     def delete(self, graph_id: str) -> dict[str, Any]:
@@ -285,9 +274,7 @@ class GraphStore:
                 "id": record.id,
                 "name": record.graph.name,
                 "revision": record.revision,
-                "recoverable_path": str(
-                    destination.relative_to(self.root.parent.parent)
-                ),
+                "recoverable_path": str(destination.relative_to(self.root.parent.parent)),
             }
 
 
@@ -344,16 +331,17 @@ class GraphTemplateStore:
         try:
             return self._load_path(path)
         except (OSError, ValueError) as exc:
-            raise ValueError(
-                f"Graph template {template_id!r} could not be loaded."
-            ) from exc
+            raise ValueError(f"Graph template {template_id!r} could not be loaded.") from exc
 
     def definitions(self, graph: GraphSpec) -> list[dict[str, Any]]:
         """Return definitions required to rehydrate one read-only template."""
 
         definitions: dict[str, dict[str, Any]] = {}
         for node in graph.nodes:
-            definitions[node.kind] = self.workflow_store.node_definition(node.kind)
+            definitions[node.kind] = self.workflow_store.node_definition(
+                node.kind,
+                node.config,
+            )
         return list(definitions.values())
 
 

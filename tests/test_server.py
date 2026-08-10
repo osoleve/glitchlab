@@ -32,27 +32,30 @@ async def test_health_and_catalog_contract() -> None:
         "endpoint",
         "model",
         "completion",
+        "range",
         "glitchling",
         "gaggle",
         "corrupt",
         "preview",
     }.issubset(kinds)
-    completion = next(
-        node for node in catalog.json()["nodes"] if node["kind"] == "completion"
-    )
-    field_types = {
-        field["name"]: field["type"] for field in completion["fields"]
-    }
+    completion = next(node for node in catalog.json()["nodes"] if node["kind"] == "completion")
+    field_types = {field["name"]: field["type"] for field in completion["fields"]}
     assert field_types["temperature"] == "number"
+    assert field_types["boundary_trim"] == "text"
     assert field_types["stop"] == "text"
     assert field_types["extra_body"] == "any"
-    inline_fields = {
-        field["name"] for field in completion["fields"] if field["inline"]
-    }
+    inline_fields = {field["name"] for field in completion["fields"] if field["inline"]}
     assert inline_fields == {"temperature", "max_tokens", "seed"}
-    number_input = next(
-        node for node in catalog.json()["nodes"] if node["kind"] == "number_input"
+    boundary_trim = next(
+        field for field in completion["fields"] if field["name"] == "boundary_trim"
     )
+    assert boundary_trim["default"] == "off"
+    assert [option["value"] for option in boundary_trim["options"]] == [
+        "off",
+        "sentence",
+        "line",
+    ]
+    number_input = next(node for node in catalog.json()["nodes"] if node["kind"] == "number_input")
     assert number_input["outputs"] == [
         {
             "name": "number",
@@ -64,28 +67,21 @@ async def test_health_and_catalog_contract() -> None:
     ]
     assert number_input["fields"][0]["default"] == 0
     assert number_input["fields"][0]["inline"] is True
-    fill_hole = next(
-        node for node in catalog.json()["nodes"] if node["kind"] == "fill_hole"
-    )
+    fill_hole = next(node for node in catalog.json()["nodes"] if node["kind"] == "fill_hole")
     assert [
-        (output["name"], output["label"], output["type"])
-        for output in fill_hole["outputs"]
+        (output["name"], output["label"], output["type"]) for output in fill_hole["outputs"]
     ] == [
         ("template", "Template", "template"),
         ("text", "Bound text", "text"),
     ]
-    passthrough = next(
-        node for node in catalog.json()["nodes"] if node["kind"] == "passthrough"
-    )
+    passthrough = next(node for node in catalog.json()["nodes"] if node["kind"] == "passthrough")
     assert passthrough["inputs"][0]["type"] == "any"
     assert passthrough["outputs"][0]["type"] == "any"
     trim = next(node for node in catalog.json()["nodes"] if node["kind"] == "trim")
     assert trim["inputs"][0]["type"] == "text"
     assert trim["outputs"][0]["type"] == "text"
     assert trim["fields"] == []
-    extract = next(
-        node for node in catalog.json()["nodes"] if node["kind"] == "extract_text"
-    )
+    extract = next(node for node in catalog.json()["nodes"] if node["kind"] == "extract_text")
     assert extract["inputs"][0]["type"] == "any"
     assert [(output["name"], output["type"]) for output in extract["outputs"]] == [
         ("text", "text"),
@@ -229,9 +225,10 @@ async def test_graph_documents_roundtrip_revision_guard_and_trash(
     assert loaded.json()["graph"]["graph"]["nodes"][0]["config"]["text"] == (
         "  semantically spaced  "
     )
-    assert {
-        definition["kind"] for definition in loaded.json()["definitions"]
-    } == {"text_input", "passthrough"}
+    assert {definition["kind"] for definition in loaded.json()["definitions"]} == {
+        "text_input",
+        "passthrough",
+    }
     assert updated.status_code == 200
     assert updated.json()["graph"]["revision"] == 2
     assert idempotent.status_code == 200
@@ -345,6 +342,7 @@ async def test_checked_in_graph_templates_are_read_only(
     ) as client:
         listed = await client.get("/api/graph-templates")
         loaded = await client.get("/api/graph-templates/openrouter-huggingface")
+        worksheet = await client.get("/api/graph-templates/phased-math-worksheet")
         traversal = await client.get("/api/graph-templates/..%2Fpyproject")
 
     assert listed.status_code == 200
@@ -355,10 +353,17 @@ async def test_checked_in_graph_templates_are_read_only(
         "two-model-synthesis",
     }
     assert loaded.status_code == 200
-    assert loaded.json()["template"]["graph"]["name"] == (
-        "Hugging Face prompts through OpenRouter"
-    )
+    assert loaded.json()["template"]["graph"]["name"] == ("Hugging Face prompts through OpenRouter")
     assert loaded.json()["template"]["graph"]["nodes"]
+    assert worksheet.status_code == 200
+    worksheet_payload = worksheet.json()
+    fold = next(
+        definition
+        for definition in worksheet_payload["definitions"]
+        if definition["kind"].startswith("fold:")
+    )
+    assert fold["workflow_persisted"] is False
+    assert fold["workflow_snapshot"]["name"] == "Generate one worksheet question"
     assert traversal.status_code == 404
     assert not (tmp_path / ".glitchlab" / "graphs").exists()
 
@@ -391,6 +396,7 @@ async def test_saved_workflow_appears_in_catalog(
                 "type": "any",
                 "required": True,
                 "multiple": False,
+                "fold_role": "item",
                 "node_id": "preview",
                 "node_port": "value",
             }
@@ -400,6 +406,7 @@ async def test_saved_workflow_appears_in_catalog(
                 "name": "value",
                 "label": "Value",
                 "type": "any",
+                "fold_role": "step",
                 "node_id": "preview",
                 "node_port": "value",
             }
@@ -413,13 +420,25 @@ async def test_saved_workflow_appears_in_catalog(
         catalog = await client.get("/api/catalog")
 
     assert saved.status_code == 201
-    definition = saved.json()["definition"]
+    definitions = saved.json()["definitions"]
+    assert len(definitions) == 2
+    definition = next(item for item in definitions if item["kind"].startswith("workflow:"))
+    fold = next(item for item in definitions if item["kind"].startswith("fold:"))
     assert definition["kind"].endswith(":v1")
+    assert definition["workflow_snapshot"]["digest"] == saved.json()["workflow"]["digest"]
+    assert definition["workflow_persisted"] is True
     assert definition["inputs"][0]["type"] == "any"
-    assert any(
-        item["kind"] == definition["kind"]
-        for item in catalog.json()["nodes"]
-    )
+    assert [port["name"] for port in fold["inputs"]] == [
+        "fold:initial",
+        "fold:items",
+    ]
+    assert {field["name"] for field in fold["fields"]} == {
+        "reducer",
+        "separator",
+        "max_iterations",
+    }
+    assert any(item["kind"] == definition["kind"] for item in catalog.json()["nodes"])
+    assert any(item["kind"] == fold["kind"] for item in catalog.json()["nodes"])
 
 
 @pytest.mark.asyncio
@@ -480,9 +499,7 @@ async def test_two_source_nodes_save_as_a_zero_input_workflow(
         response = await client.post("/api/workflows", json=payload)
         saved = response.json()
         workflow_id = saved["workflow"]["id"]
-        loaded = await client.get(
-            f"/api/workflows/{workflow_id}/versions/1"
-        )
+        loaded = await client.get(f"/api/workflows/{workflow_id}/versions/1")
         edited_payload = {
             **payload,
             "name": "Vintage Talkie renamed",
@@ -506,7 +523,7 @@ async def test_two_source_nodes_save_as_a_zero_input_workflow(
         remaining = await client.get("/api/workflows")
 
     assert response.status_code == 201
-    definition = saved["definition"]
+    definition = saved["definitions"][0]
     assert definition["inputs"] == []
     assert [output["type"] for output in definition["outputs"]] == [
         "endpoint",
@@ -522,9 +539,10 @@ async def test_two_source_nodes_save_as_a_zero_input_workflow(
     assert updated.json()["workflow"]["id"] == workflow_id
     assert updated.json()["workflow"]["version"] == 2
     assert updated.json()["workflow"]["name"] == "Vintage Talkie renamed"
-    assert [
-        output["label"] for output in updated.json()["definition"]["outputs"]
-    ] == ["Completion API", "Talkie model"]
+    assert [output["label"] for output in updated.json()["definitions"][0]["outputs"]] == [
+        "Completion API",
+        "Talkie model",
+    ]
     assert deleted.status_code == 200
     assert deleted.json()["deleted"]["versions"] == 2
     assert remaining.json()["workflows"] == []
