@@ -279,9 +279,13 @@ async def test_saved_graph_round_trips_canvas_presentation(
                 {
                     "id": "bundle-a",
                     "edge_ids": ["edge-a", "edge-b"],
-                    "waypoints": [{"x": 120, "y": 80}, {"x": 260, "y": 140}],
-                    "label": "Talkie pair",
-                }
+                    "ties": [{"x": 120, "y": 80}, {"x": 260, "y": 140}],
+                },
+                {
+                    "id": "bundle-b",
+                    "edge_ids": ["edge-a", "edge-b"],
+                    "ties": [{"x": 320, "y": 60}, {"x": 420, "y": 60}],
+                },
             ],
             "notes": [
                 {
@@ -313,10 +317,13 @@ async def test_saved_graph_round_trips_canvas_presentation(
         {
             "id": "bundle-a",
             "edge_ids": ["edge-a", "edge-b"],
-            "waypoints": [{"x": 120.0, "y": 80.0}, {"x": 260.0, "y": 140.0}],
-            "collapsed": False,
-            "label": "Talkie pair",
-        }
+            "ties": [{"x": 120.0, "y": 80.0}, {"x": 260.0, "y": 140.0}],
+        },
+        {
+            "id": "bundle-b",
+            "edge_ids": ["edge-a", "edge-b"],
+            "ties": [{"x": 320.0, "y": 60.0}, {"x": 420.0, "y": 60.0}],
+        },
     ]
     assert presentation["notes"] == [
         {

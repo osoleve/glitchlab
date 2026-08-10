@@ -1,4 +1,4 @@
-.waypointHandle {
+.tieHandle {
   position: absolute;
   z-index: 6;
   display: grid;
@@ -14,12 +14,12 @@
   transform-origin: center;
 }
 
-.waypointHandle:active,
+.tieHandle:active,
 .bundleTrunkHitArea:active {
   cursor: grabbing;
 }
 
-.waypointHandle span {
+.tieHandle span {
   position: relative;
   display: block;
   width: 18px;
@@ -32,7 +32,7 @@
     0 0 0 1px rgba(15, 13, 18, 0.7);
 }
 
-.waypointHandle span::after {
+.tieHandle span::after {
   position: absolute;
   top: 1px;
   right: -4px;
@@ -45,15 +45,15 @@
   content: "";
 }
 
-.waypointHandle:hover span,
-.waypointHandle:focus-visible span {
+.tieHandle:hover span,
+.tieHandle:focus-visible span {
   border-color: #eed69e;
   box-shadow:
     0 0 0 2px rgba(208, 171, 101, 0.2),
     0 2px 7px rgba(0, 0, 0, 0.64);
 }
 
-.waypointHandle:focus-visible {
+.tieHandle:focus-visible {
   outline: none;
 }
 
@@ -63,6 +63,22 @@
   stroke: transparent;
   stroke-width: 22px;
   cursor: grab;
+}
+
+.bundleTrunkSelected {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(238, 214, 158, 0.28);
+  stroke-width: 16px;
+  stroke-linecap: round;
+}
+
+.tieHandleSelected span,
+.tieHandleSelected:hover span {
+  border-color: #eed69e;
+  box-shadow:
+    0 0 0 2px rgba(208, 171, 101, 0.55),
+    0 2px 7px rgba(0, 0, 0, 0.64);
 }
 
 .bundleCount {

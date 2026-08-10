@@ -2110,13 +2110,8 @@
         "type": "object"
       },
       "WireBundlePresentation": {
-        "description": "A visual-only routed bundle of graph edges.",
+        "description": "A visual-only pair of cable ties clamping graph edges together.\n\nWires may pass through any number of tie pairs; the ties only pin where\nthe clamped run sits on the canvas, never the wires' full lengths.",
         "properties": {
-          "collapsed": {
-            "default": false,
-            "title": "Collapsed",
-            "type": "boolean"
-          },
           "edge_ids": {
             "items": {
               "type": "string"
@@ -2129,30 +2124,25 @@
             "title": "Id",
             "type": "string"
           },
-          "label": {
-            "anyOf": [
+          "ties": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/Position"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Position"
               }
             ],
-            "title": "Label"
-          },
-          "waypoints": {
-            "items": {
-              "$ref": "#/components/schemas/Position"
-            },
-            "minItems": 2,
-            "title": "Waypoints",
+            "title": "Ties",
             "type": "array"
           }
         },
         "required": [
           "id",
           "edge_ids",
-          "waypoints"
+          "ties"
         ],
         "title": "WireBundlePresentation",
         "type": "object"

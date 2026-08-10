@@ -1,10 +1,14 @@
 import { Position } from "@xyflow/react";
-import type { FlowPosition, WireBundle } from "./types";
+import type { FlowPosition, WireBundle, WireBundleMembership } from "./types";
 
-export interface BundledWireGeometry {
+export interface WireTieGeometry {
+  bundle: WireBundle;
+  laneTies: [FlowPosition, FlowPosition];
+}
+
+export interface WireGeometry {
   path: string;
-  trunkPath: string;
-  offsetWaypoints: FlowPosition[];
+  bundles: WireTieGeometry[];
 }
 
 export interface WireEndpoints {
@@ -13,9 +17,15 @@ export interface WireEndpoints {
   target: FlowPosition;
 }
 
-function axis(bundle: WireBundle): { dx: number; dy: number; length: number } {
-  const start = bundle.waypoints[0];
-  const end = bundle.waypoints.at(-1)!;
+interface TrunkAnchor {
+  start: FlowPosition;
+  end: FlowPosition;
+  unit: FlowPosition;
+  trunkLength: number;
+}
+
+function trunkVector(bundle: WireBundle): { dx: number; dy: number; length: number } {
+  const [start, end] = bundle.ties;
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   return { dx, dy, length: Math.max(1, Math.hypot(dx, dy)) };
@@ -25,7 +35,7 @@ export function wireBundleOrder(bundle: WireBundle, endpoints: readonly WireEndp
   const byEdgeId = new Map(endpoints.map((endpoint) => [endpoint.edgeId, endpoint]));
   if (bundle.edgeIds.some((edgeId) => !byEdgeId.has(edgeId))) return [...bundle.edgeIds];
 
-  const { dx, dy, length } = axis(bundle);
+  const { dx, dy, length } = trunkVector(bundle);
   const normal = { x: -dy / length, y: dx / length };
   const projection = (position: FlowPosition) => position.x * normal.x + position.y * normal.y;
 
@@ -40,6 +50,16 @@ export function wireBundleOrder(bundle: WireBundle, endpoints: readonly WireEndp
   });
 }
 
+export function wireBundleTieAngle(bundle: WireBundle): number {
+  const { dx, dy } = trunkVector(bundle);
+  return (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+}
+
+export function bundleTrunkPath(bundle: WireBundle): string {
+  const [start, end] = bundle.ties;
+  return `M ${point(start)} L ${point(end)}`;
+}
+
 function outwardControl(point: FlowPosition, position: Position, distance: number): FlowPosition {
   if (position === Position.Left) return { x: point.x - distance, y: point.y };
   if (position === Position.Top) return { x: point.x, y: point.y - distance };
@@ -51,98 +71,106 @@ function point(position: FlowPosition): string {
   return `${position.x.toFixed(2)},${position.y.toFixed(2)}`;
 }
 
-function offsetBundleWaypoints(bundle: WireBundle, offset: number): FlowPosition[] {
-  return bundle.waypoints.map((waypoint, index, waypoints) => {
-    const previous = waypoints[Math.max(0, index - 1)];
-    const next = waypoints[Math.min(waypoints.length - 1, index + 1)];
-    const dx = next.x - previous.x;
-    const dy = next.y - previous.y;
-    const length = Math.max(1, Math.hypot(dx, dy));
-    return {
-      x: waypoint.x + (-dy / length) * offset,
-      y: waypoint.y + (dx / length) * offset,
+function distance(from: FlowPosition, to: FlowPosition): number {
+  return Math.max(1, Math.hypot(to.x - from.x, to.y - from.y));
+}
+
+function laneTies(
+  bundle: WireBundle,
+  edgeIndex: number,
+  edgeCount: number,
+): [FlowPosition, FlowPosition] {
+  const spacing = edgeCount > 7 ? 4 : 5.5;
+  const offset = (edgeIndex - (edgeCount - 1) / 2) * spacing;
+  const { dx, dy, length } = trunkVector(bundle);
+  const shift = { x: (-dy / length) * offset, y: (dx / length) * offset };
+  const [start, end] = bundle.ties;
+  return [
+    { x: start.x + shift.x, y: start.y + shift.y },
+    { x: end.x + shift.x, y: end.y + shift.y },
+  ];
+}
+
+export function sortBundlesAlongWire<T extends { bundle: WireBundle }>(
+  source: FlowPosition,
+  target: FlowPosition,
+  memberships: readonly T[],
+): T[] {
+  const direction = { x: target.x - source.x, y: target.y - source.y };
+  const along = (bundle: WireBundle) => {
+    const mid = {
+      x: (bundle.ties[0].x + bundle.ties[1].x) / 2,
+      y: (bundle.ties[0].y + bundle.ties[1].y) / 2,
     };
-  });
+    return (mid.x - source.x) * direction.x + (mid.y - source.y) * direction.y;
+  };
+  return [...memberships].sort(
+    (left, right) =>
+      along(left.bundle) - along(right.bundle) || left.bundle.id.localeCompare(right.bundle.id),
+  );
 }
 
-export function wireBundleWaypointAngle(bundle: WireBundle, waypointIndex: number): number {
-  const previous = bundle.waypoints[Math.max(0, waypointIndex - 1)];
-  const next = bundle.waypoints[Math.min(bundle.waypoints.length - 1, waypointIndex + 1)];
-  return (Math.atan2(next.y - previous.y, next.x - previous.x) * 180) / Math.PI + 90;
+function trunkLead(trunkLength: number, gap: number): number {
+  return Math.min(58, Math.max(24, trunkLength * 0.22), gap * 0.45);
 }
 
-export function bundledWireGeometry(
+function endpointLead(gap: number): number {
+  return Math.min(90, Math.max(34, gap * 0.32), gap * 0.5);
+}
+
+export function wireGeometry(
   source: FlowPosition,
   target: FlowPosition,
   sourcePosition: Position,
   targetPosition: Position,
-  bundle: WireBundle,
-  edgeIndex: number,
-  edgeCount: number,
-): BundledWireGeometry {
-  const spacing = edgeCount > 7 ? 4 : 5.5;
-  const offset = (edgeIndex - (edgeCount - 1) / 2) * spacing;
-  const offsetWaypoints = offsetBundleWaypoints(bundle, offset);
-  const bundleStart = offsetWaypoints[0];
-  const bundleEnd = offsetWaypoints.at(-1)!;
-  const firstNext = offsetWaypoints[1];
-  const lastPrevious = offsetWaypoints.at(-2)!;
-  const firstLength = Math.max(
-    1,
-    Math.hypot(firstNext.x - bundleStart.x, firstNext.y - bundleStart.y),
-  );
-  const lastLength = Math.max(
-    1,
-    Math.hypot(bundleEnd.x - lastPrevious.x, bundleEnd.y - lastPrevious.y),
-  );
-  const firstUnit = {
-    x: (firstNext.x - bundleStart.x) / firstLength,
-    y: (firstNext.y - bundleStart.y) / firstLength,
-  };
-  const lastUnit = {
-    x: (bundleEnd.x - lastPrevious.x) / lastLength,
-    y: (bundleEnd.y - lastPrevious.y) / lastLength,
-  };
-  const leadIn = Math.min(58, Math.max(24, firstLength * 0.22));
-  const leadOut = Math.min(58, Math.max(24, lastLength * 0.22));
-  const sourceDistance = Math.min(
-    90,
-    Math.max(34, Math.hypot(bundleStart.x - source.x, bundleStart.y - source.y) * 0.32),
-  );
-  const targetDistance = Math.min(
-    90,
-    Math.max(34, Math.hypot(target.x - bundleEnd.x, target.y - bundleEnd.y) * 0.32),
-  );
-  const sourceControl = outwardControl(source, sourcePosition, sourceDistance);
-  const startControl = {
-    x: bundleStart.x - firstUnit.x * leadIn,
-    y: bundleStart.y - firstUnit.y * leadIn,
-  };
-  const endControl = {
-    x: bundleEnd.x + lastUnit.x * leadOut,
-    y: bundleEnd.y + lastUnit.y * leadOut,
-  };
-  const targetControl = outwardControl(target, targetPosition, targetDistance);
-  const trunkPoints = offsetWaypoints.slice(1).map((waypoint) => `L ${point(waypoint)}`);
+  memberships: readonly WireBundleMembership[],
+): WireGeometry {
+  const ordered = sortBundlesAlongWire(source, target, memberships);
+  const bundles: WireTieGeometry[] = ordered.map((membership) => ({
+    bundle: membership.bundle,
+    laneTies: laneTies(membership.bundle, membership.edgeIndex, membership.edgeCount),
+  }));
+  const anchors: TrunkAnchor[] = bundles.map((entry) => {
+    const { dx, dy, length } = trunkVector(entry.bundle);
+    return {
+      start: entry.laneTies[0],
+      end: entry.laneTies[1],
+      unit: { x: dx / length, y: dy / length },
+      trunkLength: length,
+    };
+  });
 
-  return {
-    path: [
-      `M ${point(source)}`,
-      `C ${point(sourceControl)} ${point(startControl)} ${point(bundleStart)}`,
-      ...trunkPoints,
-      `C ${point(endControl)} ${point(targetControl)} ${point(target)}`,
-    ].join(" "),
-    trunkPath: bundle.waypoints
-      .map((waypoint, index) => `${index === 0 ? "M" : "L"} ${point(waypoint)}`)
-      .join(" "),
-    offsetWaypoints,
-  };
-}
+  const commands = [`M ${point(source)}`];
+  anchors.forEach((anchor, index) => {
+    const previous = anchors[index - 1];
+    const from = previous?.end ?? source;
+    const gap = distance(from, anchor.start);
+    const exitLead = previous ? trunkLead(previous.trunkLength, gap) : 0;
+    const exitControl = previous
+      ? { x: from.x + previous.unit.x * exitLead, y: from.y + previous.unit.y * exitLead }
+      : outwardControl(source, sourcePosition, endpointLead(gap));
+    const entryLead = trunkLead(anchor.trunkLength, gap);
+    const entryControl = {
+      x: anchor.start.x - anchor.unit.x * entryLead,
+      y: anchor.start.y - anchor.unit.y * entryLead,
+    };
+    commands.push(
+      `C ${point(exitControl)} ${point(entryControl)} ${point(anchor.start)}`,
+      `L ${point(anchor.end)}`,
+    );
+  });
+  const last = anchors.at(-1);
+  if (last) {
+    const gap = distance(last.end, target);
+    const exitLead = trunkLead(last.trunkLength, gap);
+    const exitControl = {
+      x: last.end.x + last.unit.x * exitLead,
+      y: last.end.y + last.unit.y * exitLead,
+    };
+    commands.push(
+      `C ${point(exitControl)} ${point(outwardControl(target, targetPosition, endpointLead(gap)))} ${point(target)}`,
+    );
+  }
 
-export function wireBundleForSelection(
-  wireBundles: readonly WireBundle[],
-  edgeIds: readonly string[],
-): WireBundle | undefined {
-  if (edgeIds.length < 2) return undefined;
-  return wireBundles.find((bundle) => edgeIds.every((edgeId) => bundle.edgeIds.includes(edgeId)));
+  return { path: commands.join(" "), bundles };
 }

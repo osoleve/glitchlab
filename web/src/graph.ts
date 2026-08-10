@@ -46,9 +46,7 @@ export function serializePresentation(
     wire_bundles: wireBundles.map((bundle) => ({
       id: bundle.id,
       edge_ids: bundle.edgeIds,
-      waypoints: bundle.waypoints,
-      collapsed: bundle.collapsed,
-      ...(bundle.label ? { label: bundle.label } : {}),
+      ties: bundle.ties,
     })),
     node_previews: nodes
       .filter(
@@ -229,9 +227,7 @@ export function hydrateGraph(
     wireBundles: (presentation?.wire_bundles ?? []).map((bundle) => ({
       id: bundle.id,
       edgeIds: bundle.edge_ids,
-      waypoints: bundle.waypoints,
-      collapsed: bundle.collapsed,
-      ...(bundle.label ? { label: bundle.label } : {}),
+      ties: bundle.ties,
     })),
     notes: (presentation?.notes ?? []).map((note) => ({
       id: note.id,

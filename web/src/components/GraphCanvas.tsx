@@ -45,7 +45,7 @@ import type {
   WorkflowEdge,
   WorkflowNode,
 } from "../types";
-import { SelectedWiresToolbar, WireEdge } from "../WireEdge";
+import { SelectedBundleToolbar, SelectedWiresToolbar, WireEdge } from "../WireEdge";
 import { WorkflowNodeCardWithBoundary } from "../WorkflowNode";
 import type { ContextMenuState } from "./CanvasContextMenu";
 
@@ -78,7 +78,7 @@ interface GraphCanvasProps {
   onRemoveEdges: (edgeIds: string[]) => void;
   onBundleEdges: (edgeIds: string[], start: FlowPosition, end: FlowPosition) => void;
   onAddEdgesToBundle: (bundleId: string, edgeIds: string[]) => void;
-  onUnbundleEdges: (edgeIds: string[]) => void;
+  onRemoveEdgesFromBundle: (bundleId: string, edgeIds: string[]) => void;
   onSetWireColor: (edgeIds: string[], color?: WireColor) => void;
   onFitExecutionScope: () => void;
   onNodeDragStop: () => void;
@@ -177,7 +177,7 @@ export function GraphCanvas({
   onRemoveEdges,
   onBundleEdges,
   onAddEdgesToBundle,
-  onUnbundleEdges,
+  onRemoveEdgesFromBundle,
   onSetWireColor,
   onFitExecutionScope,
   onNodeDragStop,
@@ -211,7 +211,16 @@ export function GraphCanvas({
 
   const hoveredEdge = edges.find((edge) => edge.id === hoveredEdgeId);
   const hoveredEdgeIds = useMemo(
-    () => new Set(hoveredEdge?.data?.bundle?.edgeIds ?? (hoveredEdge ? [hoveredEdge.id] : [])),
+    () =>
+      new Set(
+        hoveredEdge
+          ? [
+              hoveredEdge.id,
+              ...(hoveredEdge.data?.bundles?.flatMap((membership) => membership.bundle.edgeIds) ??
+                []),
+            ]
+          : [],
+      ),
     [hoveredEdge],
   );
   const displayEdges = useMemo(
@@ -634,9 +643,14 @@ export function GraphCanvas({
           disabled={savingGraph || running}
           onBundle={onBundleEdges}
           onAddToBundle={onAddEdgesToBundle}
-          onUnbundle={onUnbundleEdges}
+          onRemoveFromBundle={onRemoveEdgesFromBundle}
           onSetColor={onSetWireColor}
           onRemove={onRemoveEdges}
+        />
+        <SelectedBundleToolbar
+          edges={edges}
+          wireBundles={wireBundles}
+          disabled={savingGraph || running}
         />
       </ReactFlow>
       {marquee?.moved && (

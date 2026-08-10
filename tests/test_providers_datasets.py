@@ -561,11 +561,19 @@ def test_graph_presentation_round_trips_and_validates_wires_and_bundles() -> Non
                     {
                         "id": "bundle-a",
                         "edge_ids": ["edge-a", "edge-b"],
-                        "waypoints": [
+                        "ties": [
                             {"x": 120, "y": 80},
                             {"x": 280, "y": 120},
                         ],
-                    }
+                    },
+                    {
+                        "id": "bundle-b",
+                        "edge_ids": ["edge-a", "edge-b"],
+                        "ties": [
+                            {"x": 340, "y": 100},
+                            {"x": 420, "y": 100},
+                        ],
+                    },
                 ]
             },
         }
@@ -573,11 +581,16 @@ def test_graph_presentation_round_trips_and_validates_wires_and_bundles() -> Non
 
     assert graph.presentation.wires[0].color == "rose"
     assert graph.presentation.wire_bundles[0].edge_ids == ["edge-a", "edge-b"]
+    assert graph.presentation.wire_bundles[1].edge_ids == ["edge-a", "edge-b"]
     dumped = graph.model_dump(mode="json")
     assert GraphSpec.model_validate(dumped).model_dump(mode="json") == dumped
 
     dumped["presentation"]["wire_bundles"][0]["edge_ids"] = ["edge-a", "missing"]
     with pytest.raises(ValidationError, match="references unknown edge"):
+        GraphSpec.model_validate(dumped)
+
+    dumped["presentation"]["wire_bundles"][0]["edge_ids"] = ["edge-a", "edge-a"]
+    with pytest.raises(ValidationError, match="cannot repeat an edge"):
         GraphSpec.model_validate(dumped)
 
 

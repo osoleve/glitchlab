@@ -25,13 +25,13 @@ export interface LayoutEdge {
 export interface LayoutWireBundle {
   id: string;
   edgeIds: readonly string[];
+  ties: readonly [{ x: number; y: number }, { x: number; y: number }];
 }
 
 export interface TidyGraphLayoutResult {
   nodePositions: Map<string, { x: number; y: number }>;
   framePositions: Map<string, { x: number; y: number }>;
   frameSizes: Map<string, { width: number; height: number }>;
-  wireBundleWaypoints: Map<string, [{ x: number; y: number }, { x: number; y: number }]>;
 }
 
 export interface LayoutOptions {
@@ -54,7 +54,7 @@ interface IncludedEdge {
 
 interface ActiveWireBundle {
   id: string;
-  edgeIds: string[];
+  ties: readonly [{ x: number; y: number }, { x: number; y: number }];
   startNodeId: string;
   endNodeId: string;
   parentId?: string;
@@ -62,7 +62,7 @@ interface ActiveWireBundle {
 
 const FRAME_PADDING = { top: 62, right: 28, bottom: 28, left: 28 };
 const COLLAPSED_FRAME_HEIGHT = 46;
-const WIRE_BUNDLE_WAYPOINT_SIZE = 18;
+const WIRE_BUNDLE_TIE_SIZE = 18;
 
 let elkConstructorPromise: Promise<typeof import("elkjs/lib/elk.bundled.js").default> | undefined;
 
@@ -97,11 +97,12 @@ function wireBundleNodeId(
   return candidate;
 }
 
-function elkLeaf(node: LayoutNode): ElkNode {
+function elkLeaf(node: LayoutNode, seedPositions: boolean): ElkNode {
   return {
     id: node.id,
     width: Math.max(1, node.width),
     height: Math.max(1, node.height),
+    ...(seedPositions ? { x: node.position.x, y: node.position.y } : {}),
   };
 }
 
@@ -111,6 +112,13 @@ function sharedTargetParentId(
 ): string | undefined {
   const parentIds = new Set(edges.map((edge) => nodesById.get(edge.target)?.parentId));
   return parentIds.size === 1 ? [...parentIds][0] : undefined;
+}
+
+function tieMidpoint(bundle: { ties: LayoutWireBundle["ties"] }): { x: number; y: number } {
+  return {
+    x: (bundle.ties[0].x + bundle.ties[1].x) / 2,
+    y: (bundle.ties[0].y + bundle.ties[1].y) / 2,
+  };
 }
 
 export async function tidyGraphLayout(
@@ -124,7 +132,6 @@ export async function tidyGraphLayout(
     nodePositions: new Map(),
     framePositions: new Map(),
     frameSizes: new Map(),
-    wireBundleWaypoints: new Map(),
   });
   if (nodes.length === 0 && frames.length === 0) return emptyResult();
 
@@ -161,8 +168,8 @@ export async function tidyGraphLayout(
   );
 
   const occupiedNodeIds = new Set(visibleShapeIds);
-  const claimedEdgeIds = new Set<string>();
   const activeWireBundles: ActiveWireBundle[] = [];
+  const activeBundlesByEdge = new Map<string, ActiveWireBundle[]>();
   const syntheticNodes: LayoutNode[] = [];
   const visibleNodesById = new Map(visibleNodes.map((node) => [node.id, node]));
   for (const frame of frames) {
@@ -173,43 +180,73 @@ export async function tidyGraphLayout(
       height: frame.collapsed ? COLLAPSED_FRAME_HEIGHT : frame.height,
     });
   }
+  const absoluteShapeCenter = (shapeId: string): { x: number; y: number } | undefined => {
+    const shape = visibleNodesById.get(shapeId);
+    if (!shape) return undefined;
+    const parent = shape.parentId ? frameById.get(shape.parentId) : undefined;
+    return {
+      x: (parent?.position.x ?? 0) + shape.position.x + shape.width / 2,
+      y: (parent?.position.y ?? 0) + shape.position.y + shape.height / 2,
+    };
+  };
 
   for (const bundle of [...wireBundles].sort((left, right) => left.id.localeCompare(right.id))) {
-    const edgeIds = [...new Set(bundle.edgeIds)].sort();
-    if (
-      edgeIds.length < 2 ||
-      edgeIds.some((edgeId) => !includedEdgesById.has(edgeId) || claimedEdgeIds.has(edgeId))
-    ) {
-      continue;
-    }
-    const bundleEdges = edgeIds.map((edgeId) => includedEdgesById.get(edgeId)!);
-    const candidateParentId = sharedTargetParentId(bundleEdges, visibleNodesById);
+    const memberEdges = [...new Set(bundle.edgeIds)].sort().flatMap((edgeId) => {
+      const edge = includedEdgesById.get(edgeId);
+      return edge ? [edge] : [];
+    });
+    if (memberEdges.length === 0) continue;
+    const candidateParentId = sharedTargetParentId(memberEdges, visibleNodesById);
     const parentId =
       candidateParentId && frameById.has(candidateParentId) ? candidateParentId : undefined;
+    const parentPosition = parentId ? frameById.get(parentId)!.position : { x: 0, y: 0 };
     const startNodeId = wireBundleNodeId(bundle.id, "start", occupiedNodeIds);
     const endNodeId = wireBundleNodeId(bundle.id, "end", occupiedNodeIds);
-    syntheticNodes.push(
-      {
-        id: startNodeId,
-        position: { x: 0, y: 0 },
-        width: WIRE_BUNDLE_WAYPOINT_SIZE,
-        height: WIRE_BUNDLE_WAYPOINT_SIZE,
+    bundle.ties.forEach((tie, index) => {
+      syntheticNodes.push({
+        id: index === 0 ? startNodeId : endNodeId,
+        position: {
+          x: tie.x - parentPosition.x - WIRE_BUNDLE_TIE_SIZE / 2,
+          y: tie.y - parentPosition.y - WIRE_BUNDLE_TIE_SIZE / 2,
+        },
+        width: WIRE_BUNDLE_TIE_SIZE,
+        height: WIRE_BUNDLE_TIE_SIZE,
         parentId,
-      },
-      {
-        id: endNodeId,
-        position: { x: 0, y: 0 },
-        width: WIRE_BUNDLE_WAYPOINT_SIZE,
-        height: WIRE_BUNDLE_WAYPOINT_SIZE,
-        parentId,
-      },
-    );
-    activeWireBundles.push({ id: bundle.id, edgeIds, startNodeId, endNodeId, parentId });
-    edgeIds.forEach((edgeId) => {
-      claimedEdgeIds.add(edgeId);
+      });
+    });
+    const active: ActiveWireBundle = {
+      id: bundle.id,
+      ties: bundle.ties,
+      startNodeId,
+      endNodeId,
+      parentId,
+    };
+    activeWireBundles.push(active);
+    for (const edge of memberEdges) {
+      const chain = activeBundlesByEdge.get(edge.id!) ?? [];
+      chain.push(active);
+      activeBundlesByEdge.set(edge.id!, chain);
+    }
+  }
+  for (const [edgeId, chain] of activeBundlesByEdge) {
+    const edge = includedEdgesById.get(edgeId)!;
+    const source = absoluteShapeCenter(edge.source);
+    const target = absoluteShapeCenter(edge.target);
+    chain.sort((left, right) => {
+      if (source && target) {
+        const direction = { x: target.x - source.x, y: target.y - source.y };
+        const along = (bundle: ActiveWireBundle) => {
+          const mid = tieMidpoint(bundle);
+          return (mid.x - source.x) * direction.x + (mid.y - source.y) * direction.y;
+        };
+        const difference = along(left) - along(right);
+        if (difference !== 0) return difference;
+      }
+      return left.id.localeCompare(right.id);
     });
   }
 
+  const seedPositions = activeWireBundles.length > 0;
   const workingNodes = [...visibleNodes, ...syntheticNodes];
   const frameChildren = new Map<string, LayoutNode[]>();
   for (const node of workingNodes) {
@@ -220,8 +257,9 @@ export async function tidyGraphLayout(
   }
   const rootNodes = workingNodes.filter((node) => !node.parentId || !frameById.has(node.parentId));
   const elkChildren: ElkNode[] = [
-    ...rootNodes.map(elkLeaf),
+    ...rootNodes.map((node) => elkLeaf(node, seedPositions)),
     ...frames.map((frame): ElkNode => {
+      const seed = seedPositions ? { x: frame.position.x, y: frame.position.y } : {};
       const children = [...(frameChildren.get(frame.id) ?? [])].sort((left, right) =>
         left.id.localeCompare(right.id),
       );
@@ -230,29 +268,56 @@ export async function tidyGraphLayout(
           id: frame.id,
           width: Math.max(1, frame.width),
           height: Math.max(1, frame.collapsed ? COLLAPSED_FRAME_HEIGHT : frame.height),
+          ...seed,
         };
       }
       return {
         id: frame.id,
-        children: children.map(elkLeaf),
+        children: children.map((node) => elkLeaf(node, seedPositions)),
         layoutOptions: {
           "elk.padding": `[top=${FRAME_PADDING.top},left=${FRAME_PADDING.left},bottom=${FRAME_PADDING.bottom},right=${FRAME_PADDING.right}]`,
+          // INCLUDE_CHILDREN requires nested compound nodes to run the same
+          // crossing-minimization processor as the root.
+          ...(seedPositions
+            ? {
+                "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
+                "elk.layered.layering.strategy": "INTERACTIVE",
+                "elk.layered.crossingMinimization.strategy": "INTERACTIVE",
+              }
+            : {}),
         },
+        ...seed,
       };
     }),
   ].sort((left, right) => left.id.localeCompare(right.id));
 
+  const tiedEdgeIds = new Set(activeBundlesByEdge.keys());
   const layoutEdges: IncludedEdge[] = includedEdges
-    .filter((edge) => !edge.id || !claimedEdgeIds.has(edge.id))
+    .filter((edge) => !edge.id || !tiedEdgeIds.has(edge.id))
     .map((edge) => ({ ...edge }));
+  for (const [edgeId, chain] of [...activeBundlesByEdge].sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    const edge = includedEdgesById.get(edgeId)!;
+    layoutEdges.push({
+      source: edge.source,
+      target: chain[0].startNodeId,
+      id: `bundle:${chain[0].id}:in:${edgeId}`,
+    });
+    chain.slice(1).forEach((bundle, index) => {
+      layoutEdges.push({
+        source: chain[index].endNodeId,
+        target: bundle.startNodeId,
+        id: `bundle-link:${chain[index].id}:${bundle.id}:${edgeId}`,
+      });
+    });
+    layoutEdges.push({
+      source: chain.at(-1)!.endNodeId,
+      target: edge.target,
+      id: `bundle:${chain.at(-1)!.id}:out:${edgeId}`,
+    });
+  }
   for (const bundle of activeWireBundles) {
-    for (const edgeId of bundle.edgeIds) {
-      const edge = includedEdgesById.get(edgeId)!;
-      layoutEdges.push(
-        { source: edge.source, target: bundle.startNodeId, id: `bundle:${bundle.id}:in:${edgeId}` },
-        { source: bundle.endNodeId, target: edge.target, id: `bundle:${bundle.id}:out:${edgeId}` },
-      );
-    }
     layoutEdges.push({
       source: bundle.startNodeId,
       target: bundle.endNodeId,
@@ -281,8 +346,12 @@ export async function tidyGraphLayout(
       "elk.direction": "RIGHT",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
       "elk.edgeRouting": "ORTHOGONAL",
-      "elk.layered.cycleBreaking.strategy": "GREEDY",
-      "elk.layered.layering.strategy": "NETWORK_SIMPLEX",
+      // Placed cable ties act as layout constraints: seed every shape with its
+      // current position and let the interactive strategies preserve the
+      // arrangement the ties encode instead of relayouting from scratch.
+      "elk.layered.cycleBreaking.strategy": seedPositions ? "INTERACTIVE" : "GREEDY",
+      "elk.layered.layering.strategy": seedPositions ? "INTERACTIVE" : "NETWORK_SIMPLEX",
+      "elk.layered.crossingMinimization.strategy": seedPositions ? "INTERACTIVE" : "LAYER_SWEEP",
       "elk.spacing.nodeNode": String(options.nodeGap ?? 72),
       "elk.spacing.edgeEdge": "28",
       "elk.layered.spacing.nodeNodeBetweenLayers": String(options.rankGap ?? 112),
@@ -292,41 +361,70 @@ export async function tidyGraphLayout(
   });
 
   const resultChildren = result.children ?? [];
-  const originalTopLevelBoxes: LayoutBox[] = [
-    ...nodes
-      .filter((node) => !node.parentId || !frameById.has(node.parentId))
-      .map((node) => ({ ...node })),
-    ...frames.map((frame) => ({
-      ...frame,
-      height: frame.collapsed ? COLLAPSED_FRAME_HEIGHT : frame.height,
-    })),
-  ];
-  const layoutTopLevelBoxes: LayoutBox[] = resultChildren.map((node) => ({
-    id: node.id,
-    position: { x: node.x ?? 0, y: node.y ?? 0 },
-    width: node.width ?? 1,
-    height: node.height ?? 1,
-  }));
-  const originalCenter = centerOfBounds(originalTopLevelBoxes);
-  const layoutCenter = centerOfBounds(layoutTopLevelBoxes);
-  const offset = {
-    x: originalCenter.x - layoutCenter.x,
-    y: originalCenter.y - layoutCenter.y,
-  };
+  const syntheticNodeIds = new Set(syntheticNodes.map((node) => node.id));
+  const actualNodeIds = new Set(nodes.map((node) => node.id));
+
+  const rawSyntheticCenters: Array<{ x: number; y: number }> = [];
+  for (const child of resultChildren) {
+    if (syntheticNodeIds.has(child.id)) {
+      rawSyntheticCenters.push({
+        x: (child.x ?? 0) + WIRE_BUNDLE_TIE_SIZE / 2,
+        y: (child.y ?? 0) + WIRE_BUNDLE_TIE_SIZE / 2,
+      });
+    }
+    for (const nested of child.children ?? []) {
+      if (syntheticNodeIds.has(nested.id)) {
+        rawSyntheticCenters.push({
+          x: (child.x ?? 0) + (nested.x ?? 0) + WIRE_BUNDLE_TIE_SIZE / 2,
+          y: (child.y ?? 0) + (nested.y ?? 0) + WIRE_BUNDLE_TIE_SIZE / 2,
+        });
+      }
+    }
+  }
+
+  let offset: { x: number; y: number };
+  if (rawSyntheticCenters.length > 0) {
+    // The ties themselves do not move, so anchor the layout onto them: shift
+    // the whole result so the laid-out tie stand-ins line up with the placed
+    // ties on average.
+    const tieCenters = activeWireBundles.flatMap((bundle) => [...bundle.ties]);
+    const average = (points: ReadonlyArray<{ x: number; y: number }>) => ({
+      x: points.reduce((sum, position) => sum + position.x, 0) / points.length,
+      y: points.reduce((sum, position) => sum + position.y, 0) / points.length,
+    });
+    const actual = average(tieCenters);
+    const raw = average(rawSyntheticCenters);
+    offset = { x: actual.x - raw.x, y: actual.y - raw.y };
+  } else {
+    const originalTopLevelBoxes: LayoutBox[] = [
+      ...nodes
+        .filter((node) => !node.parentId || !frameById.has(node.parentId))
+        .map((node) => ({ ...node })),
+      ...frames.map((frame) => ({
+        ...frame,
+        height: frame.collapsed ? COLLAPSED_FRAME_HEIGHT : frame.height,
+      })),
+    ];
+    const layoutTopLevelBoxes: LayoutBox[] = resultChildren.map((node) => ({
+      id: node.id,
+      position: { x: node.x ?? 0, y: node.y ?? 0 },
+      width: node.width ?? 1,
+      height: node.height ?? 1,
+    }));
+    const originalCenter = centerOfBounds(originalTopLevelBoxes);
+    const layoutCenter = centerOfBounds(layoutTopLevelBoxes);
+    offset = { x: originalCenter.x - layoutCenter.x, y: originalCenter.y - layoutCenter.y };
+  }
 
   const nodePositions = new Map<string, { x: number; y: number }>();
   const framePositions = new Map<string, { x: number; y: number }>();
   const frameSizes = new Map<string, { width: number; height: number }>();
-  const absoluteSyntheticPositions = new Map<string, { x: number; y: number }>();
-  const syntheticNodeIds = new Set(syntheticNodes.map((node) => node.id));
-  const actualNodeIds = new Set(nodes.map((node) => node.id));
 
   for (const child of resultChildren) {
     const rootPosition = { x: (child.x ?? 0) + offset.x, y: (child.y ?? 0) + offset.y };
     const frame = frameById.get(child.id);
     if (!frame) {
       if (actualNodeIds.has(child.id)) nodePositions.set(child.id, rootPosition);
-      if (syntheticNodeIds.has(child.id)) absoluteSyntheticPositions.set(child.id, rootPosition);
       continue;
     }
     framePositions.set(frame.id, rootPosition);
@@ -337,32 +435,13 @@ export async function tidyGraphLayout(
       });
     }
     for (const nested of child.children ?? []) {
-      const relativePosition = { x: nested.x ?? 0, y: nested.y ?? 0 };
-      if (actualNodeIds.has(nested.id)) nodePositions.set(nested.id, relativePosition);
-      if (syntheticNodeIds.has(nested.id)) {
-        absoluteSyntheticPositions.set(nested.id, {
-          x: rootPosition.x + relativePosition.x,
-          y: rootPosition.y + relativePosition.y,
-        });
+      if (actualNodeIds.has(nested.id)) {
+        nodePositions.set(nested.id, { x: nested.x ?? 0, y: nested.y ?? 0 });
       }
     }
   }
 
-  const wireBundleWaypoints = new Map<
-    string,
-    [{ x: number; y: number }, { x: number; y: number }]
-  >();
-  for (const bundle of activeWireBundles) {
-    const start = absoluteSyntheticPositions.get(bundle.startNodeId);
-    const end = absoluteSyntheticPositions.get(bundle.endNodeId);
-    if (!start || !end) continue;
-    wireBundleWaypoints.set(bundle.id, [
-      { x: start.x + WIRE_BUNDLE_WAYPOINT_SIZE / 2, y: start.y + WIRE_BUNDLE_WAYPOINT_SIZE / 2 },
-      { x: end.x + WIRE_BUNDLE_WAYPOINT_SIZE / 2, y: end.y + WIRE_BUNDLE_WAYPOINT_SIZE / 2 },
-    ]);
-  }
-
-  return { nodePositions, framePositions, frameSizes, wireBundleWaypoints };
+  return { nodePositions, framePositions, frameSizes };
 }
 
 export async function tidyNodeLayout(
