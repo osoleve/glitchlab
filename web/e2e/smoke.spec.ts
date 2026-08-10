@@ -179,9 +179,14 @@ test("starter loads, fits, opens its Loom, and preserves panel controls", async 
     }
   }
 
+  await page.waitForTimeout(450);
+  const viewport = page.locator(".react-flow__viewport");
+  const viewportBeforeInspector = await viewport.getAttribute("style");
   const loomNode = page.locator('.react-flow__node[data-id="loom"]');
   await loomNode.locator("header").click();
   await expect(page.getByText("Inspector", { exact: true })).toBeVisible();
+  await page.waitForTimeout(450);
+  await expect(viewport).toHaveAttribute("style", viewportBeforeInspector ?? "");
   await page
     .locator('aside[aria-label="Inspector"]')
     .getByRole("button", { name: "Open loom" })
@@ -189,10 +194,16 @@ test("starter loads, fits, opens its Loom, and preserves panel controls", async 
   await expect(page.getByRole("dialog", { name: "Branching draft" })).toBeVisible();
   await page.getByRole("button", { name: "Close loom" }).click();
 
+  const viewportBeforeClose = await viewport.getAttribute("style");
   await page.getByRole("button", { name: "Close inspector" }).click();
   await expect(page.locator('aside[aria-label="Inspector"]')).toBeHidden();
+  await page.waitForTimeout(450);
+  await expect(viewport).toHaveAttribute("style", viewportBeforeClose ?? "");
+  const viewportBeforeReopen = await viewport.getAttribute("style");
   await page.getByRole("button", { name: "Open inspector" }).click();
   await expect(page.locator('aside[aria-label="Inspector"]')).toBeVisible();
+  await page.waitForTimeout(450);
+  await expect(viewport).toHaveAttribute("style", viewportBeforeReopen ?? "");
   expect(errors).toEqual([]);
 });
 
@@ -750,19 +761,10 @@ test("wires pass through two tie pairs and each pair snips independently", async
   const tieHandles = page.locator('button[class*="tieHandle"]');
   await expect(trunks).toHaveCount(1);
   await expect(tieHandles).toHaveCount(2);
-
-  const trunkBox = await trunks.first().boundingBox();
-  expect(trunkBox).not.toBeNull();
-  if (trunkBox) {
-    const center = {
-      x: trunkBox.x + trunkBox.width / 2,
-      y: trunkBox.y + trunkBox.height / 2,
-    };
-    await page.mouse.move(center.x, center.y);
-    await page.mouse.down();
-    await page.mouse.move(center.x - 60, center.y - 40, { steps: 8 });
-    await page.mouse.up();
-  }
+  const existingTieMidpoint =
+    (Number(await tieHandles.nth(0).getAttribute("data-flow-x")) +
+      Number(await tieHandles.nth(1).getAttribute("data-flow-x"))) /
+    2;
   await page.locator(".react-flow__pane").click({ position: { x: 400, y: 20 } });
 
   await clickWireAt(page, "endpoint-loom", 0.12);
@@ -770,8 +772,12 @@ test("wires pass through two tie pairs and each pair snips independently", async
   await page.getByRole("button", { name: "Tie", exact: true }).click();
   await expect(trunks).toHaveCount(2);
   await expect(tieHandles).toHaveCount(4);
+  const newTieMidpoint =
+    (Number(await tieHandles.nth(2).getAttribute("data-flow-x")) +
+      Number(await tieHandles.nth(3).getAttribute("data-flow-x"))) /
+    2;
+  expect(newTieMidpoint).toBeLessThan(existingTieMidpoint - 8);
 
-  await trunks.last().click();
   await expect(page.getByRole("button", { name: "Snip" })).toBeVisible();
   await page.getByRole("button", { name: "Snip" }).click();
   await expect(trunks).toHaveCount(1);

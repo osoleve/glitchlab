@@ -16,6 +16,7 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -205,6 +206,7 @@ export function GraphCanvas({
   const setInspectorOpen = useWorkspaceStore((state) => state.setInspectorOpen);
   const selectedNodes = documentNodes.filter((node) => node.selected);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string>();
+  const [wireSelectionAnchor, setWireSelectionAnchor] = useState<FlowPosition>();
   const [marquee, setMarquee] = useState<MarqueeState>();
   const marqueeRef = useRef<MarqueeState | undefined>(undefined);
   const ignoreNextPaneClick = useRef(false);
@@ -241,6 +243,11 @@ export function GraphCanvas({
     [edges, hoveredEdgeIds],
   );
   const hoveredSemanticEdge = documentEdges.find((edge) => hoveredEdgeIds.has(edge.id));
+
+  useEffect(() => {
+    if (selectionKind !== "wire") setWireSelectionAnchor(undefined);
+  }, [selectionKind]);
+
   const displayNodes = useMemo(
     () =>
       nodes.map((node) => {
@@ -363,6 +370,12 @@ export function GraphCanvas({
       } else {
         const ids = combineMarqueeIds(current.baselineIds, hitIds, current.mode);
         selectEdges(ids);
+        setWireSelectionAnchor(
+          screenToFlowPosition({
+            x: (rect.left + rect.right) / 2,
+            y: (rect.top + rect.bottom) / 2,
+          }),
+        );
         setInspectorOpen(false);
       }
       onOpenContextMenu(undefined);
@@ -518,6 +531,7 @@ export function GraphCanvas({
         onEdgeClick={(event, edge) => {
           if (edge.data?.presentationProxy) return;
           selectEdges([edge.id], event.ctrlKey || event.metaKey);
+          setWireSelectionAnchor(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
           setInspectorOpen(false);
           onOpenContextMenu(undefined);
         }}
@@ -528,6 +542,7 @@ export function GraphCanvas({
         onPaneClick={() => {
           if (ignoreNextPaneClick.current) return;
           clearSelection();
+          setWireSelectionAnchor(undefined);
           setFrames((current) => current.map((frame) => ({ ...frame, selected: false })));
           setInspectorOpen(false);
           onOpenContextMenu(undefined);
@@ -590,6 +605,7 @@ export function GraphCanvas({
           event.preventDefault();
           if (edge.data?.presentationProxy) return;
           if (!edge.selected) selectEdges([edge.id]);
+          setWireSelectionAnchor(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
           setInspectorOpen(false);
           onOpenContextMenu({
             x: event.clientX,
@@ -640,6 +656,7 @@ export function GraphCanvas({
           edges={edges}
           wires={wires}
           wireBundles={wireBundles}
+          selectionAnchor={wireSelectionAnchor}
           disabled={savingGraph || running}
           onBundle={onBundleEdges}
           onAddToBundle={onAddEdgesToBundle}

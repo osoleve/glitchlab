@@ -1,12 +1,7 @@
 import { Position } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 import type { WireBundle, WireBundleMembership } from "./types";
-import {
-  bundleTrunkPath,
-  sortBundlesAlongWire,
-  wireBundleOrder,
-  wireGeometry,
-} from "./wireGeometry";
+import { bundleTrunkPath, solveBundleRoute, wireBundleOrder, wireGeometry } from "./wireGeometry";
 
 const bundle: WireBundle = {
   id: "bundle-a",
@@ -89,11 +84,57 @@ describe("wire bundle geometry", () => {
         { x: 80, y: 100 },
       ],
     };
-    const sorted = sortBundlesAlongWire({ x: 0, y: 80 }, { x: 320, y: 80 }, [
+    const sorted = solveBundleRoute({ x: 0, y: 80 }, { x: 320, y: 80 }, [
       { bundle },
       { bundle: early },
-    ]);
+    ]).map(({ item }) => item);
     expect(sorted.map((entry) => entry.bundle.id)).toEqual(["z-early", "bundle-a"]);
+  });
+
+  it("solves tie order and orientation together instead of trusting stored endpoint order", () => {
+    const reversedEarly: WireBundle = {
+      id: "reversed-early",
+      edgeIds: ["a", "b"],
+      ties: [
+        { x: 120, y: 80 },
+        { x: 60, y: 80 },
+      ],
+    };
+    const late: WireBundle = {
+      id: "late",
+      edgeIds: ["a", "b"],
+      ties: [
+        { x: 220, y: 80 },
+        { x: 280, y: 80 },
+      ],
+    };
+    const route = solveBundleRoute({ x: 0, y: 80 }, { x: 340, y: 80 }, [
+      { bundle: late },
+      { bundle: reversedEarly },
+    ]);
+
+    expect(route.map(({ item }) => item.bundle.id)).toEqual(["reversed-early", "late"]);
+    expect(route[0].ties).toEqual([
+      { x: 60, y: 80 },
+      { x: 120, y: 80 },
+    ]);
+
+    const geometry = wireGeometry(
+      { x: 0, y: 80 },
+      { x: 340, y: 80 },
+      Position.Right,
+      Position.Left,
+      [membership(late, 0, 1), membership(reversedEarly, 0, 1)],
+    );
+    expect(geometry.bundles.map(({ bundle: routed }) => routed.id)).toEqual([
+      "reversed-early",
+      "late",
+    ]);
+    expect(geometry.bundles[0].laneTies).toEqual([
+      { x: 60, y: 80 },
+      { x: 120, y: 80 },
+    ]);
+    expect(geometry.path).toContain("L 120.00,80.00 C 144.00,80.00");
   });
 
   it("orders bundle lanes by their input-side targets", () => {

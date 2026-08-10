@@ -375,8 +375,46 @@ interface EdgeSamples {
   end: FlowPosition;
 }
 
-function sampleSelectedEdges(edgeIds: string[]): EdgeSamples | undefined {
-  const samples = edgeIds.flatMap((edgeId) => {
+interface PathTieSample {
+  middle: FlowPosition;
+  direction: FlowPosition;
+  halfSpan: number;
+}
+
+function closestPathLength(path: SVGPathElement, anchor: FlowPosition, length: number): number {
+  const steps = Math.max(24, Math.min(120, Math.ceil(length / 12)));
+  let bestLength = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index <= steps; index += 1) {
+    const candidateLength = (length * index) / steps;
+    const point = path.getPointAtLength(candidateLength);
+    const distance = (point.x - anchor.x) ** 2 + (point.y - anchor.y) ** 2;
+    if (distance < bestDistance) {
+      bestLength = candidateLength;
+      bestDistance = distance;
+    }
+  }
+
+  let left = Math.max(0, bestLength - length / steps);
+  let right = Math.min(length, bestLength + length / steps);
+  for (let iteration = 0; iteration < 8; iteration += 1) {
+    const first = left + (right - left) / 3;
+    const second = right - (right - left) / 3;
+    const firstPoint = path.getPointAtLength(first);
+    const secondPoint = path.getPointAtLength(second);
+    const firstDistance = (firstPoint.x - anchor.x) ** 2 + (firstPoint.y - anchor.y) ** 2;
+    const secondDistance = (secondPoint.x - anchor.x) ** 2 + (secondPoint.y - anchor.y) ** 2;
+    if (firstDistance <= secondDistance) right = second;
+    else left = first;
+  }
+  return (left + right) / 2;
+}
+
+function sampleSelectedEdges(
+  edgeIds: string[],
+  selectionAnchor?: FlowPosition,
+): EdgeSamples | undefined {
+  const samples = edgeIds.flatMap((edgeId): PathTieSample[] => {
     const edge = [...document.querySelectorAll<SVGGElement>(".react-flow__edge")].find(
       (element) => element.dataset.id === edgeId,
     );
@@ -384,30 +422,47 @@ function sampleSelectedEdges(edgeIds: string[]): EdgeSamples | undefined {
     if (!path) return [];
     const length = path.getTotalLength();
     if (!Number.isFinite(length) || length <= 0) return [];
-    return [
-      {
-        start: path.getPointAtLength(0),
-        middle: path.getPointAtLength(length * 0.5),
-        end: path.getPointAtLength(length),
-      },
-    ];
+    const desiredCenter = selectionAnchor
+      ? closestPathLength(path, selectionAnchor, length)
+      : length / 2;
+    const endpointMargin = Math.min(14, length * 0.06);
+    const halfSpan = Math.min(54, Math.max(22, length * 0.055), (length - endpointMargin * 2) / 2);
+    const center = Math.min(
+      length - endpointMargin - halfSpan,
+      Math.max(endpointMargin + halfSpan, desiredCenter),
+    );
+    const start = path.getPointAtLength(center - halfSpan);
+    const middle = path.getPointAtLength(center);
+    const end = path.getPointAtLength(center + halfSpan);
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const segmentLength = Math.max(1, Math.hypot(dx, dy));
+    return [{ middle, direction: { x: dx / segmentLength, y: dy / segmentLength }, halfSpan }];
   });
   if (samples.length !== edgeIds.length) return undefined;
-  const average = (key: keyof EdgeSamples): FlowPosition => ({
-    x: samples.reduce((sum, sample) => sum + sample[key].x, 0) / samples.length,
-    y: samples.reduce((sum, sample) => sum + sample[key].y, 0) / samples.length,
-  });
-  const source = average("start");
-  const target = average("end");
+  const middle = {
+    x: samples.reduce((sum, sample) => sum + sample.middle.x, 0) / samples.length,
+    y: samples.reduce((sum, sample) => sum + sample.middle.y, 0) / samples.length,
+  };
+  const directionSum = {
+    x: samples.reduce((sum, sample) => sum + sample.direction.x, 0),
+    y: samples.reduce((sum, sample) => sum + sample.direction.y, 0),
+  };
+  const directionLength = Math.hypot(directionSum.x, directionSum.y);
+  const direction =
+    directionLength > 0.001
+      ? { x: directionSum.x / directionLength, y: directionSum.y / directionLength }
+      : samples[0].direction;
+  const halfSpan = samples.reduce((sum, sample) => sum + sample.halfSpan, 0) / samples.length;
   return {
     start: {
-      x: source.x + (target.x - source.x) * 0.24,
-      y: source.y + (target.y - source.y) * 0.24,
+      x: middle.x - direction.x * halfSpan,
+      y: middle.y - direction.y * halfSpan,
     },
-    middle: average("middle"),
+    middle,
     end: {
-      x: source.x + (target.x - source.x) * 0.76,
-      y: source.y + (target.y - source.y) * 0.76,
+      x: middle.x + direction.x * halfSpan,
+      y: middle.y + direction.y * halfSpan,
     },
   };
 }
@@ -461,6 +516,7 @@ export function SelectedWiresToolbar({
   edges,
   wires,
   wireBundles,
+  selectionAnchor,
   disabled,
   onBundle,
   onAddToBundle,
@@ -471,6 +527,7 @@ export function SelectedWiresToolbar({
   edges: WorkflowEdge[];
   wires: WirePresentation[];
   wireBundles: WireBundle[];
+  selectionAnchor?: FlowPosition;
   disabled: boolean;
   onBundle: (edgeIds: string[], start: FlowPosition, end: FlowPosition) => void;
   onAddToBundle: (bundleId: string, edgeIds: string[]) => void;
@@ -490,8 +547,8 @@ export function SelectedWiresToolbar({
       setSamples(undefined);
       return;
     }
-    setSamples(sampleSelectedEdges(edgeIds));
-  }, [edgeIds]);
+    setSamples(sampleSelectedEdges(edgeIds, selectionAnchor));
+  }, [edgeIds, selectionAnchor]);
 
   if (edgeIds.length === 0 || !samples) return null;
   const containingBundles = wireBundles.filter((bundle) =>
@@ -550,7 +607,7 @@ export function SelectedWiresToolbar({
         type="button"
         disabled={disabled || edgeIds.length < 2}
         onClick={() => {
-          const current = sampleSelectedEdges(edgeIds) ?? samples;
+          const current = sampleSelectedEdges(edgeIds, selectionAnchor) ?? samples;
           onBundle(edgeIds, current.start, current.end);
         }}
       >

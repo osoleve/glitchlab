@@ -533,8 +533,9 @@ export function GlitchlabWorkbench() {
     return () => window.cancelAnimationFrame(frame);
   }, [fitView, needsFit, nodes.length, nodesInitialized, notes.length]);
 
-  // Panel visibility changes intentionally retrigger the fit after CSS transitions.
-  // biome-ignore lint/correctness/useExhaustiveDependencies(inspectorOpen): trigger-only dependency
+  // The node library is an explicit workspace-layout control, so refit after it
+  // changes the canvas width. The inspector opens and closes as a consequence
+  // of selection; that action must preserve the user's canvas transform.
   // biome-ignore lint/correctness/useExhaustiveDependencies(paletteOpen): trigger-only dependency
   useEffect(() => {
     if (!nodesInitialized || nodes.length + notes.length === 0 || needsFit) return;
@@ -547,7 +548,7 @@ export function GlitchlabWorkbench() {
       });
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [fitView, inspectorOpen, needsFit, nodes.length, nodesInitialized, notes.length, paletteOpen]);
+  }, [fitView, needsFit, nodes.length, nodesInitialized, notes.length, paletteOpen]);
 
   useEffect(() => {
     if (!running) return;
