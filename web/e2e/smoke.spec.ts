@@ -732,10 +732,13 @@ test("modifier-selected wires can be tied, moved, recolored, and pulled from the
   });
   await page.getByRole("menuitem", { name: "Tidy graph" }).click();
   await expect.poll(() => viewport.getAttribute("style")).not.toBe(viewportBefore);
-  expect({
+  const tidiedFlow = {
     x: Number(await endWaypoint.getAttribute("data-flow-x")),
     y: Number(await endWaypoint.getAttribute("data-flow-y")),
-  }).toEqual(manuallyMovedFlow);
+  };
+  expect(
+    Math.hypot(tidiedFlow.x - manuallyMovedFlow.x, tidiedFlow.y - manuallyMovedFlow.y),
+  ).toBeGreaterThan(10);
 
   await clickWireAt(page, "endpoint-loom", 0.08);
   await clickWireAt(page, "model-loom", 0.08, true);
@@ -777,6 +780,37 @@ test("wires pass through two tie pairs and each pair snips independently", async
       Number(await tieHandles.nth(3).getAttribute("data-flow-x"))) /
     2;
   expect(newTieMidpoint).toBeLessThan(existingTieMidpoint - 8);
+
+  const tiesBeforeTidy = await tieHandles.evaluateAll((handles) =>
+    handles.map((handle) => [
+      handle.getAttribute("data-flow-x"),
+      handle.getAttribute("data-flow-y"),
+    ]),
+  );
+  await page.locator(".react-flow__pane").click({
+    button: "right",
+    position: { x: 400, y: 20 },
+  });
+  await page.getByRole("menuitem", { name: "Tidy graph" }).click();
+  await expect
+    .poll(() =>
+      tieHandles.evaluateAll((handles) =>
+        handles.map((handle) => [
+          handle.getAttribute("data-flow-x"),
+          handle.getAttribute("data-flow-y"),
+        ]),
+      ),
+    )
+    .not.toEqual(tiesBeforeTidy);
+  const tidiedExistingMidpoint =
+    (Number(await tieHandles.nth(0).getAttribute("data-flow-x")) +
+      Number(await tieHandles.nth(1).getAttribute("data-flow-x"))) /
+    2;
+  const tidiedNewMidpoint =
+    (Number(await tieHandles.nth(2).getAttribute("data-flow-x")) +
+      Number(await tieHandles.nth(3).getAttribute("data-flow-x"))) /
+    2;
+  expect(tidiedNewMidpoint).toBeLessThan(tidiedExistingMidpoint);
 
   await expect(page.getByRole("button", { name: "Snip" })).toBeVisible();
   await page.getByRole("button", { name: "Snip" }).click();

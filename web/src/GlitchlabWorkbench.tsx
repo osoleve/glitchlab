@@ -1048,8 +1048,8 @@ export function GlitchlabWorkbench() {
           ...(!included && node.parentId ? { parentId: node.parentId } : {}),
         })),
         edges,
-        // Tie pairs stay where the user placed them and constrain the layout,
-        // expressed in the same coordinate frame as the laid-out nodes.
+        // Express tie pairs in the same coordinate frame as the laid-out nodes;
+        // tidy returns their new positions alongside nodes and frames.
         wireBundles.map((bundle) => ({
           id: bundle.id,
           edgeIds: bundle.edgeIds,
@@ -1069,6 +1069,15 @@ export function GlitchlabWorkbench() {
             })),
       );
       const positions = layout.nodePositions;
+      const positionedBundleTies = new Map(
+        [...layout.wireBundleTies].map(([bundleId, ties]) => [
+          bundleId,
+          [
+            { x: ties[0].x + parentPosition.x, y: ties[0].y + parentPosition.y },
+            { x: ties[1].x + parentPosition.x, y: ties[1].y + parentPosition.y },
+          ] as [FlowPosition, FlowPosition],
+        ]),
+      );
       const changed =
         targets.some((node) => {
           const position = positions.get(node.id);
@@ -1091,10 +1100,20 @@ export function GlitchlabWorkbench() {
                     Math.abs(size.height - (frame.measured?.height ?? frame.height ?? 260)) >
                       0.01)),
             );
-          }));
+          })) ||
+        wireBundles.some((bundle) => {
+          const ties = positionedBundleTies.get(bundle.id);
+          return Boolean(
+            ties &&
+              (Math.abs(ties[0].x - bundle.ties[0].x) > 0.01 ||
+                Math.abs(ties[0].y - bundle.ties[0].y) > 0.01 ||
+                Math.abs(ties[1].x - bundle.ties[1].x) > 0.01 ||
+                Math.abs(ties[1].y - bundle.ties[1].y) > 0.01),
+          );
+        });
       if (changed) {
         updateDocument(
-          ({ nodes: current, frames: currentFrames }) => ({
+          ({ nodes: current, frames: currentFrames, wireBundles: currentBundles }) => ({
             nodes: current.map((node) => {
               const position = positions.get(node.id);
               return position ? { ...node, position } : node;
@@ -1108,6 +1127,10 @@ export function GlitchlabWorkbench() {
                 ...(position ? { position } : {}),
                 ...(size ? { width: size.width, height: size.height, measured: undefined } : {}),
               };
+            }),
+            wireBundles: currentBundles.map((bundle) => {
+              const ties = positionedBundleTies.get(bundle.id);
+              return ties ? { ...bundle, ties } : bundle;
             }),
           }),
           false,

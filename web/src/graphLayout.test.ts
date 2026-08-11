@@ -110,7 +110,7 @@ describe("tidy node layout", () => {
     );
   });
 
-  it("arranges nodes around a pinned tie pair instead of moving it", async () => {
+  it("moves a tie pair with the nodes while keeping it between its members", async () => {
     const tiedEdges = edges.slice(2).map((edge, index) => ({ ...edge, id: `edge-${index}` }));
     const ties: [{ x: number; y: number }, { x: number; y: number }] = [
       { x: 800, y: 300 },
@@ -119,10 +119,12 @@ describe("tidy node layout", () => {
     const result = await tidyGraphLayout(nodes, tiedEdges, [
       { id: "bundle", edgeIds: tiedEdges.map((edge) => edge.id), ties },
     ]);
+    const movedTies = result.wireBundleTies.get("bundle")!;
 
-    expect(result.nodePositions.get("left")!.x + nodes[1].width).toBeLessThan(ties[0].x);
-    expect(result.nodePositions.get("right")!.x + nodes[2].width).toBeLessThan(ties[0].x);
-    expect(result.nodePositions.get("merge")!.x).toBeGreaterThan(ties[1].x);
+    expect(movedTies).not.toEqual(ties);
+    expect(result.nodePositions.get("left")!.x + nodes[1].width).toBeLessThan(movedTies[0].x);
+    expect(result.nodePositions.get("right")!.x + nodes[2].width).toBeLessThan(movedTies[0].x);
+    expect(result.nodePositions.get("merge")!.x).toBeGreaterThan(movedTies[1].x);
   });
 
   it("chains a wire through several tie pairs in placement order", async () => {
@@ -148,9 +150,14 @@ describe("tidy node layout", () => {
       ] as [{ x: number; y: number }, { x: number; y: number }],
     };
     const result = await tidyGraphLayout(parallelNodes, parallelEdges, [second, first]);
+    const movedFirst = result.wireBundleTies.get(first.id)!;
+    const movedSecond = result.wireBundleTies.get(second.id)!;
+    const midpoint = (ties: [{ x: number; y: number }, { x: number; y: number }]) =>
+      (ties[0].x + ties[1].x) / 2;
 
-    expect(result.nodePositions.get("source")!.x + nodes[0].width).toBeLessThan(first.ties[0].x);
-    expect(result.nodePositions.get("merge")!.x).toBeGreaterThan(second.ties[1].x);
+    expect(result.nodePositions.get("source")!.x + nodes[0].width).toBeLessThan(movedFirst[0].x);
+    expect(midpoint(movedFirst)).toBeLessThan(midpoint(movedSecond));
+    expect(result.nodePositions.get("merge")!.x).toBeGreaterThan(movedSecond[1].x);
   });
 
   it("lays out tied graphs deterministically, honoring ties on partial member sets", async () => {
@@ -170,7 +177,11 @@ describe("tidy node layout", () => {
     expect(Object.fromEntries(first.nodePositions)).toEqual(
       Object.fromEntries(reordered.nodePositions),
     );
+    expect(Object.fromEntries(first.wireBundleTies)).toEqual(
+      Object.fromEntries(reordered.wireBundleTies),
+    );
     expect([...partial.nodePositions.keys()].sort()).toEqual(["left", "right", "source"]);
+    expect([...partial.wireBundleTies.keys()]).toEqual(["bundle"]);
   });
 
   it("lays out frame children locally and treats the sized frame as an outer supernode", async () => {
@@ -247,13 +258,21 @@ describe("tidy node layout", () => {
       [frame],
     );
     const frameSize = result.frameSizes.get(frame.id)!;
+    const framePosition = result.framePositions.get(frame.id)!;
     const model = result.nodePositions.get("internal-model")!;
     const completion = result.nodePositions.get("internal-completion")!;
+    const movedTies = result.wireBundleTies.get("fan-in")!;
 
     expect(result.framePositions.has(frame.id)).toBe(true);
     expect(model.x).toBeLessThan(completion.x);
     expect(model.x).toBeGreaterThanOrEqual(28);
     expect(completion.x + compoundNodes[3].width).toBeLessThanOrEqual(frameSize.width - 28);
+    for (const tie of movedTies) {
+      expect(tie.x).toBeGreaterThan(framePosition.x);
+      expect(tie.x).toBeLessThan(framePosition.x + frameSize.width);
+      expect(tie.y).toBeGreaterThan(framePosition.y);
+      expect(tie.y).toBeLessThan(framePosition.y + frameSize.height);
+    }
   });
 
   it("treats a collapsed frame as a leaf while preserving child positions", async () => {
