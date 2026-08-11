@@ -62,7 +62,7 @@ Use **Open → Templates** for checked-in starting points, including a Fold-gene
 
 Glitchlab deliberately sends raw prompts to `/v1/completions`. It does not silently apply a chat template or trim prompt whitespace.
 
-A completion can optionally trim its generated text through the final explicit sentence or line boundary. Sentence mode recognizes `.`, `!`, or `?` followed by whitespace or the end of the generation; line mode recognizes the last newline. If the selected boundary never appears, the processed text is empty. The original provider text remains in the completion's raw provenance, and the transform is recorded under `postprocessing`.
+A completion can optionally trim its generated text through the final explicit sentence or line boundary. Sentence mode recognizes `.`, `!`, or `?` followed by whitespace or the end of the generation; line mode recognizes the last newline. **After final `</think>`** discards a thinking-model prefix through its final closing tag and returns the answer that follows. If the selected boundary never appears, the processed text is empty. The original provider text remains in the completion's raw provenance, and the transform is recorded under `postprocessing`.
 
 You can point completion nodes at:
 

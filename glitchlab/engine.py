@@ -67,6 +67,7 @@ HOLE_PATTERN = re.compile(r"(?<!\?)\?([A-Za-z_][A-Za-z0-9_]*)")
 ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SENTENCE_BOUNDARY_PATTERN = re.compile(r"[.!?](?=\s|$)")
 LINE_BOUNDARY_PATTERN = re.compile(r"\r\n|\r|\n")
+THINK_END_PATTERN = re.compile(r"</\s*think\s*>(?:\r\n|\r|\n)*", re.IGNORECASE)
 MAX_RANGE_ITEMS = 10_000
 MAX_FOLD_ITERATIONS = 10_000
 RunEventSink = Callable[[RunEvent], Awaitable[None]]
@@ -111,13 +112,14 @@ def _integer(value: Any, *, field: str) -> int:
 
 
 def _trim_at_boundary(text: str, mode: str) -> str:
-    """Keep text through the final explicit sentence or line boundary."""
+    """Apply the selected completion boundary transform."""
 
     if mode == "off":
         return text
     pattern = {
         "sentence": SENTENCE_BOUNDARY_PATTERN,
         "line": LINE_BOUNDARY_PATTERN,
+        "after_think": THINK_END_PATTERN,
     }.get(mode)
     if pattern is None:
         raise ValueError(f"Unknown completion boundary trim mode {mode!r}.")
@@ -125,7 +127,11 @@ def _trim_at_boundary(text: str, mode: str) -> str:
     if not matches:
         return ""
     boundary = matches[-1]
-    return text[: boundary.end() if mode == "sentence" else boundary.start()]
+    if mode == "sentence":
+        return text[: boundary.end()]
+    if mode == "line":
+        return text[: boundary.start()]
+    return text[boundary.end() :]
 
 
 def _json_config(value: Any, *, field: str) -> Any:

@@ -54,6 +54,7 @@ async def test_health_and_catalog_contract() -> None:
         "off",
         "sentence",
         "line",
+        "after_think",
     ]
     number_input = next(node for node in catalog.json()["nodes"] if node["kind"] == "number_input")
     assert number_input["outputs"] == [

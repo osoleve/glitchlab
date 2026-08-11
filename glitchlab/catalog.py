@@ -89,13 +89,15 @@ def _completion_fields(*, include_boundary_trim: bool = False) -> list[dict[str,
                 "off",
                 label="Trim output at",
                 help_text=(
-                    "Keep content through the last complete sentence or line boundary; "
-                    "return empty text when no selected boundary exists."
+                    "Keep content through the last complete sentence or line boundary, "
+                    "or discard reasoning through the final </think> tag. Return empty "
+                    "text when the selected boundary does not exist."
                 ),
                 options=[
                     {"label": "Off", "value": "off"},
                     {"label": "Final sentence", "value": "sentence"},
                     {"label": "Final line", "value": "line"},
+                    {"label": "After final </think>", "value": "after_think"},
                 ],
             ),
         )

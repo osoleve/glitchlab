@@ -97,6 +97,13 @@ async def test_range_rejects_unbounded_or_invalid_requests(
         ("sentence", "Done!", "Done!"),
         ("line", "first\r\nsecond partial", "first"),
         ("line", "one line only", ""),
+        ("after_think", "<think>hidden</think>\nVisible.", "Visible."),
+        (
+            "after_think",
+            "first</think>discarded</ THINK >\r\n\r\n  visible",
+            "  visible",
+        ),
+        ("after_think", "no closing tag", ""),
     ],
 )
 def test_completion_boundary_trim_modes(mode: str, source: str, expected: str) -> None:
@@ -1074,7 +1081,7 @@ async def test_completion_boundary_trim_reuses_raw_request_cache(tmp_path: Path)
                 "id": "cmpl-boundary",
                 "choices": [
                     {
-                        "text": "he said. Then,",
+                        "text": "<think>reasoning</think>\nFinal answer.",
                         "finish_reason": "length",
                         "logprobs": None,
                     }
@@ -1111,21 +1118,24 @@ async def test_completion_boundary_trim_reuses_raw_request_cache(tmp_path: Path)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         engine = GraphEngine(workspace=tmp_path, http_client=client)
-        trimmed = await engine.run(graph("sentence"))
+        trimmed = await engine.run(graph("after_think"))
         untrimmed = await engine.run(graph("off"))
 
     trimmed_result = trimmed.terminal_outputs["complete"]["result"]
     untrimmed_result = untrimmed.terminal_outputs["complete"]["result"]
     assert calls == 1
-    assert trimmed_result["text"] == "he said."
-    assert trimmed_result["raw"]["choices"][0]["text"] == "he said. Then,"
+    assert trimmed_result["text"] == "Final answer."
+    assert (
+        trimmed_result["raw"]["choices"][0]["text"]
+        == "<think>reasoning</think>\nFinal answer."
+    )
     assert trimmed_result["postprocessing"]["boundary_trim"] == {
-        "mode": "sentence",
+        "mode": "after_think",
         "applied": True,
-        "original_length": 14,
-        "output_length": 8,
+        "original_length": 38,
+        "output_length": 13,
     }
-    assert untrimmed_result["text"] == "he said. Then,"
+    assert untrimmed_result["text"] == "<think>reasoning</think>\nFinal answer."
     assert untrimmed_result["cache"]["hit"] is True
 
 
