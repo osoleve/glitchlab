@@ -38,7 +38,7 @@
     "openapi-typescript": "^7.13.0",
     "typescript": "~5.7.2",
     "vite": "^6.0.5",
-    "vitest": "^3.2.4"
+    "vitest": "^5.0.5"
   },
   "overrides": {
     "brace-expansion": "^5.0.9",
